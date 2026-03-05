@@ -423,6 +423,11 @@ class ChatTextArea(TextArea):
                     app._ask_user_confirm()
                 return
 
+            # Block all other keys in ask-user mode to prevent text input
+            event.stop()
+            event.prevent_default()
+            return
+
         model_picker = getattr(app, "_model_picker", None)
         picker_active = bool(model_picker and getattr(model_picker, "active", False))
 

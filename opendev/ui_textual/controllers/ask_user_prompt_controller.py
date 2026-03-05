@@ -447,6 +447,7 @@ class AskUserPromptController:
         conversation = self.app.conversation
         conversation.render_ask_user_prompt([panel])
         conversation.scroll_end(animate=False)
+        self.app.input_field.focus()
 
     def _render(self) -> None:
         if not self._active or not self._questions:
@@ -570,3 +571,4 @@ class AskUserPromptController:
         conversation = self.app.conversation
         conversation.render_ask_user_prompt([panel])
         conversation.scroll_end(animate=False)
+        self.app.input_field.focus()

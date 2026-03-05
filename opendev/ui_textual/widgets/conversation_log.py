@@ -527,23 +527,23 @@ class ConversationLog(RichLog):
         Args:
             renderables: List of Rich renderables to display
         """
-        # Clear existing if any
-        if self._ask_user_start is not None:
+        is_re_render = self._ask_user_start is not None
+        if is_re_render:
             self.clear_ask_user_prompt()
 
-        # Remove any trailing blank line to connect panel directly to spinner
-        # The panel is part of tool execution flow, no spacing needed
-        while self.lines:
-            last_line = self.lines[-1]
-            content = ""
-            if hasattr(last_line, "plain"):
-                content = last_line.plain.strip() if last_line.plain else ""
-            elif hasattr(last_line, "text"):
-                content = last_line.text.strip() if last_line.text else ""
-            if not content:
-                self.lines.pop()
-            else:
-                break
+        if not is_re_render:
+            # Only strip trailing blank lines on initial render, not re-renders
+            while self.lines:
+                last_line = self.lines[-1]
+                content = ""
+                if hasattr(last_line, "plain"):
+                    content = last_line.plain.strip() if last_line.plain else ""
+                elif hasattr(last_line, "text"):
+                    content = last_line.text.strip() if last_line.text else ""
+                if not content:
+                    self.lines.pop()
+                else:
+                    break
 
         self._ask_user_start = len(self.lines)
 
