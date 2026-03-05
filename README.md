@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo/swe-cli-high-resolution-logo-grayscale-transparent.png" alt="SWE-CLI Logo" width="400"/>
+  <img src="logo/logo_long.png" alt="OpenDev Logo" width="400"/>
 </p>
 
 <p align="center">
@@ -11,11 +11,11 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/swe-cli/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/swe-cli?style=flat-square" /></a>
+  <a href="https://pypi.org/project/opendev/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/opendev?style=flat-square" /></a>
   <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <a href="https://python.org/"><img alt="Python version" src="https://img.shields.io/badge/python-%3E%3D3.10-blue.svg?style=flat-square" /></a>
-  <a href="https://github.com/swe-cli/swe-cli/issues"><img alt="Issues" src="https://img.shields.io/github/issues/swe-cli/swe-cli?style=flat-square" /></a>
-  <a href="https://github.com/swe-cli/swe-cli/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/swe-cli/swe-cli?style=flat-square" /></a>
+  <a href="https://github.com/opendev-to/opendev/issues"><img alt="Issues" src="https://img.shields.io/github/issues/opendev-to/opendev?style=flat-square" /></a>
+  <a href="https://github.com/opendev-to/opendev/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/opendev-to/opendev?style=flat-square" /></a>
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 
 ## Overview
 
-**SWE-CLI** is a one-stop, cost-effective CLI-based coding agent designed to democratize how coding agents are built. It supports **MCP (Model Context Protocol)**, **multi-provider LLMs** (Fireworks, OpenAI, Anthropic), and deep **codebase understanding** through a modular, SOLID-based architecture.
+**OpenDev** is a one-stop, cost-effective CLI-based coding agent designed to democratize how coding agents are built. It supports **MCP (Model Context Protocol)**, **multi-provider LLMs** (Fireworks, OpenAI, Anthropic), and deep **codebase understanding** through a modular, SOLID-based architecture.
 
 ## Installation
 
@@ -35,7 +35,7 @@ We recommend using [uv](https://github.com/astral-sh/uv) for fast and reliable i
 
 ### User Installation
 ```bash
-uv pip install swe-cli
+uv pip install opendev
 ```
 
 ### Development Setup
@@ -43,8 +43,8 @@ uv pip install swe-cli
 #### 1. Clone and install dependencies
 
 ```bash
-git clone https://github.com/swe-cli/swe-cli.git
-cd swe-cli
+git clone https://github.com/opendev-to/opendev.git
+cd opendev
 
 # Create venv and install the package with dev dependencies
 uv venv
@@ -61,10 +61,10 @@ source .venv/bin/activate
 
 ```bash
 # After activating venv
-swecli
+opendev
 
 # Or without activating
-uv run swecli
+uv run opendev
 ```
 
 #### 4. Run pytest
@@ -80,7 +80,7 @@ uv run pytest tests/test_terminal_box_renderer.py
 uv run pytest -v
 
 # Run with coverage
-uv run pytest --cov=swecli
+uv run pytest --cov=opendev
 ```
 
 #### Quick one-liner setup
@@ -93,16 +93,16 @@ uv venv && uv pip install -e ".[dev]" && uv run pytest
 
 1.  **Configure**: Run the setup wizard to configure your LLM providers.
     ```bash
-    swecli config setup
+    opendev config setup
     ```
 
 2.  **Run**: Start the interactive coding assistant.
     ```bash
-    swecli
+    opendev
     ```
     *Or start the Web UI:*
     ```bash
-    swecli run ui
+    opendev run ui
     ```
 
 ## Key Components
