@@ -4,12 +4,12 @@ This package contains modular UI components extracted from the main REPL class.
 Each component is responsible for a specific aspect of the user interface.
 """
 
-from swecli.repl.ui.text_utils import truncate_text
-from swecli.repl.ui.message_printer import MessagePrinter
-from swecli.repl.ui.input_frame import InputFrame
-from swecli.repl.ui.prompt_builder import PromptBuilder
-from swecli.repl.ui.toolbar import Toolbar
-from swecli.repl.ui.context_display import ContextDisplay
+from opendev.repl.ui.text_utils import truncate_text
+from opendev.repl.ui.message_printer import MessagePrinter
+from opendev.repl.ui.input_frame import InputFrame
+from opendev.repl.ui.prompt_builder import PromptBuilder
+from opendev.repl.ui.toolbar import Toolbar
+from opendev.repl.ui.context_display import ContextDisplay
 
 __all__ = [
     "truncate_text",

@@ -8,10 +8,10 @@ This package manages all context-related systems:
 - mcp/: Model Context Protocol integration
 """
 
-from swecli.core.context_engineering.tools import ToolRegistry, ToolExecutionContext
-from swecli.core.context_engineering.history.session_manager import SessionManager
-from swecli.core.context_engineering.history.undo_manager import UndoManager
-from swecli.core.context_engineering.memory.playbook import Playbook
+from opendev.core.context_engineering.tools import ToolRegistry, ToolExecutionContext
+from opendev.core.context_engineering.history.session_manager import SessionManager
+from opendev.core.context_engineering.history.undo_manager import UndoManager
+from opendev.core.context_engineering.memory.playbook import Playbook
 
 __all__ = [
     "ToolRegistry",

@@ -7,8 +7,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
 
-from swecli.repl.commands.base import CommandHandler, CommandResult
-from swecli.core.paths import get_paths, APP_DIR_NAME
+from opendev.repl.commands.base import CommandHandler, CommandResult
+from opendev.core.paths import get_paths, APP_DIR_NAME
 
 
 # Default template for new agents (Claude Code style)
@@ -173,7 +173,7 @@ class AgentsCommands(CommandHandler):
         Returns:
             CommandResult with agent list
         """
-        from swecli.core.agents.subagents.agents import ALL_SUBAGENTS
+        from opendev.core.agents.subagents.agents import ALL_SUBAGENTS
 
         table = Table(show_header=True, header_style="bold")
         table.add_column("Name", style="cyan")

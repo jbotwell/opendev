@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from swecli.core.paths import APP_DIR_NAME
+from opendev.core.paths import APP_DIR_NAME
 
 
 class ToolPermission(BaseModel):
@@ -206,7 +206,7 @@ class AppConfig(BaseModel):
         Returns:
             ModelInfo object or None if model not found
         """
-        from swecli.config import get_model_registry
+        from opendev.config import get_model_registry
 
         registry = get_model_registry()
         result = registry.find_model_by_id(self.model)
@@ -220,7 +220,7 @@ class AppConfig(BaseModel):
         Returns:
             ProviderInfo object or None if provider not found
         """
-        from swecli.config import get_model_registry
+        from opendev.config import get_model_registry
 
         registry = get_model_registry()
         return registry.get_provider(self.model_provider)
@@ -231,7 +231,7 @@ class AppConfig(BaseModel):
         Returns:
             Tuple of (provider_id, model_id, ModelInfo) or None
         """
-        from swecli.config import get_model_registry
+        from opendev.config import get_model_registry
 
         registry = get_model_registry()
 
@@ -251,7 +251,7 @@ class AppConfig(BaseModel):
         Returns:
             Tuple of (provider_id, model_id, ModelInfo) or None
         """
-        from swecli.config import get_model_registry
+        from opendev.config import get_model_registry
 
         registry = get_model_registry()
 
@@ -277,7 +277,7 @@ class AppConfig(BaseModel):
         Returns:
             Tuple of (provider_id, model_id, ModelInfo) or None
         """
-        from swecli.config import get_model_registry
+        from opendev.config import get_model_registry
 
         registry = get_model_registry()
 
@@ -303,7 +303,7 @@ class AppConfig(BaseModel):
         Returns:
             Tuple of (provider_id, model_id, ModelInfo) or None
         """
-        from swecli.config import get_model_registry
+        from opendev.config import get_model_registry
 
         registry = get_model_registry()
 

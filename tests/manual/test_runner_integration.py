@@ -8,9 +8,9 @@ from pathlib import Path
 # Add the project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from swecli.ui_textual.runner import TextualRunner
-from swecli.core.runtime import ConfigManager
-from swecli.core.context_engineering.history.session_manager import SessionManager
+from opendev.ui_textual.runner import TextualRunner
+from opendev.core.runtime import ConfigManager
+from opendev.core.context_engineering.history.session_manager import SessionManager
 
 def test_runner_initialization():
     """Test that the runner initializes properly."""

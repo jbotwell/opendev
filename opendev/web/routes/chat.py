@@ -5,8 +5,8 @@ from typing import Dict, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from swecli.web.state import get_state
-from swecli.models.message import ChatMessage, Role
+from opendev.web.state import get_state
+from opendev.models.message import ChatMessage, Role
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 

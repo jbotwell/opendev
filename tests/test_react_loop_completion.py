@@ -11,8 +11,8 @@ class TestMainAgentTaskComplete:
 
     def test_loop_ends_on_task_complete(self):
         """Loop should end when task_complete is called."""
-        from swecli.core.agents.main_agent import MainAgent
-        from swecli.models.config import AppConfig
+        from opendev.core.agents.main_agent import MainAgent
+        from opendev.models.config import AppConfig
 
         # Create agent with mocked dependencies
         config = AppConfig()
@@ -63,8 +63,8 @@ class TestMainAgentTaskComplete:
 
     def test_loop_ends_on_task_complete_failed(self):
         """Loop should end with success=False when task_complete status is failed."""
-        from swecli.core.agents.main_agent import MainAgent
-        from swecli.models.config import AppConfig
+        from opendev.core.agents.main_agent import MainAgent
+        from opendev.models.config import AppConfig
 
         config = AppConfig()
         tool_registry = MagicMock()
@@ -112,8 +112,8 @@ class TestMainAgentTaskComplete:
 
     def test_loop_accepts_implicit_completion_on_success(self):
         """Loop should accept implicit completion when last tool succeeded."""
-        from swecli.core.agents.main_agent import MainAgent
-        from swecli.models.config import AppConfig
+        from opendev.core.agents.main_agent import MainAgent
+        from opendev.models.config import AppConfig
 
         config = AppConfig()
         tool_registry = MagicMock()
@@ -186,8 +186,8 @@ class TestMainAgentTaskComplete:
 
     def test_loop_nudges_on_tool_failure(self):
         """Loop should nudge agent when last tool failed and no tool calls returned."""
-        from swecli.core.agents.main_agent import MainAgent
-        from swecli.models.config import AppConfig
+        from opendev.core.agents.main_agent import MainAgent
+        from opendev.models.config import AppConfig
 
         config = AppConfig()
         tool_registry = MagicMock()
@@ -303,7 +303,7 @@ class TestTaskCompleteToolSchema:
 
     def test_schema_in_builtin_schemas(self):
         """Verify task_complete schema is in builtin schemas."""
-        from swecli.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
+        from opendev.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
 
         task_complete_schema = None
         for schema in _BUILTIN_TOOL_SCHEMAS:
@@ -322,7 +322,7 @@ class TestTaskCompleteToolSchema:
 
     def test_schema_has_enum_for_status(self):
         """Verify status has valid enum values."""
-        from swecli.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
+        from opendev.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
 
         for schema in _BUILTIN_TOOL_SCHEMAS:
             if schema["function"]["name"] == "task_complete":

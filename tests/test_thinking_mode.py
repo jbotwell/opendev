@@ -7,7 +7,7 @@ model reasoning content.
 import pytest
 from unittest.mock import MagicMock, patch
 
-from swecli.core.context_engineering.tools.handlers.thinking_handler import (
+from opendev.core.context_engineering.tools.handlers.thinking_handler import (
     ThinkingHandler,
     ThinkingBlock,
 )
@@ -149,14 +149,14 @@ class TestThinkToolRemoved:
 
     def test_think_schema_not_in_builtin(self):
         """Test that think tool schema is NOT defined (removed)."""
-        from swecli.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
+        from opendev.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
 
         names = [s["function"]["name"] for s in _BUILTIN_TOOL_SCHEMAS]
         assert "think" not in names, "Think tool should be removed from schemas"
 
     def test_think_not_in_planning_tools(self):
         """Test that think is NOT in plan mode tools (removed)."""
-        from swecli.core.agents.components import PLANNING_TOOLS
+        from opendev.core.agents.components import PLANNING_TOOLS
 
         assert "think" not in PLANNING_TOOLS, "Think should be removed from PLANNING_TOOLS"
 
@@ -170,7 +170,7 @@ class TestThinkingHandlerStillExists:
 
     def test_registry_has_thinking_handler(self):
         """Test that ToolRegistry still has thinking_handler for visibility."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         assert hasattr(registry, "thinking_handler")
@@ -182,7 +182,7 @@ class TestThinkingUICallback:
 
     def test_callback_has_thinking_visible_attribute(self):
         """Test that TextualUICallback initializes thinking visibility."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         callback = TextualUICallback(mock_conversation)
@@ -192,7 +192,7 @@ class TestThinkingUICallback:
 
     def test_on_thinking_calls_add_thinking_block(self):
         """Test that on_thinking calls conversation.add_thinking_block."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         mock_conversation.add_thinking_block = MagicMock()
@@ -208,7 +208,7 @@ class TestThinkingUICallback:
 
     def test_on_thinking_skipped_when_not_visible(self):
         """Test that on_thinking is skipped when visibility is off."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         mock_conversation.add_thinking_block = MagicMock()
@@ -221,7 +221,7 @@ class TestThinkingUICallback:
 
     def test_on_thinking_reads_from_chat_app_state(self):
         """Test that on_thinking reads visibility from chat_app._thinking_visible."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         mock_conversation.add_thinking_block = MagicMock()
@@ -239,7 +239,7 @@ class TestThinkingUICallback:
 
     def test_on_thinking_uses_app_state_when_visible(self):
         """Test that on_thinking displays when chat_app._thinking_visible is True."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         mock_conversation.add_thinking_block = MagicMock()
@@ -256,7 +256,7 @@ class TestThinkingUICallback:
 
     def test_on_thinking_skipped_for_empty_content(self):
         """Test that on_thinking is skipped for empty content."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         mock_conversation.add_thinking_block = MagicMock()
@@ -269,7 +269,7 @@ class TestThinkingUICallback:
 
     def test_toggle_thinking_visibility(self):
         """Test toggle_thinking_visibility method (fallback when no app)."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         callback = TextualUICallback(mock_conversation)
@@ -286,7 +286,7 @@ class TestThinkingUICallback:
 
     def test_toggle_thinking_visibility_syncs_with_app(self):
         """Test toggle_thinking_visibility syncs with chat_app._thinking_visible."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         mock_app = MagicMock()
@@ -308,7 +308,7 @@ class TestThinkingUICallback:
 
     def test_on_thinking_called_directly(self):
         """Test that on_thinking works when called directly (from thinking phase)."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         mock_conversation = MagicMock()
         mock_conversation.add_thinking_block = MagicMock()
@@ -330,7 +330,7 @@ class TestCallbackProtocol:
 
     def test_base_ui_callback_has_on_thinking(self):
         """Test BaseUICallback has on_thinking method."""
-        from swecli.ui_textual.callback_interface import BaseUICallback
+        from opendev.ui_textual.callback_interface import BaseUICallback
 
         callback = BaseUICallback()
         assert hasattr(callback, "on_thinking")
@@ -339,7 +339,7 @@ class TestCallbackProtocol:
 
     def test_forwarding_callback_forwards_on_thinking(self):
         """Test ForwardingUICallback forwards on_thinking."""
-        from swecli.ui_textual.callback_interface import ForwardingUICallback
+        from opendev.ui_textual.callback_interface import ForwardingUICallback
 
         mock_parent = MagicMock()
         mock_parent.on_thinking = MagicMock()
@@ -355,7 +355,7 @@ class TestStyleTokens:
 
     def test_thinking_tokens_exist(self):
         """Test that THINKING and THINKING_ICON tokens are defined."""
-        from swecli.ui_textual.style_tokens import THINKING, THINKING_ICON
+        from opendev.ui_textual.style_tokens import THINKING, THINKING_ICON
 
         assert THINKING is not None
         assert isinstance(THINKING, str)
@@ -375,7 +375,7 @@ class TestMessageRendererDedup:
 
     def test_identical_response_always_renders_in_renderer(self):
         """Renderer always renders — dedup is DisplayLedger's job now."""
-        from swecli.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
+        from opendev.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
 
         mock_log = MagicMock()
         mock_log.lines = []
@@ -393,7 +393,7 @@ class TestMessageRendererDedup:
 
     def test_display_ledger_handles_cross_path_dedup(self):
         """DisplayLedger deduplicates identical assistant messages from different paths."""
-        from swecli.ui_textual.managers.display_ledger import DisplayLedger
+        from opendev.ui_textual.managers.display_ledger import DisplayLedger
 
         mock_conversation = MagicMock()
         mock_conversation.add_assistant_message = MagicMock()
@@ -412,7 +412,7 @@ class TestMessageRenderer:
 
     def test_add_thinking_block_method_exists(self):
         """Test DefaultMessageRenderer has add_thinking_block."""
-        from swecli.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
+        from opendev.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
 
         mock_log = MagicMock()
         renderer = DefaultMessageRenderer(mock_log)
@@ -421,7 +421,7 @@ class TestMessageRenderer:
 
     def test_add_thinking_block_writes_to_log(self):
         """Test add_thinking_block writes to log."""
-        from swecli.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
+        from opendev.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
         from rich.text import Text
 
         mock_log = MagicMock()
@@ -435,7 +435,7 @@ class TestMessageRenderer:
 
     def test_add_thinking_block_skips_empty(self):
         """Test add_thinking_block skips empty content."""
-        from swecli.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
+        from opendev.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
 
         mock_log = MagicMock()
         renderer = DefaultMessageRenderer(mock_log)
@@ -451,7 +451,7 @@ class TestConversationLog:
 
     def test_add_thinking_block_delegates(self):
         """Test ConversationLog.add_thinking_block delegates to renderer."""
-        from swecli.ui_textual.widgets.conversation_log import ConversationLog
+        from opendev.ui_textual.widgets.conversation_log import ConversationLog
 
         # ConversationLog inherits from RichLog which requires more setup
         # Use a simpler approach - just verify the method exists
@@ -463,7 +463,7 @@ class TestStatusBar:
 
     def test_status_bar_has_thinking_enabled_attribute(self):
         """Test StatusBar initializes with thinking_enabled based on default thinking_level."""
-        from swecli.ui_textual.widgets.status_bar import StatusBar
+        from opendev.ui_textual.widgets.status_bar import StatusBar
 
         status_bar = StatusBar()
         assert hasattr(status_bar, "thinking_enabled")
@@ -472,7 +472,7 @@ class TestStatusBar:
 
     def test_set_thinking_enabled(self):
         """Test set_thinking_enabled method."""
-        from swecli.ui_textual.widgets.status_bar import StatusBar
+        from opendev.ui_textual.widgets.status_bar import StatusBar
 
         status_bar = StatusBar()
         # Mock update_status to avoid Textual context requirement
@@ -495,7 +495,7 @@ class TestThinkingModeReminder:
 
     def test_no_placeholder_leaves_content_unchanged(self):
         """Test that prompts without placeholder are left unchanged."""
-        from swecli.repl.query_enhancer import QueryEnhancer
+        from opendev.repl.query_enhancer import QueryEnhancer
 
         file_ops = MagicMock()
         session_manager = MagicMock()
@@ -528,7 +528,7 @@ class TestThinkingModeSchemaFiltering:
 
     def test_think_tool_never_in_schemas(self):
         """Test that think tool is NEVER in schemas (removed from architecture)."""
-        from swecli.core.agents.components import ToolSchemaBuilder
+        from opendev.core.agents.components import ToolSchemaBuilder
 
         mock_registry = MagicMock()
         mock_registry.subagent_manager = None
@@ -555,7 +555,7 @@ class TestThinkingModelSelection:
 
     def test_thinking_model_used_when_configured_and_visible(self):
         """Test agent always uses Normal model in call_llm (thinking happens in separate call)."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
 
         config = MagicMock()
         config.model = "gpt-4"
@@ -599,7 +599,7 @@ class TestThinkingModelSelection:
 
     def test_normal_model_used_when_not_visible(self):
         """Test agent uses Normal model when thinking_visible=False."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
 
         config = MagicMock()
         config.model = "gpt-4"
@@ -639,7 +639,7 @@ class TestThinkingModelSelection:
 
     def test_fallback_to_normal_when_no_thinking_model(self):
         """Test agent falls back to Normal model when no Thinking model configured."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
 
         config = MagicMock()
         config.model = "gpt-4"
@@ -682,7 +682,7 @@ class TestReasoningContentExtraction:
 
     def test_reasoning_content_extracted(self):
         """Test that reasoning_content is extracted from response."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
 
         config = MagicMock()
         config.model = "o1-preview"
@@ -725,7 +725,7 @@ class TestReasoningContentExtraction:
 
     def test_reasoning_content_none_when_not_present(self):
         """Test reasoning_content is None when model doesn't provide it."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
 
         config = MagicMock()
         config.model = "gpt-4"
@@ -767,7 +767,7 @@ class TestReactExecutorReasoningDisplay:
 
     def test_parse_llm_response_extracts_reasoning(self):
         """Test _parse_llm_response extracts reasoning_content."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         mock_console = MagicMock()
         mock_session_manager = MagicMock()
@@ -797,7 +797,7 @@ class TestReactExecutorReasoningDisplay:
 
     def test_parse_llm_response_handles_no_reasoning(self):
         """Test _parse_llm_response handles missing reasoning_content."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         mock_console = MagicMock()
         mock_session_manager = MagicMock()
@@ -830,12 +830,12 @@ class TestThinkingPromptBuilder:
 
     def test_thinking_prompt_builder_loads_prompt(self):
         """Test ThinkingPromptBuilder loads thinking prompt template."""
-        from swecli.core.agents.components import ThinkingPromptBuilder
+        from opendev.core.agents.components import ThinkingPromptBuilder
 
         mock_return = "Thinking Mode: You are in thinking mode.\nWorking directory context will be added."
         with (
-            patch("swecli.core.agents.components.prompts.builders.load_prompt") as mock_load,
-            patch("swecli.core.agents.prompts.loader.load_prompt") as mock_loader_load,
+            patch("opendev.core.agents.components.prompts.builders.load_prompt") as mock_load,
+            patch("opendev.core.agents.prompts.loader.load_prompt") as mock_loader_load,
         ):
             mock_load.return_value = mock_return
             mock_loader_load.return_value = mock_return
@@ -848,7 +848,7 @@ class TestThinkingPromptBuilder:
 
     def test_thinking_prompt_builder_includes_mcp_tools(self):
         """Test ThinkingPromptBuilder includes MCP tools if available."""
-        from swecli.core.agents.components import ThinkingPromptBuilder
+        from opendev.core.agents.components import ThinkingPromptBuilder
 
         mock_registry = MagicMock()
         mock_registry.mcp_manager = MagicMock()
@@ -861,8 +861,8 @@ class TestThinkingPromptBuilder:
         mock_registry._skill_loader = None
 
         with (
-            patch("swecli.core.agents.components.prompts.builders.load_prompt") as mock_load,
-            patch("swecli.core.agents.prompts.loader.load_prompt") as mock_loader_load,
+            patch("opendev.core.agents.components.prompts.builders.load_prompt") as mock_load,
+            patch("opendev.core.agents.prompts.loader.load_prompt") as mock_loader_load,
         ):
             mock_load.return_value = "Thinking Mode prompt"
             mock_loader_load.return_value = "Thinking Mode prompt"
@@ -878,7 +878,7 @@ class TestHTTPClientFactory:
 
     def test_openai_client_creation(self):
         """Test creating HTTP client for OpenAI provider."""
-        from swecli.core.agents.components import create_http_client_for_provider
+        from opendev.core.agents.components import create_http_client_for_provider
 
         config = MagicMock()
 
@@ -888,7 +888,7 @@ class TestHTTPClientFactory:
 
     def test_fireworks_client_creation(self):
         """Test creating HTTP client for Fireworks provider."""
-        from swecli.core.agents.components import create_http_client_for_provider
+        from opendev.core.agents.components import create_http_client_for_provider
 
         config = MagicMock()
 
@@ -898,7 +898,7 @@ class TestHTTPClientFactory:
 
     def test_missing_api_key_raises(self):
         """Test that missing API key raises ValueError."""
-        from swecli.core.agents.components import create_http_client_for_provider
+        from opendev.core.agents.components import create_http_client_for_provider
 
         config = MagicMock()
 
@@ -908,7 +908,7 @@ class TestHTTPClientFactory:
 
     def test_unknown_provider_raises(self):
         """Test that unknown provider raises ValueError."""
-        from swecli.core.agents.components import create_http_client_for_provider
+        from opendev.core.agents.components import create_http_client_for_provider
 
         config = MagicMock()
 
@@ -927,7 +927,7 @@ class TestToolChoiceBehavior:
 
     def test_tool_choice_always_auto(self):
         """tool_choice should always be 'auto' (no more force_think)."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
 
         config = MagicMock()
         config.model = "gpt-4"
@@ -972,7 +972,7 @@ class TestToolChoiceBehavior:
 
     def test_call_llm_no_force_think_parameter(self):
         """Verify call_llm no longer accepts force_think parameter."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
         import inspect
 
         # Get the signature of call_llm

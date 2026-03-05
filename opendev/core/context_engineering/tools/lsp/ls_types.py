@@ -9,7 +9,7 @@ from typing import NotRequired, Union
 
 from typing_extensions import TypedDict
 
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity, SymbolKind
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity, SymbolKind
 
 URI = str
 DocumentUri = str

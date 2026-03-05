@@ -10,8 +10,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from swecli.core.channels.base import ChannelAdapter, OutboundMessage
-from swecli.core.context_engineering.history.session_manager import SessionManager
+from opendev.core.channels.base import ChannelAdapter, OutboundMessage
+from opendev.core.context_engineering.history.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 

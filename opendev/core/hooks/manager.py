@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from swecli.core.hooks.executor import HookCommandExecutor, HookResult
-from swecli.core.hooks.models import HookConfig, HookEvent
+from opendev.core.hooks.executor import HookCommandExecutor, HookResult
+from opendev.core.hooks.models import HookConfig, HookEvent
 
 logger = logging.getLogger(__name__)
 

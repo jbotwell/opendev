@@ -10,7 +10,7 @@ import logging
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.mcp.manager import MCPManager
+    from opendev.core.context_engineering.mcp.manager import MCPManager
 
 logger = logging.getLogger(__name__)
 

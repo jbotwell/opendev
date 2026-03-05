@@ -7,7 +7,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from .formatter_base import BaseFormatter, STATUS_ICONS
-from swecli.ui_textual.style_tokens import ERROR, SUBTLE, SUCCESS, GREEN_BRIGHT, PANEL_BORDER, PRIMARY
+from opendev.ui_textual.style_tokens import ERROR, SUBTLE, SUCCESS, GREEN_BRIGHT, PANEL_BORDER, PRIMARY
 
 
 class FileFormatter(BaseFormatter):

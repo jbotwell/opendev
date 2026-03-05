@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from swecli.repl.file_content_injector import FileContentInjector, InjectionResult
+from opendev.repl.file_content_injector import FileContentInjector, InjectionResult
 
 
 class MockFileOps:
@@ -280,7 +280,7 @@ class TestImageProcessing:
 
         # Mock VLMTool at the source module
         with patch(
-            "swecli.core.context_engineering.tools.implementations.vlm_tool.VLMTool"
+            "opendev.core.context_engineering.tools.implementations.vlm_tool.VLMTool"
         ) as mock_vlm_class:
             mock_vlm = MagicMock()
             mock_vlm.is_available.return_value = True
@@ -309,7 +309,7 @@ class TestPDFProcessing:
 
         # Mock PDFTool at the source module
         with patch(
-            "swecli.core.context_engineering.tools.implementations.pdf_tool.PDFTool"
+            "opendev.core.context_engineering.tools.implementations.pdf_tool.PDFTool"
         ) as mock_pdf_class:
             mock_pdf = MagicMock()
             mock_pdf.extract_text.return_value = {
@@ -333,7 +333,7 @@ class TestPDFProcessing:
         config = MagicMock()
 
         with patch(
-            "swecli.core.context_engineering.tools.implementations.pdf_tool.PDFTool"
+            "opendev.core.context_engineering.tools.implementations.pdf_tool.PDFTool"
         ) as mock_pdf_class:
             mock_pdf = MagicMock()
             mock_pdf.extract_text.return_value = {

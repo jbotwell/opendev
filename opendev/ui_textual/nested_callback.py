@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
-from swecli.ui_textual.callback_interface import ForwardingUICallback, UICallbackProtocol
+from opendev.ui_textual.callback_interface import ForwardingUICallback, UICallbackProtocol
 
 # Re-export for backwards compatibility
 UICallback = UICallbackProtocol

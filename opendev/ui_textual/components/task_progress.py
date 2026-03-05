@@ -14,9 +14,9 @@ try:
 except ImportError:
     PYNPUT_AVAILABLE = False
 
-from swecli.core.runtime.monitoring import TaskMonitor
-from swecli.ui_textual import style_tokens
-from swecli.ui_textual.formatters_internal.markdown_formatter import markdown_to_plain_text
+from opendev.core.runtime.monitoring import TaskMonitor
+from opendev.ui_textual import style_tokens
+from opendev.ui_textual.formatters_internal.markdown_formatter import markdown_to_plain_text
 
 
 class TaskProgressDisplay:

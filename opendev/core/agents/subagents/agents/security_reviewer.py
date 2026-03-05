@@ -1,7 +1,7 @@
 """Security Reviewer subagent for vulnerability analysis."""
 
-from swecli.core.agents.prompts.loader import load_prompt
-from swecli.core.agents.subagents.specs import SubAgentSpec
+from opendev.core.agents.prompts.loader import load_prompt
+from opendev.core.agents.subagents.specs import SubAgentSpec
 
 SECURITY_REVIEWER_SUBAGENT = SubAgentSpec(
     name="Security-Reviewer",

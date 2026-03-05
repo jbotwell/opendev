@@ -17,8 +17,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from swecli.repl.repl import REPL
-from swecli.ui_textual.style_tokens import ERROR, PRIMARY, SUBTLE, CYAN, GREEN_BRIGHT, BLUE_BRIGHT
+from opendev.repl.repl import REPL
+from opendev.ui_textual.style_tokens import ERROR, PRIMARY, SUBTLE, CYAN, GREEN_BRIGHT, BLUE_BRIGHT
 
 
 class CommandRouter:
@@ -179,7 +179,7 @@ class CommandRouter:
         transport_text = server_config.transport or "stdio"
         info_table.add_row("Transport", transport_text)
 
-        from swecli.core.context_engineering.mcp.config import get_config_path, get_project_config_path
+        from opendev.core.context_engineering.mcp.config import get_config_path, get_project_config_path
 
         config_location = ""
         try:
@@ -289,7 +289,7 @@ class CommandRouter:
         """Handle /mcp connect with Textual spinner."""
         if not self._app:
             return
-        from swecli.ui_textual.controllers.mcp_command_controller import MCPCommandController
+        from opendev.ui_textual.controllers.mcp_command_controller import MCPCommandController
 
         controller = MCPCommandController(self._app, self._repl)
         controller.handle_connect(command)
@@ -302,7 +302,7 @@ class CommandRouter:
             return
 
         # Create UI callback for proper spinner/collapsed agent display
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         conversation_widget = getattr(self._app, "conversation", None)
         if conversation_widget is None:

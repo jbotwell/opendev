@@ -227,7 +227,7 @@ def test_code_explorer_tools():
     """Verify Code-Explorer subagent has correct tools (no bash)."""
     print("\n=== Testing Code-Explorer Tools ===\n")
 
-    from swecli.core.agents.subagents.agents import CODE_EXPLORER_SUBAGENT
+    from opendev.core.agents.subagents.agents import CODE_EXPLORER_SUBAGENT
 
     expected_tools = ["read_file", "search", "list_files", "find_symbol", "find_referencing_symbols"]
     actual_tools = CODE_EXPLORER_SUBAGENT.get("tools", [])
@@ -248,7 +248,7 @@ def test_available_subagents():
     """Print all available subagents for reference."""
     print("\n=== Available Subagents ===\n")
 
-    from swecli.core.agents.subagents.agents import ALL_SUBAGENTS
+    from opendev.core.agents.subagents.agents import ALL_SUBAGENTS
 
     for agent in ALL_SUBAGENTS:
         name = agent.get("name", "Unknown")
@@ -266,8 +266,8 @@ def test_tool_filtering():
     """Test that MainAgent correctly filters tools based on allowed_tools."""
     print("\n=== Testing Tool Filtering ===\n")
 
-    from swecli.core.agents.main_agent import MainAgent
-    from swecli.core.agents.components import ToolSchemaBuilder
+    from opendev.core.agents.main_agent import MainAgent
+    from opendev.core.agents.components import ToolSchemaBuilder
 
     # Test 1: No filtering (None) = all tools
     print("1. Testing with no filtering (allowed_tools=None)...")

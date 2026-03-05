@@ -1,7 +1,7 @@
 """Web clone subagent for replicating website UI/design."""
 
-from swecli.core.agents.prompts.loader import load_prompt
-from swecli.core.agents.subagents.specs import SubAgentSpec
+from opendev.core.agents.prompts.loader import load_prompt
+from opendev.core.agents.subagents.specs import SubAgentSpec
 
 WEB_CLONE_SUBAGENT = SubAgentSpec(
     name="Web-clone",

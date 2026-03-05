@@ -6,9 +6,9 @@ from typing import Any, Dict
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from swecli.web.state import get_state
-from swecli.web.logging_config import logger
-from swecli.models.message import ChatMessage, Role
+from opendev.web.state import get_state
+from opendev.web.logging_config import logger
+from opendev.models.message import ChatMessage, Role
 
 
 class WebSocketManager:
@@ -171,7 +171,7 @@ class WebSocketManager:
         })
 
         # Execute query with agent in background task
-        from swecli.web.agent_executor import AgentExecutor
+        from opendev.web.agent_executor import AgentExecutor
 
         executor = AgentExecutor(state)
         asyncio.create_task(

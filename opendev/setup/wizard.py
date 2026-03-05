@@ -23,7 +23,7 @@ from .wizard_ui import (
     rail_summary_box,
     rail_warning,
 )
-from swecli.core.paths import get_paths, APP_DIR_NAME
+from opendev.core.paths import get_paths, APP_DIR_NAME
 
 
 console = Console()
@@ -71,7 +71,7 @@ def run_setup_wizard() -> bool:
         return False
 
     # Look up model info for smart defaults
-    from swecli.config import get_model_registry
+    from opendev.config import get_model_registry
 
     registry = get_model_registry()
     normal_model_result = registry.find_model_by_id(model_id)
@@ -244,7 +244,7 @@ def configure_slot_model(
 
 def show_config_summary(config: dict, collected_keys: dict[str, str]) -> None:
     """Display a summary panel of the configuration before saving."""
-    from swecli.config import get_model_registry
+    from opendev.config import get_model_registry
 
     registry = get_model_registry()
 

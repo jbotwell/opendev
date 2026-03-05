@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from swecli.models.config import AppConfig
+    from opendev.models.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

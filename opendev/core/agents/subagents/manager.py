@@ -11,8 +11,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from swecli.core.agents.prompts import get_reminder
-from swecli.models.config import AppConfig
+from opendev.core.agents.prompts import get_reminder
+from opendev.models.config import AppConfig
 
 from .specs import CompiledSubAgent, SubAgentSpec
 
@@ -143,7 +143,7 @@ class SubAgentManager:
         Args:
             spec: The subagent specification
         """
-        from swecli.core.agents import MainAgent
+        from opendev.core.agents import MainAgent
 
         # Create a filtered tool registry if tools are specified
         tool_names = spec.get("tools", self._all_tool_names)
@@ -694,7 +694,7 @@ class SubAgentManager:
         if ui_callback is None:
             return None
 
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         # Use existing _create_docker_path_sanitizer
         path_sanitizer = self._create_docker_path_sanitizer(
@@ -880,8 +880,8 @@ class SubAgentManager:
             Result dict with content, success, and messages
         """
         import asyncio
-        from swecli.core.docker.deployment import DockerDeployment
-        from swecli.core.docker.tool_handler import DockerToolHandler
+        from opendev.core.docker.deployment import DockerDeployment
+        from opendev.core.docker.tool_handler import DockerToolHandler
 
         docker_config = spec.get("docker_config")
         if docker_config is None:
@@ -1194,7 +1194,7 @@ class SubAgentManager:
         """
         # Fire SubagentStart hook
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             if self._hook_manager.has_hooks_for(HookEvent.SUBAGENT_START):
                 outcome = self._hook_manager.run_hooks(
@@ -1251,7 +1251,7 @@ class SubAgentManager:
             # Use Docker-based tool registry for Docker execution
             # Pass local registry for fallback on tools not supported in Docker (e.g., read_pdf)
             # Pass path_mapping to remap Docker paths to local paths for local-only tools
-            from swecli.core.docker.tool_handler import DockerToolRegistry
+            from opendev.core.docker.tool_handler import DockerToolRegistry
 
             tool_registry = DockerToolRegistry(
                 docker_handler,
@@ -1263,7 +1263,7 @@ class SubAgentManager:
 
         # If working_dir or docker_handler requires a new agent instance
         if working_dir is not None or docker_handler is not None:
-            from swecli.core.agents import MainAgent
+            from opendev.core.agents import MainAgent
             from .agents import ALL_SUBAGENTS
 
             # Find the spec for this subagent
@@ -1309,7 +1309,7 @@ class SubAgentManager:
         # For Docker subagents, caller should use create_docker_nested_callback() first
         nested_callback = None
         if ui_callback is not None:
-            from swecli.ui_textual.nested_callback import NestedUICallback
+            from opendev.ui_textual.nested_callback import NestedUICallback
 
             if isinstance(ui_callback, NestedUICallback):
                 # Already nested (e.g., from create_docker_nested_callback), use directly
@@ -1345,7 +1345,7 @@ class SubAgentManager:
 
         # Fire SubagentStop hook
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             if self._hook_manager.has_hooks_for(HookEvent.SUBAGENT_STOP):
                 self._hook_manager.run_hooks_async(
@@ -1514,7 +1514,7 @@ class SubAgentManager:
         Returns:
             List of Question objects
         """
-        from swecli.core.context_engineering.tools.implementations.ask_user_tool import (
+        from opendev.core.context_engineering.tools.implementations.ask_user_tool import (
             Question,
             QuestionOption,
         )

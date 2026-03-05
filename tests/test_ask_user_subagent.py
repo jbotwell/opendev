@@ -6,14 +6,14 @@ import pytest
 from unittest.mock import MagicMock, patch
 import asyncio
 
-from swecli.core.agents.subagents.agents import ALL_SUBAGENTS
-from swecli.core.agents.subagents.agents.ask_user import ASK_USER_SUBAGENT
-from swecli.core.agents.subagents.manager import SubAgentManager, SubAgentDeps
-from swecli.core.context_engineering.tools.implementations.ask_user_tool import (
+from opendev.core.agents.subagents.agents import ALL_SUBAGENTS
+from opendev.core.agents.subagents.agents.ask_user import ASK_USER_SUBAGENT
+from opendev.core.agents.subagents.manager import SubAgentManager, SubAgentDeps
+from opendev.core.context_engineering.tools.implementations.ask_user_tool import (
     Question,
     QuestionOption,
 )
-from swecli.ui_textual.controllers.ask_user_prompt_controller import AskUserPromptController
+from opendev.ui_textual.controllers.ask_user_prompt_controller import AskUserPromptController
 
 
 # ============================================================================

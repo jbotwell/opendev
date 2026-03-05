@@ -18,10 +18,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from swecli.core.agents.components.api.configuration import build_temperature_param
-from swecli.core.agents.prompts.loader import load_prompt
-from swecli.core.context_engineering.retrieval.token_monitor import ContextTokenMonitor
-from swecli.models.config import AppConfig
+from opendev.core.agents.components.api.configuration import build_temperature_param
+from opendev.core.agents.prompts.loader import load_prompt
+from opendev.core.context_engineering.retrieval.token_monitor import ContextTokenMonitor
+from opendev.models.config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -465,7 +465,7 @@ class ContextCompactor:
         """
         # Fire PreCompact hook
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             if self._hook_manager.has_hooks_for(HookEvent.PRE_COMPACT):
                 self._hook_manager.run_hooks(

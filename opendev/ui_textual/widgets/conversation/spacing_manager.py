@@ -36,7 +36,7 @@ Thinking block (structural -> checks prev, sees content, adds leading; adds trai
 """
 
 from rich.text import Text
-from swecli.ui_textual.widgets.conversation.protocols import RichLogInterface
+from opendev.ui_textual.widgets.conversation.protocols import RichLogInterface
 
 
 class SpacingManager:

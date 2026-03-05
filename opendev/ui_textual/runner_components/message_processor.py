@@ -11,7 +11,7 @@ import queue
 import threading
 from typing import Any, Callable, Optional
 
-from swecli.models.message import ChatMessage
+from opendev.models.message import ChatMessage
 
 logger = logging.getLogger(__name__)
 

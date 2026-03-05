@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
-from swecli.core.agents.prompts import load_prompt
+from opendev.core.agents.prompts import load_prompt
 
 if TYPE_CHECKING:
-    from swecli.core.skills import SkillLoader
-    from swecli.core.agents.subagents.manager import SubAgentManager
+    from opendev.core.skills import SkillLoader
+    from opendev.core.agents.subagents.manager import SubAgentManager
     from .environment import EnvironmentContext
 
 
@@ -112,8 +112,8 @@ class BasePromptBuilder:
             Composed prompt from modular sections, or empty string if not available
         """
         from pathlib import Path
-        from swecli.core.agents.prompts.composition import create_composer
-        from swecli.core.agents.prompts.loader import load_prompt
+        from opendev.core.agents.prompts.composition import create_composer
+        from opendev.core.agents.prompts.loader import load_prompt
 
         templates_dir = Path(__file__).parent.parent.parent / "prompts/templates"
 
@@ -153,8 +153,8 @@ class BasePromptBuilder:
             composition is not available.
         """
         from pathlib import Path
-        from swecli.core.agents.prompts.composition import create_composer
-        from swecli.core.agents.prompts.loader import load_prompt
+        from opendev.core.agents.prompts.composition import create_composer
+        from opendev.core.agents.prompts.loader import load_prompt
 
         templates_dir = Path(__file__).parent.parent.parent / "prompts/templates"
         sections_dir = templates_dir / self._core_template

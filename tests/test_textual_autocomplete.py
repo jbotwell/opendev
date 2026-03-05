@@ -3,8 +3,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from swecli.ui_textual.autocomplete import SwecliCompleter
-from swecli.ui_textual.widgets.chat_text_area import ChatTextArea
+from opendev.ui_textual.autocomplete import SwecliCompleter
+from opendev.ui_textual.widgets.chat_text_area import ChatTextArea
 
 
 def _build_area(tmp_path: Path) -> ChatTextArea:

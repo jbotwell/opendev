@@ -5,11 +5,11 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
-from swecli.models.config import AppConfig
-from swecli.models.message import ChatMessage, Role
-from swecli.core.runtime.config import ConfigManager
-from swecli.core.context_engineering.history.session_manager import SessionManager
-from swecli.ui_textual.runner import TextualRunner
+from opendev.models.config import AppConfig
+from opendev.models.message import ChatMessage, Role
+from opendev.core.runtime.config import ConfigManager
+from opendev.core.context_engineering.history.session_manager import SessionManager
+from opendev.ui_textual.runner import TextualRunner
 
 
 class DummyConfigManager(ConfigManager):
@@ -43,7 +43,7 @@ class DummyRepl:
         self.config_manager = config_manager
         self.config = config_manager.get_config()
         self.session_manager = session_manager
-        from swecli.core.runtime import OperationMode
+        from opendev.core.runtime import OperationMode
         self.mode_manager = SimpleNamespace(
             set_mode=lambda mode: None,
             current_mode=OperationMode.NORMAL,

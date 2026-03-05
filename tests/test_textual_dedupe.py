@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import pytest
 from rich.text import Text
 
-from swecli.ui_textual.chat_app import SWECLIChatApp
-from swecli.ui_textual.managers.console_buffer_manager import ConsoleBufferManager
+from opendev.ui_textual.chat_app import SWECLIChatApp
+from opendev.ui_textual.managers.console_buffer_manager import ConsoleBufferManager
 
 
 def make_app() -> SWECLIChatApp:

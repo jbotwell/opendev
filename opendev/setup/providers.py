@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Any, Optional
 
-from swecli.config import get_model_registry
+from opendev.config import get_model_registry
 
 
 def get_provider_config(provider_id: str) -> Optional[Dict[str, Any]]:

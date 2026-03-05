@@ -31,7 +31,7 @@ def run_cli_test(prompt: str, timeout: int = 60) -> dict:
     env = os.environ.copy()
 
     # Run swecli with -p flag for non-interactive mode
-    cmd = [sys.executable, "-m", "swecli", "-p", prompt]
+    cmd = [sys.executable, "-m", "opendev", "-p", prompt]
 
     print(f"\n{'='*60}")
     print(f"Running: {' '.join(cmd[:4])} '{prompt}'")
@@ -117,7 +117,7 @@ def test_file_read():
     print("#"*60)
 
     # Create test file
-    test_file = "/tmp/swecli_test_file.py"
+    test_file = "/tmp/opendev_test_file.py"
     with open(test_file, "w") as f:
         f.write('print("hello from test file")\n')
 

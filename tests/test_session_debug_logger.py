@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from swecli.core.debug.session_debug_logger import (
+from opendev.core.debug.session_debug_logger import (
     SessionDebugLogger,
     get_debug_logger,
     set_debug_logger,
@@ -205,13 +205,13 @@ class TestGlobalLogger:
 class TestDeleteSessionCleanup:
     def test_delete_session_removes_debug_file(self, tmp_session_dir):
         """SessionManager.delete_session removes both .json and .debug files."""
-        from swecli.core.context_engineering.history import SessionManager
+        from opendev.core.context_engineering.history import SessionManager
 
         sm = SessionManager(session_dir=tmp_session_dir)
         session = sm.create_session(working_directory="/tmp")
 
         # Add a message so save works
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         sm.add_message(ChatMessage(role=Role.USER, content="test"), auto_save_interval=1)
 
@@ -230,12 +230,12 @@ class TestDeleteSessionCleanup:
 
     def test_delete_session_without_debug_file(self, tmp_session_dir):
         """delete_session works fine when no .debug file exists."""
-        from swecli.core.context_engineering.history import SessionManager
+        from opendev.core.context_engineering.history import SessionManager
 
         sm = SessionManager(session_dir=tmp_session_dir)
         session = sm.create_session(working_directory="/tmp")
 
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         sm.add_message(ChatMessage(role=Role.USER, content="test"), auto_save_interval=1)
 

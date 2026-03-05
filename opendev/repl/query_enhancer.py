@@ -7,10 +7,10 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from swecli.core.agents.prompts import get_reminder
+from opendev.core.agents.prompts import get_reminder
 
 if TYPE_CHECKING:
-    from swecli.repl.file_content_injector import InjectionResult
+    from opendev.repl.file_content_injector import InjectionResult
 
 
 class QueryEnhancer:
@@ -45,7 +45,7 @@ class QueryEnhancer:
             - enhanced_query: Query with @ stripped and file contents appended
             - image_blocks: List of multimodal image blocks for vision API
         """
-        from swecli.repl.file_content_injector import FileContentInjector
+        from opendev.repl.file_content_injector import FileContentInjector
 
         # Get working directory from file_ops if available
         working_dir = Path.cwd()
@@ -101,7 +101,7 @@ class QueryEnhancer:
                 # Convert post-compaction messages via a temporary Session-like slice
                 post_msgs = session.messages[at_count:]
                 if post_msgs:
-                    from swecli.models.session import Session
+                    from opendev.models.session import Session
 
                     temp = Session(session_id="tmp", working_directory="")
                     temp.messages = post_msgs
@@ -140,7 +140,7 @@ class QueryEnhancer:
                     cache_file = playbook_config.cache_file
                     # If cache_file not specified but cache enabled, use session-based default
                     if cache_file is None and playbook_config.cache_embeddings and session:
-                        from swecli.core.paths import get_paths
+                        from opendev.core.paths import get_paths
 
                         paths = get_paths()
                         cache_file = str(

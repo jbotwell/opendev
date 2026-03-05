@@ -1,6 +1,6 @@
 """Tests for command history navigation in Textual chat app."""
 
-from swecli.ui_textual.chat_app import ChatTextArea, ConversationLog, create_chat_app
+from opendev.ui_textual.chat_app import ChatTextArea, ConversationLog, create_chat_app
 
 
 def test_history_navigation_roundtrip() -> None:

@@ -3,7 +3,7 @@
 from unittest.mock import Mock, MagicMock, patch
 from rich.text import Text
 
-from swecli.ui_textual.controllers.approval_prompt_controller import ApprovalPromptController
+from opendev.ui_textual.controllers.approval_prompt_controller import ApprovalPromptController
 
 
 def test_approval_cancel_shows_interrupt_message_with_call_start():

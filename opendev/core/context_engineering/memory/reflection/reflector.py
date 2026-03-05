@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
-    from swecli.models.message import ToolCall
+    from opendev.models.message import ToolCall
 
 
 @dataclass

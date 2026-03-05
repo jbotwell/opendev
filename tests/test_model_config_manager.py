@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
-from swecli.ui_textual.runner_components.model_config_manager import ModelConfigManager
+from opendev.ui_textual.runner_components.model_config_manager import ModelConfigManager
 
 
 class MockConfig:

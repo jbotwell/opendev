@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
-    from swecli.ui_textual.chat_app import SWECLIChatApp
+    from opendev.ui_textual.chat_app import SWECLIChatApp
 
 
 class CommandRouter:
@@ -34,7 +34,7 @@ class CommandRouter:
             return True
 
         if cmd == "/sound":
-            from swecli.core.utils.sound import play_finish_sound
+            from opendev.core.utils.sound import play_finish_sound
             play_finish_sound()
             if conversation is not None:
                 conversation.add_system_message("Playing test sound...")

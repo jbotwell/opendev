@@ -1,7 +1,7 @@
 """Code Explorer subagent for codebase exploration and research."""
 
-from swecli.core.agents.prompts.loader import load_prompt
-from swecli.core.agents.subagents.specs import SubAgentSpec
+from opendev.core.agents.prompts.loader import load_prompt
+from opendev.core.agents.subagents.specs import SubAgentSpec
 
 CODE_EXPLORER_SUBAGENT = SubAgentSpec(
     name="Code-Explorer",

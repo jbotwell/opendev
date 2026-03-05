@@ -8,7 +8,7 @@ from typing import Any, Mapping, Tuple
 
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import GREY
+from opendev.ui_textual.style_tokens import GREY
 
 _TOOL_DISPLAY_PARTS: dict[str, tuple[str, str]] = {
     "read_file": ("Read", "file"),

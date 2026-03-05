@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import httpx
 
-from swecli.core.agents.components.api.http_client import (
+from opendev.core.agents.components.api.http_client import (
     MAX_RETRIES,
     AgentHttpClient,
     HttpResult,
@@ -47,10 +47,10 @@ class TestHttpClientRetry:
         with (
             patch.object(client._client, "post", side_effect=responses),
             patch(
-                "swecli.core.agents.components.api.http_client.time.monotonic",
+                "opendev.core.agents.components.api.http_client.time.monotonic",
                 side_effect=fast_monotonic,
             ),
-            patch("swecli.core.agents.components.api.http_client.time.sleep"),
+            patch("opendev.core.agents.components.api.http_client.time.sleep"),
         ):
             result = client.post_json({"model": "test"})
         assert result.success
@@ -72,10 +72,10 @@ class TestHttpClientRetry:
         with (
             patch.object(client._client, "post", side_effect=responses),
             patch(
-                "swecli.core.agents.components.api.http_client.time.monotonic",
+                "opendev.core.agents.components.api.http_client.time.monotonic",
                 side_effect=fast_monotonic,
             ),
-            patch("swecli.core.agents.components.api.http_client.time.sleep"),
+            patch("opendev.core.agents.components.api.http_client.time.sleep"),
         ):
             result = client.post_json({"model": "test"})
         assert result.success
@@ -105,10 +105,10 @@ class TestHttpClientRetry:
         with (
             patch.object(client._client, "post", side_effect=[resp_429, resp_200]),
             patch(
-                "swecli.core.agents.components.api.http_client.time.monotonic",
+                "opendev.core.agents.components.api.http_client.time.monotonic",
                 side_effect=fast_monotonic,
             ),
-            patch("swecli.core.agents.components.api.http_client.time.sleep"),
+            patch("opendev.core.agents.components.api.http_client.time.sleep"),
         ):
             result = client.post_json({"model": "test"})
 
@@ -128,10 +128,10 @@ class TestHttpClientRetry:
         with (
             patch.object(client._client, "post", side_effect=responses),
             patch(
-                "swecli.core.agents.components.api.http_client.time.monotonic",
+                "opendev.core.agents.components.api.http_client.time.monotonic",
                 side_effect=fast_monotonic,
             ),
-            patch("swecli.core.agents.components.api.http_client.time.sleep"),
+            patch("opendev.core.agents.components.api.http_client.time.sleep"),
         ):
             result = client.post_json({"model": "test"})
         assert result.success  # Transport succeeded

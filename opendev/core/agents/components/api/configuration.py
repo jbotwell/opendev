@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Tuple, TYPE_CHECKING
 
-from swecli.models.config import AppConfig
+from opendev.models.config import AppConfig
 
 if TYPE_CHECKING:
-    from swecli.core.agents.components.api.base_adapter import ProviderAdapter
+    from opendev.core.agents.components.api.base_adapter import ProviderAdapter
 
 
 # Models that require max_completion_tokens instead of max_tokens
@@ -74,7 +74,7 @@ def build_temperature_param(model_id: str, temperature: float) -> dict[str, floa
     if _is_reasoning_model(model_id):
         return {}
 
-    from swecli.config.models import get_model_registry
+    from opendev.config.models import get_model_registry
 
     registry = get_model_registry()
     result = registry.find_model_by_id(model_id)

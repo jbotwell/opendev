@@ -19,14 +19,14 @@ from fastmcp.client.transports import (
     SSETransport,
 )
 
-from swecli.core.context_engineering.mcp.config import (
+from opendev.core.context_engineering.mcp.config import (
     load_config,
     save_config,
     get_project_config_path,
     merge_configs,
     prepare_server_config,
 )
-from swecli.core.context_engineering.mcp.models import MCPConfig, MCPServerConfig
+from opendev.core.context_engineering.mcp.models import MCPConfig, MCPServerConfig
 
 
 class _SuppressStderr:

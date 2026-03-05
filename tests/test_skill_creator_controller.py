@@ -11,7 +11,7 @@ class TestParseGeneratedSkill:
 
     def setup_method(self):
         """Create a controller instance for testing."""
-        from swecli.ui_textual.controllers.skill_creator_controller import (
+        from opendev.ui_textual.controllers.skill_creator_controller import (
             SkillCreatorController,
         )
 
@@ -93,7 +93,7 @@ class TestCreateSkillFallback:
 
     def setup_method(self):
         """Create a controller instance for testing."""
-        from swecli.ui_textual.controllers.skill_creator_controller import (
+        from opendev.ui_textual.controllers.skill_creator_controller import (
             SkillCreatorController,
         )
 
@@ -161,7 +161,7 @@ class TestSkillGeneratorPromptExists:
         """Test that the skill generator prompt file exists."""
         prompt_path = (
             Path(__file__).parent.parent
-            / "swecli/core/agents/prompts/templates/generators/skill_generator_prompt.txt"
+            / "opendev/core/agents/prompts/templates/generators/skill_generator_prompt.txt"
         )
         assert prompt_path.exists(), f"Prompt file not found at {prompt_path}"
 
@@ -169,7 +169,7 @@ class TestSkillGeneratorPromptExists:
         """Test that prompt contains key instructions."""
         prompt_path = (
             Path(__file__).parent.parent
-            / "swecli/core/agents/prompts/templates/generators/skill_generator_prompt.txt"
+            / "opendev/core/agents/prompts/templates/generators/skill_generator_prompt.txt"
         )
         content = prompt_path.read_text()
 
@@ -184,7 +184,7 @@ class TestSkillCreatorWizardStates:
 
     def setup_method(self):
         """Create a controller instance for testing."""
-        from swecli.ui_textual.controllers.skill_creator_controller import (
+        from opendev.ui_textual.controllers.skill_creator_controller import (
             SkillCreatorController,
         )
 
@@ -261,21 +261,21 @@ class TestSkillCreatorPanels:
 
     def test_create_location_panel(self):
         """Test location panel creation."""
-        from swecli.ui_textual.components.skill_creator_panels import create_location_panel
+        from opendev.ui_textual.components.skill_creator_panels import create_location_panel
 
         panel = create_location_panel(0, working_dir="/test")
         assert panel is not None
 
     def test_create_method_panel(self):
         """Test method panel creation."""
-        from swecli.ui_textual.components.skill_creator_panels import create_method_panel
+        from opendev.ui_textual.components.skill_creator_panels import create_method_panel
 
         panel = create_method_panel(0)
         assert panel is not None
 
     def test_create_identifier_input_panel(self):
         """Test identifier input panel creation."""
-        from swecli.ui_textual.components.skill_creator_panels import (
+        from opendev.ui_textual.components.skill_creator_panels import (
             create_identifier_input_panel,
         )
 
@@ -288,7 +288,7 @@ class TestSkillCreatorPanels:
 
     def test_create_purpose_input_panel(self):
         """Test purpose input panel creation."""
-        from swecli.ui_textual.components.skill_creator_panels import (
+        from opendev.ui_textual.components.skill_creator_panels import (
             create_purpose_input_panel,
         )
 
@@ -297,7 +297,7 @@ class TestSkillCreatorPanels:
 
     def test_create_description_input_panel(self):
         """Test description input panel creation."""
-        from swecli.ui_textual.components.skill_creator_panels import (
+        from opendev.ui_textual.components.skill_creator_panels import (
             create_description_input_panel,
         )
 
@@ -306,14 +306,14 @@ class TestSkillCreatorPanels:
 
     def test_create_generating_panel(self):
         """Test generating panel creation."""
-        from swecli.ui_textual.components.skill_creator_panels import create_generating_panel
+        from opendev.ui_textual.components.skill_creator_panels import create_generating_panel
 
         panel = create_generating_panel("test description", "⠋", 5)
         assert panel is not None
 
     def test_create_success_panel(self):
         """Test success panel creation."""
-        from swecli.ui_textual.components.skill_creator_panels import create_success_panel
+        from opendev.ui_textual.components.skill_creator_panels import create_success_panel
 
         panel = create_success_panel("test-skill", "/path/to/skill")
         assert panel is not None

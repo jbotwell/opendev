@@ -8,8 +8,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
-from swecli.core.context_engineering.tools.lsp.ls_utils import FileUtils, PlatformUtils
-from swecli.core.context_engineering.tools.lsp.util.subprocess_util import subprocess_kwargs
+from opendev.core.context_engineering.tools.lsp.ls_utils import FileUtils, PlatformUtils
+from opendev.core.context_engineering.tools.lsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 

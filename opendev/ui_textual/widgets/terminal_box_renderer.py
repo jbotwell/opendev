@@ -9,7 +9,7 @@ from typing import Callable, List
 
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import (
+from opendev.ui_textual.style_tokens import (
     BLUE_PATH,
     ERROR,
     GREEN_PROMPT,
@@ -17,7 +17,7 @@ from swecli.ui_textual.style_tokens import (
     PANEL_BORDER,
     SUBTLE,
 )
-from swecli.ui_textual.utils.output_summarizer import summarize_output, get_expansion_hint
+from opendev.ui_textual.utils.output_summarizer import summarize_output, get_expansion_hint
 
 
 @dataclass

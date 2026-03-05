@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from swecli.core.context_engineering.mcp.models import MCPConfig, MCPServerConfig
-from swecli.core.paths import get_paths
+from opendev.core.context_engineering.mcp.models import MCPConfig, MCPServerConfig
+from opendev.core.paths import get_paths
 
 
 def get_config_path() -> Path:

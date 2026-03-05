@@ -12,7 +12,7 @@ def test_imports():
     """Test that all imports work."""
     print("Testing imports...")
     try:
-        from swecli.ui_textual.chat_app import (
+        from opendev.ui_textual.chat_app import (
             SWECLIChatApp,
             ConversationLog,
             StatusBar,
@@ -29,7 +29,7 @@ def test_app_creation():
     """Test that app can be created."""
     print("\nTesting app creation...")
     try:
-        from swecli.ui_textual.chat_app import create_chat_app
+        from opendev.ui_textual.chat_app import create_chat_app
 
         app = create_chat_app()
         print(f"✓ App created: {app.__class__.__name__}")
@@ -47,7 +47,7 @@ def test_widgets():
     """Test that widgets can be created."""
     print("\nTesting widgets...")
     try:
-        from swecli.ui_textual.chat_app import ConversationLog, StatusBar
+        from opendev.ui_textual.chat_app import ConversationLog, StatusBar
 
         # Create conversation log
         conv = ConversationLog(id="test-conv")
@@ -67,7 +67,7 @@ def test_message_formatting():
     """Test message formatting methods."""
     print("\nTesting message formatting...")
     try:
-        from swecli.ui_textual.chat_app import ConversationLog
+        from opendev.ui_textual.chat_app import ConversationLog
 
         conv = ConversationLog(id="test")
 

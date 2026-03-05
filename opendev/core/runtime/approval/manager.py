@@ -17,8 +17,8 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 
-from swecli.models.operation import Operation
-from swecli.ui_textual.style_tokens import PT_META_GREY
+from opendev.models.operation import Operation
+from opendev.ui_textual.style_tokens import PT_META_GREY
 
 
 class ApprovalChoice(str, Enum):
@@ -226,7 +226,7 @@ class ApprovalManager:
         timeout: Union[Any, None] = None,
         force_prompt: bool = False,
     ) -> ApprovalResult:
-        from swecli.core.debug import get_debug_logger
+        from opendev.core.debug import get_debug_logger
 
         get_debug_logger().log(
             "approval_request",

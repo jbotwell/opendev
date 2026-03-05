@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from swecli.ui_textual.services import ToolDisplayService, ToolResultData, BashOutputData
+from opendev.ui_textual.services import ToolDisplayService, ToolResultData, BashOutputData
 
 
 class TestToolDisplayService:

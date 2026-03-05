@@ -6,7 +6,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Dict
 
-from swecli.models.config import AppConfig
+from opendev.models.config import AppConfig
 
 
 class OpenBrowserTool:

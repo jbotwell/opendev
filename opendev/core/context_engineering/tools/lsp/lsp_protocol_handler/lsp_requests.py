@@ -31,7 +31,7 @@ SOFTWARE.
 
 from typing import Any, Union
 
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types
 
 
 class LspRequest:

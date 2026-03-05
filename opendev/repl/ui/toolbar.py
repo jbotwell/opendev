@@ -4,12 +4,12 @@ from typing import TYPE_CHECKING
 
 from prompt_toolkit.formatted_text import FormattedText
 
-from swecli.ui_textual.style_tokens import PT_GREEN, PT_GREY, PT_ORANGE, PT_PURPLE
+from opendev.ui_textual.style_tokens import PT_GREEN, PT_GREY, PT_ORANGE, PT_PURPLE
 
 if TYPE_CHECKING:
-    from swecli.core.runtime import ModeManager
-    from swecli.core.context_engineering.history import SessionManager
-    from swecli.models.config import Config
+    from opendev.core.runtime import ModeManager
+    from opendev.core.context_engineering.history import SessionManager
+    from opendev.models.config import Config
 
 
 class Toolbar:
@@ -38,7 +38,7 @@ class Toolbar:
         Returns:
             FormattedText for bottom toolbar
         """
-        from swecli.core.runtime import OperationMode
+        from opendev.core.runtime import OperationMode
 
         mode = self.mode_manager.current_mode.value.upper()
         limit = self.config.max_context_tokens or 1

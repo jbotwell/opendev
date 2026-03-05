@@ -10,16 +10,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from swecli.core.hooks.models import (
+from opendev.core.hooks.models import (
     HookEvent,
     HookCommand,
     HookMatcher,
     HookConfig,
     VALID_EVENT_NAMES,
 )
-from swecli.core.hooks.executor import HookResult, HookCommandExecutor
-from swecli.core.hooks.manager import HookManager, HookOutcome
-from swecli.core.hooks.loader import load_hooks_config, _read_hooks_from_file
+from opendev.core.hooks.executor import HookResult, HookCommandExecutor
+from opendev.core.hooks.manager import HookManager, HookOutcome
+from opendev.core.hooks.loader import load_hooks_config, _read_hooks_from_file
 
 
 # ============================================================================
@@ -448,7 +448,7 @@ class TestLoader:
             }
         }))
 
-        with patch("swecli.core.paths.get_paths") as mock_paths:
+        with patch("opendev.core.paths.get_paths") as mock_paths:
             mock_p = MagicMock()
             mock_p.global_settings = global_settings
             mock_p.project_settings = project_settings
@@ -463,7 +463,7 @@ class TestLoader:
 
     def test_load_hooks_config_empty(self, tmp_path):
         """No hooks defined returns empty config."""
-        with patch("swecli.core.paths.get_paths") as mock_paths:
+        with patch("opendev.core.paths.get_paths") as mock_paths:
             mock_p = MagicMock()
             mock_p.global_settings = tmp_path / "nonexistent_global.json"
             mock_p.project_settings = tmp_path / "nonexistent_project.json"
@@ -574,7 +574,7 @@ class TestToolRegistryHookIntegration:
 
     def test_pre_tool_use_blocks_execution(self):
         """PreToolUse hook with exit 2 should prevent tool execution."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         config = HookConfig(hooks={
@@ -595,7 +595,7 @@ class TestToolRegistryHookIntegration:
 
     def test_pre_tool_use_updates_input(self):
         """PreToolUse hook can modify tool arguments."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         config = HookConfig(hooks={
@@ -618,7 +618,7 @@ class TestToolRegistryHookIntegration:
 
     def test_no_hook_manager_is_noop(self):
         """When no hook manager is set, tools work normally."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         # No set_hook_manager call — _hook_manager is None

@@ -1,5 +1,5 @@
 """Test interrupt display formatting end-to-end."""
-from swecli.ui_textual.formatters.style_formatter import StyleFormatter
+from opendev.ui_textual.formatters.style_formatter import StyleFormatter
 
 
 def test_interrupt_display_format():

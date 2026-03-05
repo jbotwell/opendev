@@ -11,26 +11,26 @@ from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.widgets import Header, Rule, Static
 
-from swecli.ui_textual.widgets import AnimatedWelcomePanel, ConversationLog, ProgressBar
-from swecli.ui_textual.widgets.chat_text_area import ChatTextArea
-from swecli.ui_textual.widgets.status_bar import StatusBar
-from swecli.ui_textual.widgets.todo_panel import TodoPanel
-from swecli.ui_textual.components import TipsManager
-from swecli.ui_textual.controllers.approval_prompt_controller import ApprovalPromptController
-from swecli.ui_textual.controllers.ask_user_prompt_controller import AskUserPromptController
-from swecli.ui_textual.controllers.plan_approval_controller import PlanApprovalController
-from swecli.ui_textual.controllers.autocomplete_popup_controller import AutocompletePopupController
-from swecli.ui_textual.controllers.command_router import CommandRouter
-from swecli.ui_textual.controllers.message_controller import MessageController
-from swecli.ui_textual.controllers.model_picker_controller import ModelPickerController
-from swecli.ui_textual.controllers.agent_creator_controller import AgentCreatorController
-from swecli.ui_textual.controllers.skill_creator_controller import SkillCreatorController
-from swecli.ui_textual.controllers.spinner_controller import SpinnerController
-from swecli.ui_textual.managers.console_buffer_manager import ConsoleBufferManager
-from swecli.ui_textual.managers.message_history import MessageHistory
-from swecli.ui_textual.managers.tool_summary_manager import ToolSummaryManager
-from swecli.ui_textual.managers.spinner_service import SpinnerService
-from swecli.ui_textual.managers.interrupt_manager import InterruptManager, InterruptState
+from opendev.ui_textual.widgets import AnimatedWelcomePanel, ConversationLog, ProgressBar
+from opendev.ui_textual.widgets.chat_text_area import ChatTextArea
+from opendev.ui_textual.widgets.status_bar import StatusBar
+from opendev.ui_textual.widgets.todo_panel import TodoPanel
+from opendev.ui_textual.components import TipsManager
+from opendev.ui_textual.controllers.approval_prompt_controller import ApprovalPromptController
+from opendev.ui_textual.controllers.ask_user_prompt_controller import AskUserPromptController
+from opendev.ui_textual.controllers.plan_approval_controller import PlanApprovalController
+from opendev.ui_textual.controllers.autocomplete_popup_controller import AutocompletePopupController
+from opendev.ui_textual.controllers.command_router import CommandRouter
+from opendev.ui_textual.controllers.message_controller import MessageController
+from opendev.ui_textual.controllers.model_picker_controller import ModelPickerController
+from opendev.ui_textual.controllers.agent_creator_controller import AgentCreatorController
+from opendev.ui_textual.controllers.skill_creator_controller import SkillCreatorController
+from opendev.ui_textual.controllers.spinner_controller import SpinnerController
+from opendev.ui_textual.managers.console_buffer_manager import ConsoleBufferManager
+from opendev.ui_textual.managers.message_history import MessageHistory
+from opendev.ui_textual.managers.tool_summary_manager import ToolSummaryManager
+from opendev.ui_textual.managers.spinner_service import SpinnerService
+from opendev.ui_textual.managers.interrupt_manager import InterruptManager, InterruptState
 
 # Note: render_welcome_panel no longer used - replaced by AnimatedWelcomePanel widget
 
@@ -227,7 +227,7 @@ class SWECLIChatApp(App):
     def on_mount(self) -> None:
         """Initialize the app on mount."""
         # Clear debug log for fresh session
-        from swecli.ui_textual.debug_logger import clear_debug_log, debug_log
+        from opendev.ui_textual.debug_logger import clear_debug_log, debug_log
         clear_debug_log()
         debug_log("ChatApp", "App mounted - debug log cleared")
 

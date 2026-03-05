@@ -3,7 +3,7 @@
 import asyncio
 from typing import Any, Callable, Optional
 
-from swecli.core.channels.base import ChannelAdapter, InboundMessage, OutboundMessage
+from opendev.core.channels.base import ChannelAdapter, InboundMessage, OutboundMessage
 
 
 class MockChannelAdapter(ChannelAdapter):

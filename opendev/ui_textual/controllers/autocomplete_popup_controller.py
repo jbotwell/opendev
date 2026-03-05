@@ -9,8 +9,8 @@ from rich.table import Table
 from rich.text import Text
 from textual.widgets import Static
 
-from swecli.ui_textual.style_tokens import BLUE_BG_ACTIVE, GREY
-from swecli.ui_textual.utils.file_type_colors import FileTypeColors
+from opendev.ui_textual.style_tokens import BLUE_BG_ACTIVE, GREY
+from opendev.ui_textual.utils.file_type_colors import FileTypeColors
 
 StateType = Tuple[Tuple[Tuple[str, str], ...], int]
 

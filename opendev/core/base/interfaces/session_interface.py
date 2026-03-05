@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Union, Protocol, Sequence
 
-from swecli.models.message import ChatMessage
-from swecli.models.session import Session, SessionMetadata
+from opendev.models.message import ChatMessage
+from opendev.models.session import Session, SessionMetadata
 
 
 class SessionManagerInterface(Protocol):

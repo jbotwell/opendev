@@ -5,7 +5,7 @@ and helper functions. All paths in the application should be accessed through
 this module rather than hardcoded strings.
 
 Example:
-    from swecli.core.paths import get_paths
+    from opendev.core.paths import get_paths
 
     paths = get_paths()
     settings_file = paths.global_settings

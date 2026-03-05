@@ -4,9 +4,9 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 
-from swecli.core.context_engineering.tools.implementations.bash_tool import truncate_output
-from swecli.core.context_engineering.tools.implementations.file_ops import FileOperations
-from swecli.models.config import AppConfig
+from opendev.core.context_engineering.tools.implementations.bash_tool import truncate_output
+from opendev.core.context_engineering.tools.implementations.file_ops import FileOperations
+from opendev.models.config import AppConfig
 
 
 def _make_config() -> AppConfig:
@@ -106,7 +106,7 @@ class TestSearchOutputTruncation:
 
     def test_output_cap_at_30k_chars(self) -> None:
         """Total output should not exceed ~30,000 chars."""
-        from swecli.core.context_engineering.tools.handlers.file_handlers import FileToolHandler
+        from opendev.core.context_engineering.tools.handlers.file_handlers import FileToolHandler
 
         file_ops = MagicMock()
         # Generate many long matches
@@ -123,7 +123,7 @@ class TestSearchOutputTruncation:
 
     def test_truncation_message_appended(self) -> None:
         """Should indicate when results are truncated."""
-        from swecli.core.context_engineering.tools.handlers.file_handlers import FileToolHandler
+        from opendev.core.context_engineering.tools.handlers.file_handlers import FileToolHandler
 
         file_ops = MagicMock()
         file_ops.grep_files.return_value = [
@@ -161,7 +161,7 @@ class TestListFilesTruncation:
 
     def test_500_entry_cap(self) -> None:
         """Should cap at 500 entries with count message."""
-        from swecli.core.context_engineering.tools.handlers.file_handlers import FileToolHandler
+        from opendev.core.context_engineering.tools.handlers.file_handlers import FileToolHandler
 
         file_ops = MagicMock()
         file_ops.working_dir = Path("/mock")

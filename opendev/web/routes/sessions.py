@@ -7,8 +7,8 @@ from typing import Dict, List, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from swecli.web.state import get_state
-from swecli.web.routes.chat import MessageResponse, ToolCallInfo
+from opendev.web.state import get_state
+from opendev.web.routes.chat import MessageResponse, ToolCallInfo
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -58,7 +58,7 @@ async def create_session(request: CreateSessionRequest) -> Dict[str, Any]:
         print(f"[DEBUG] Got current session: {session.id}")
 
         # Initialize plan file path for plan mode
-        from swecli.core.paths import get_paths
+        from opendev.core.paths import get_paths
 
         plans_dir = get_paths().global_dir / "plans"
         plans_dir.mkdir(parents=True, exist_ok=True)
@@ -174,7 +174,7 @@ async def resume_session(session_id: str) -> Dict[str, str]:
             print(f"[DEBUG] Session {session_id} loaded with {len(current.messages)} messages")
 
             # Initialize plan file path for plan mode
-            from swecli.core.paths import get_paths
+            from opendev.core.paths import get_paths
 
             plans_dir = get_paths().global_dir / "plans"
             plans_dir.mkdir(parents=True, exist_ok=True)
@@ -615,7 +615,7 @@ async def list_files(query: str = "") -> Dict[str, Any]:
         gitignore_parser = None
         gitignore_path = working_dir / ".gitignore"
         if gitignore_path.exists():
-            from swecli.ui_textual.autocomplete_internal.gitignore import GitIgnoreParser
+            from opendev.ui_textual.autocomplete_internal.gitignore import GitIgnoreParser
             gitignore_parser = GitIgnoreParser(working_dir)
 
         def should_skip_dir(dir_path: Path, dir_name: str) -> bool:

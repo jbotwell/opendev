@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rich.console import Console
 
-from swecli.repl.commands.tool_commands import ToolCommands
+from opendev.repl.commands.tool_commands import ToolCommands
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def test_init_command(tool_commands, mock_repl, tmp_path):
     opendev_path = tmp_path / "OPENDEV.md"
     opendev_path.write_text("# Test")
 
-    with patch("swecli.repl.commands.tool_commands.load_prompt") as mock_load:
+    with patch("opendev.repl.commands.tool_commands.load_prompt") as mock_load:
         mock_load.return_value = "Test prompt for {path}"
         tool_commands.init_codebase(f"/init {tmp_path}")
 
@@ -79,7 +79,7 @@ def test_init_command_shows_summary_in_tui(mock_repl, tmp_path):
     opendev_path = tmp_path / "OPENDEV.md"
     opendev_path.write_text("# Test")
 
-    with patch("swecli.repl.commands.tool_commands.load_prompt") as mock_load:
+    with patch("opendev.repl.commands.tool_commands.load_prompt") as mock_load:
         mock_load.return_value = "Test prompt for {path}"
         tool_commands.init_codebase(f"/init {tmp_path}")
 

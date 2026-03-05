@@ -2,7 +2,7 @@
 from unittest.mock import Mock, MagicMock
 import pytest
 
-from swecli.ui_textual.controllers.mcp_command_controller import MCPCommandController
+from opendev.ui_textual.controllers.mcp_command_controller import MCPCommandController
 
 
 @pytest.fixture

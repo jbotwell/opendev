@@ -3,7 +3,7 @@ import os
 from unittest.mock import Mock
 from rich.text import Text
 
-from swecli.ui_textual.widgets.terminal_box_renderer import TerminalBoxRenderer, TerminalBoxConfig
+from opendev.ui_textual.widgets.terminal_box_renderer import TerminalBoxRenderer, TerminalBoxConfig
 
 
 def test_format_path():

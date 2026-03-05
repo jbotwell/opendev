@@ -10,7 +10,7 @@ class TestReactExecutorInjection:
 
     def _make_executor(self):
         """Create a ReactExecutor with mocked dependencies."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = MagicMock()
         session_manager = MagicMock()
@@ -40,7 +40,7 @@ class TestReactExecutorInjection:
 
     def test_drain_injected_messages(self):
         """_drain_injected_messages persists and appends messages."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor, session_manager = self._make_executor()
         executor.inject_user_message("msg1")
@@ -66,7 +66,7 @@ class TestReactExecutorInjection:
 
     def test_drain_caps_at_max_per_drain(self):
         """_drain_injected_messages caps at max_per_drain=3."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor, _ = self._make_executor()
         for i in range(5):
@@ -90,7 +90,7 @@ class TestReactExecutorInjection:
 
     def test_drain_empty_queue_returns_zero(self):
         """_drain_injected_messages on empty queue returns 0."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor, _ = self._make_executor()
         ctx = IterationContext(
@@ -116,7 +116,7 @@ class TestMainAgentInjection:
         Patches build_system_prompt to avoid requiring real tool registry
         and template files during __init__.
         """
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
 
         config = MagicMock()
         config.model = "test-model"
@@ -217,7 +217,7 @@ class TestMessageProcessorInjection:
 
     def _make_processor(self):
         """Create a MessageProcessor with mocked app."""
-        from swecli.ui_textual.runner_components.message_processor import MessageProcessor
+        from opendev.ui_textual.runner_components.message_processor import MessageProcessor
 
         app = MagicMock()
         app.update_queue_indicator = MagicMock()
@@ -282,7 +282,7 @@ class TestWebStateInjectionQueue:
 
     def _make_state(self):
         """Create a WebState with mocked managers."""
-        from swecli.web.state import WebState
+        from opendev.web.state import WebState
 
         state = WebState(
             config_manager=MagicMock(),
@@ -333,7 +333,7 @@ class TestInjectionThreadSafety:
 
     def test_concurrent_inject_and_drain(self):
         """Concurrent inject and drain don't lose messages or crash."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor, _ = TestReactExecutorInjection()._make_executor()
 
@@ -386,7 +386,7 @@ class TestDeferredDisplay:
     """Tests for deferred display of injected messages."""
 
     def _make_executor(self):
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = MagicMock()
         session_manager = MagicMock()
@@ -399,7 +399,7 @@ class TestDeferredDisplay:
         return executor, session_manager
 
     def _make_processor(self):
-        from swecli.ui_textual.runner_components.message_processor import MessageProcessor
+        from opendev.ui_textual.runner_components.message_processor import MessageProcessor
 
         app = MagicMock()
         app.update_queue_indicator = MagicMock()
@@ -458,7 +458,7 @@ class TestDeferredDisplay:
 
     def test_drain_calls_on_message_consumed(self):
         """_drain_injected_messages calls _on_message_consumed for each drained message."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor, _ = self._make_executor()
         consumed = []
@@ -482,7 +482,7 @@ class TestDeferredDisplay:
 
     def test_drain_without_callback_works(self):
         """Drain succeeds even with no callback set."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor, _ = self._make_executor()
         # No callback set
@@ -504,7 +504,7 @@ class TestDeferredDisplay:
 
     def test_drain_callback_exception_swallowed(self):
         """Callback exceptions don't break the drain."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor, _ = self._make_executor()
 
@@ -546,7 +546,7 @@ class TestDeferredDisplay:
                 if executor._on_orphan_message is not None:
                     executor._on_orphan_message(text)
                 else:
-                    from swecli.models.message import ChatMessage, Role
+                    from opendev.models.message import ChatMessage, Role
                     user_msg = ChatMessage(role=Role.USER, content=text)
                     session_manager.add_message(user_msg, 0)
             except queue_mod.Empty:

@@ -6,7 +6,7 @@ from typing import Any
 
 from rich.text import Text
 
-from swecli.ui_textual.services.display_data import ToolResultData
+from opendev.ui_textual.services.display_data import ToolResultData
 
 
 class ReplayModeAdapter:

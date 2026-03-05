@@ -9,7 +9,7 @@ from base64 import b64decode
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from swecli.models.config import AppConfig
+from opendev.models.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

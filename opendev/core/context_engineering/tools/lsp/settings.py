@@ -8,10 +8,10 @@ import pathlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from swecli.core.context_engineering.tools.lsp.util.compat import ToStringMixin
+from opendev.core.context_engineering.tools.lsp.util.compat import ToStringMixin
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.tools.lsp.ls_config import Language
+    from opendev.core.context_engineering.tools.lsp.ls_config import Language
 
 log = logging.getLogger(__name__)
 

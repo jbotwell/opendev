@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from swecli.core.paths import get_paths
-from swecli.core.plugins.models import (
+from opendev.core.paths import get_paths
+from opendev.core.plugins.models import (
     KnownMarketplaces,
     InstalledPlugins,
     MarketplaceInfo,

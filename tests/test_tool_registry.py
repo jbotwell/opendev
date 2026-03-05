@@ -10,24 +10,24 @@ import importlib
 def mock_dependencies():
     """Mocks necessary modules for ToolRegistry and yields control."""
     mock_modules = {
-        'swecli.core.runtime': MagicMock(),
-        'swecli.core.context_engineering.tools.context': MagicMock(),
-        'swecli.core.context_engineering.tools.handlers.file_handlers': MagicMock(),
-        'swecli.core.context_engineering.mcp.handler': MagicMock(),
-        'swecli.core.context_engineering.tools.handlers.process_handlers': MagicMock(),
-        'swecli.core.context_engineering.tools.handlers.web_handlers': MagicMock(),
-        'swecli.core.context_engineering.tools.handlers.screenshot_handler': MagicMock(),
-        'swecli.core.context_engineering.tools.handlers.todo_handler': MagicMock(),
-        'swecli.core.context_engineering.tools.implementations.pdf_tool': MagicMock(),
-        'swecli.core.context_engineering.tools.symbol_tools': MagicMock(),
-        'swecli.core.agents.subagents.manager': MagicMock(),
+        'opendev.core.runtime': MagicMock(),
+        'opendev.core.context_engineering.tools.context': MagicMock(),
+        'opendev.core.context_engineering.tools.handlers.file_handlers': MagicMock(),
+        'opendev.core.context_engineering.mcp.handler': MagicMock(),
+        'opendev.core.context_engineering.tools.handlers.process_handlers': MagicMock(),
+        'opendev.core.context_engineering.tools.handlers.web_handlers': MagicMock(),
+        'opendev.core.context_engineering.tools.handlers.screenshot_handler': MagicMock(),
+        'opendev.core.context_engineering.tools.handlers.todo_handler': MagicMock(),
+        'opendev.core.context_engineering.tools.implementations.pdf_tool': MagicMock(),
+        'opendev.core.context_engineering.tools.symbol_tools': MagicMock(),
+        'opendev.core.agents.subagents.manager': MagicMock(),
     }
 
     # Setup OperationMode on the runtime mock
     class OperationMode:
         PLAN = "plan"
         CODE = "code"
-    mock_modules['swecli.core.runtime'].OperationMode = OperationMode
+    mock_modules['opendev.core.runtime'].OperationMode = OperationMode
 
     # We use patch.dict to safely mock sys.modules for the duration of the test
     with patch.dict(sys.modules, mock_modules):
@@ -42,10 +42,10 @@ def tool_registry_cls(mock_dependencies):
     # To be safe, we can try to invalidate cache or just import.
 
     # Check if we need to remove it from sys.modules to force reload with mocks
-    if 'swecli.core.context_engineering.tools.registry' in sys.modules:
-        del sys.modules['swecli.core.context_engineering.tools.registry']
+    if 'opendev.core.context_engineering.tools.registry' in sys.modules:
+        del sys.modules['opendev.core.context_engineering.tools.registry']
 
-    import swecli.core.context_engineering.tools.registry as tr
+    import opendev.core.context_engineering.tools.registry as tr
     return tr
 
 @pytest.fixture
@@ -94,7 +94,7 @@ def test_execute_tool_exception(registry):
 @pytest.mark.skip(reason="Plan mode blocking logic difficult to test with mocks currently")
 def test_plan_mode_blocking(registry, tool_registry_cls, mock_dependencies):
     # Setup context for Plan Mode
-    mock_runtime = mock_dependencies['swecli.core.runtime']
+    mock_runtime = mock_dependencies['opendev.core.runtime']
     OperationMode = mock_runtime.OperationMode
 
     mode_manager = MagicMock()

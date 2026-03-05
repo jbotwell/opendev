@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock
 
-from swecli.ui_textual.controllers.message_controller import MessageController
+from opendev.ui_textual.controllers.message_controller import MessageController
 
 
 def _make_controller() -> MessageController:

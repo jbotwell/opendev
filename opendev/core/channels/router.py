@@ -8,12 +8,12 @@ import asyncio
 import logging
 from typing import Any, Callable, Optional
 
-from swecli.core.channels.base import ChannelAdapter, InboundMessage, OutboundMessage
-from swecli.core.channels.reset_policies import should_reset_session
-from swecli.core.channels.workspace_selector import WorkspaceSelector
-from swecli.core.context_engineering.history.session_manager import SessionManager
-from swecli.models.message import ChatMessage, InputProvenance, Role
-from swecli.models.session import Session
+from opendev.core.channels.base import ChannelAdapter, InboundMessage, OutboundMessage
+from opendev.core.channels.reset_policies import should_reset_session
+from opendev.core.channels.workspace_selector import WorkspaceSelector
+from opendev.core.context_engineering.history.session_manager import SessionManager
+from opendev.models.message import ChatMessage, InputProvenance, Role
+from opendev.models.session import Session
 
 logger = logging.getLogger(__name__)
 

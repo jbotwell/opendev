@@ -6,7 +6,7 @@ import time
 sys.path.insert(0, "/Users/nghibui/codes/swe-cli")
 
 from rich.text import Text
-from swecli.ui_textual.widgets.conversation.tool_renderer import (
+from opendev.ui_textual.widgets.conversation.tool_renderer import (
     DefaultToolRenderer,
     ParallelAgentGroup,
     AgentInfo,
@@ -280,7 +280,7 @@ class MockApp:
 
 def test_ui_callback_suppresses_spawn_subagent_in_parallel_mode():
     """Verify UICallback suppresses spawn_subagent display when parallel group is active."""
-    from swecli.ui_textual.ui_callback import TextualUICallback
+    from opendev.ui_textual.ui_callback import TextualUICallback
 
     conversation = MockConversation()
     app = MockApp()
@@ -312,7 +312,7 @@ def test_ui_callback_suppresses_spawn_subagent_in_parallel_mode():
 
 def test_ui_callback_allows_spawn_subagent_outside_parallel_mode():
     """Verify UICallback calls on_single_agent_start for spawn_subagent when not in parallel mode."""
-    from swecli.ui_textual.ui_callback import TextualUICallback
+    from opendev.ui_textual.ui_callback import TextualUICallback
 
     conversation = MockConversation()
     app = MockApp()
@@ -339,7 +339,7 @@ def test_ui_callback_allows_spawn_subagent_outside_parallel_mode():
 
 def test_ui_callback_parallel_flag_lifecycle():
     """Verify _in_parallel_agent_group flag is set/cleared correctly."""
-    from swecli.ui_textual.ui_callback import TextualUICallback
+    from opendev.ui_textual.ui_callback import TextualUICallback
 
     conversation = MockConversation()
     app = MockApp()
@@ -365,7 +365,7 @@ def test_ui_callback_parallel_flag_lifecycle():
 
 def test_ui_callback_suppresses_nested_tool_result_in_parallel_mode():
     """Verify UICallback suppresses nested tool result display when parallel group is active."""
-    from swecli.ui_textual.ui_callback import TextualUICallback
+    from opendev.ui_textual.ui_callback import TextualUICallback
 
     conversation = MockConversation()
     app = MockApp()

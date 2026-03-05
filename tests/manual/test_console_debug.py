@@ -8,8 +8,8 @@ from pathlib import Path
 # Add the project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from swecli.ui_textual.runner import TextualRunner
-from swecli.models.message import Role
+from opendev.ui_textual.runner import TextualRunner
+from opendev.models.message import Role
 
 def print_section(title):
     """Print a section header."""

@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, Optional, Callable
 from rich.console import Console
 from rich.table import Table
 
-from swecli.core.runtime.monitoring import TaskMonitor
-from swecli.repl.commands.base import CommandHandler, CommandResult
-from swecli.ui_textual.components.task_progress import TaskProgressDisplay
-from swecli.ui_textual.modals.mcp_viewer_modal import show_mcp_server
+from opendev.core.runtime.monitoring import TaskMonitor
+from opendev.repl.commands.base import CommandHandler, CommandResult
+from opendev.ui_textual.components.task_progress import TaskProgressDisplay
+from opendev.ui_textual.modals.mcp_viewer_modal import show_mcp_server
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.mcp.manager import MCPManager
+    from opendev.core.context_engineering.mcp.manager import MCPManager
 
 
 class MCPCommands(CommandHandler):
@@ -445,7 +445,7 @@ class MCPCommands(CommandHandler):
             # For now, just show tools if they exist
 
         # Get config location
-        from swecli.core.context_engineering.mcp.config import (
+        from opendev.core.context_engineering.mcp.config import (
             get_config_path,
             get_project_config_path,
         )

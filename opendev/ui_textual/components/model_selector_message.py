@@ -1,7 +1,7 @@
 """Model selector message component for interactive model switching."""
 
 from typing import List, Tuple
-from swecli.config import get_model_registry
+from opendev.config import get_model_registry
 
 
 def create_model_selector_message(selected_index: int, selection_mode: str = "normal") -> str:

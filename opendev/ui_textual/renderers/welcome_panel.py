@@ -10,9 +10,9 @@ from rich.align import Align
 from rich.panel import Panel
 from rich.text import Text
 
-from swecli.core.runtime import OperationMode
-from swecli.ui_textual.components import WelcomeMessage
-from swecli.ui_textual.style_tokens import BLUE_BRIGHT, SUBTLE, GREEN_BRIGHT, PRIMARY, CYAN
+from opendev.core.runtime import OperationMode
+from opendev.ui_textual.components import WelcomeMessage
+from opendev.ui_textual.style_tokens import BLUE_BRIGHT, SUBTLE, GREEN_BRIGHT, PRIMARY, CYAN
 
 
 def render_welcome_panel(

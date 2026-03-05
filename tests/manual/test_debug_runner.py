@@ -11,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
 from textual.widgets import Header, Footer, Static, Button
-from swecli.ui_textual.chat_app import ConversationLog, ChatTextArea
-from swecli.ui_textual.runner import TextualRunner
-from swecli.models.message import Role
+from opendev.ui_textual.chat_app import ConversationLog, ChatTextArea
+from opendev.ui_textual.runner import TextualRunner
+from opendev.models.message import Role
 
 class DebugApp(App):
     """Debug app that shows exactly what happens when we process a query."""

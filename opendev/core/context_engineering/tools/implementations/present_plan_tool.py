@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from swecli.ui_textual.ui_callback import UICallback
+    from opendev.ui_textual.ui_callback import UICallback
 
 
 class PresentPlanTool:
@@ -79,8 +79,8 @@ class PresentPlanTool:
 
         # Index the plan
         try:
-            from swecli.core.paths import get_paths
-            from swecli.core.runtime.plan_index import PlanIndex
+            from opendev.core.paths import get_paths
+            from opendev.core.runtime.plan_index import PlanIndex
 
             plans_dir = get_paths().global_plans_dir
             plans_dir.mkdir(parents=True, exist_ok=True)

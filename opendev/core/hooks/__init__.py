@@ -6,10 +6,10 @@ hooks in settings.json with regex matchers to filter which events
 trigger which commands.
 """
 
-from swecli.core.hooks.models import HookEvent, HookCommand, HookMatcher, HookConfig
-from swecli.core.hooks.executor import HookResult, HookCommandExecutor
-from swecli.core.hooks.manager import HookOutcome, HookManager
-from swecli.core.hooks.loader import load_hooks_config
+from opendev.core.hooks.models import HookEvent, HookCommand, HookMatcher, HookConfig
+from opendev.core.hooks.executor import HookResult, HookCommandExecutor
+from opendev.core.hooks.manager import HookOutcome, HookManager
+from opendev.core.hooks.loader import load_hooks_config
 
 __all__ = [
     "HookEvent",

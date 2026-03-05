@@ -14,11 +14,11 @@ import threading
 
 from overrides import override
 
-from swecli.core.context_engineering.tools.lsp.ls import SolidLanguageServer
-from swecli.core.context_engineering.tools.lsp.ls_config import LanguageServerConfig
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import InitializeParams
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from swecli.core.context_engineering.tools.lsp.settings import SolidLSPSettings
+from opendev.core.context_engineering.tools.lsp.ls import SolidLanguageServer
+from opendev.core.context_engineering.tools.lsp.ls_config import LanguageServerConfig
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import InitializeParams
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from opendev.core.context_engineering.tools.lsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class Solargraph(SolidLanguageServer):
         )
         # Override internal language enum for file matching (excludes .erb files)
         # while keeping LSP languageId as "ruby" for protocol compliance
-        from swecli.core.context_engineering.tools.lsp.ls_config import Language
+        from opendev.core.context_engineering.tools.lsp.ls_config import Language
 
         self.language = Language.RUBY_SOLARGRAPH
         self.analysis_complete = threading.Event()

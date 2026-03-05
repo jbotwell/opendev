@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from rich.console import Console
 
-from swecli.core.agents.prompts import load_prompt
-from swecli.models.agent_deps import AgentDependencies
-from swecli.repl.commands.base import CommandHandler, CommandResult
+from opendev.core.agents.prompts import load_prompt
+from opendev.models.agent_deps import AgentDependencies
+from opendev.repl.commands.base import CommandHandler, CommandResult
 
 if TYPE_CHECKING:
-    from swecli.repl.repl import REPL
+    from opendev.repl.repl import REPL
 
 
 class ToolCommands(CommandHandler):
@@ -128,7 +128,7 @@ class ToolCommands(CommandHandler):
                     self.ui_callback.on_assistant_message(final_content)
                 else:
                     # No summary from agent - prompt LLM for one
-                    from swecli.core.agents.prompts import get_reminder
+                    from opendev.core.agents.prompts import get_reminder
 
                     signal = get_reminder("init_complete_signal", path=str(opendev_path))
 

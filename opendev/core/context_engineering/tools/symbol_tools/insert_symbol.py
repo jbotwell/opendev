@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from swecli.core.context_engineering.tools.lsp import SymbolRetriever
+from opendev.core.context_engineering.tools.lsp import SymbolRetriever
 
 
 def handle_insert_before_symbol(arguments: dict[str, Any]) -> dict[str, Any]:

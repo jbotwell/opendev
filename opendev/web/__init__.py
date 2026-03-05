@@ -1,7 +1,7 @@
 """Web UI module for OpenDev."""
 
 from pathlib import Path
-from swecli.web.server import create_app, start_server
+from opendev.web.server import create_app, start_server
 
 def find_static_directory() -> Path:
     """Find the built web UI static directory.

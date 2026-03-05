@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, Sequence
 
-from swecli.models.config import AppConfig
+from opendev.models.config import AppConfig
 
 
 class ConfigManagerInterface(Protocol):

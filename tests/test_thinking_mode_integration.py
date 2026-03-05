@@ -12,8 +12,8 @@ import os
 import pytest
 from unittest.mock import MagicMock, patch
 
-from swecli.core.agents.main_agent import MainAgent
-from swecli.models.config import AppConfig
+from opendev.core.agents.main_agent import MainAgent
+from opendev.models.config import AppConfig
 
 
 def create_test_agent() -> MainAgent:

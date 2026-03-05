@@ -6,7 +6,7 @@ from pathlib import Path
 
 def test_present_plan_tool_description_loaded():
     """Verify present_plan description loads from markdown file."""
-    from swecli.core.agents.prompts.loader import load_tool_description
+    from opendev.core.agents.prompts.loader import load_tool_description
 
     description = load_tool_description("present_plan")
 
@@ -23,7 +23,7 @@ def test_tool_description_template_files_exist():
     """Verify tool description template files exist."""
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates/tools"
+        / "opendev/core/agents/prompts/templates/tools"
     )
 
     # Check for present_plan tool description
@@ -35,7 +35,7 @@ def test_tool_description_templates_valid_markdown():
     """Verify tool description templates are valid markdown."""
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates/tools"
+        / "opendev/core/agents/prompts/templates/tools"
     )
 
     for template_file in templates_dir.glob("*.md"):
@@ -54,7 +54,7 @@ def test_tool_description_templates_valid_markdown():
 
 def test_present_plan_tool_name_correct():
     """Verify present_plan tool name is correctly set."""
-    from swecli.core.context_engineering.tools.implementations.present_plan_tool import (
+    from opendev.core.context_engineering.tools.implementations.present_plan_tool import (
         PresentPlanTool,
     )
 
@@ -64,11 +64,11 @@ def test_present_plan_tool_name_correct():
 
 def test_all_builtin_tools_have_template_files():
     """Verify every tool in _BUILTIN_TOOL_SCHEMAS has a corresponding .md template."""
-    from swecli.core.agents.components.schemas.definitions import _BUILTIN_TOOL_SCHEMAS
+    from opendev.core.agents.components.schemas.definitions import _BUILTIN_TOOL_SCHEMAS
 
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates/tools"
+        / "opendev/core/agents/prompts/templates/tools"
     )
 
     for schema in _BUILTIN_TOOL_SCHEMAS:
@@ -80,7 +80,7 @@ def test_all_builtin_tools_have_template_files():
 
 def test_load_tool_description_returns_content():
     """Verify load_tool_description loads and strips frontmatter."""
-    from swecli.core.agents.prompts.loader import load_tool_description
+    from opendev.core.agents.prompts.loader import load_tool_description
 
     desc = load_tool_description("write_file")
 
@@ -91,7 +91,7 @@ def test_load_tool_description_returns_content():
 
 def test_load_tool_description_missing_raises():
     """Verify load_tool_description raises FileNotFoundError for missing templates."""
-    from swecli.core.agents.prompts.loader import load_tool_description
+    from opendev.core.agents.prompts.loader import load_tool_description
 
     with pytest.raises(FileNotFoundError):
         load_tool_description("nonexistent_tool_that_does_not_exist")

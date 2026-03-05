@@ -10,7 +10,7 @@ Fix 6: Token check between sequential tool calls
 
 from unittest.mock import Mock, MagicMock, patch, PropertyMock
 
-from swecli.core.runtime.interrupt_token import InterruptToken
+from opendev.core.runtime.interrupt_token import InterruptToken
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ class TestFix1TokenWiredToInterruptManager:
 
     def _make_executor(self):
         """Create a minimal ReactExecutor with mocked dependencies."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = Mock()
         session_manager = Mock()
@@ -137,7 +137,7 @@ class TestFix2ActionInterruptSignalsToken:
         app.input_field._completions = None
 
         # Create a real InterruptManager with mocked app
-        from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+        from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
         manager = InterruptManager(app)
         app._interrupt_manager = manager
@@ -159,7 +159,7 @@ class TestFix2ActionInterruptSignalsToken:
         manager.register_controller(controller)
 
         # Import and call the actual method
-        from swecli.ui_textual.chat_app import SWECLIChatApp
+        from opendev.ui_textual.chat_app import SWECLIChatApp
 
         SWECLIChatApp.action_interrupt(app)
 
@@ -175,7 +175,7 @@ class TestFix2ActionInterruptSignalsToken:
         token = InterruptToken()
         manager.set_interrupt_token(token)
 
-        from swecli.ui_textual.chat_app import SWECLIChatApp
+        from opendev.ui_textual.chat_app import SWECLIChatApp
 
         SWECLIChatApp.action_interrupt(app)
         SWECLIChatApp._show_interrupt_feedback(app)
@@ -190,7 +190,7 @@ class TestFix2ActionInterruptSignalsToken:
         # Patch handle_interrupt to track calls
         manager.handle_interrupt = Mock(return_value=False)
 
-        from swecli.ui_textual.chat_app import SWECLIChatApp
+        from opendev.ui_textual.chat_app import SWECLIChatApp
 
         SWECLIChatApp.action_interrupt(app)
 
@@ -209,7 +209,7 @@ class TestFix3InterruptGuard:
 
     def _make_callback(self):
         """Create a TextualUICallback with mocked dependencies."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         conversation = Mock()
         conversation.lines = []
@@ -258,7 +258,7 @@ class TestFix4OnInterruptInFinally:
 
     def test_on_interrupt_called_in_finally(self):
         """If token is requested during execute, on_interrupt fires in finally."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = Mock()
         session_manager = Mock()
@@ -327,7 +327,7 @@ class TestFix5BashInterruptPropagation:
 
     def test_bash_interrupt_propagates_flag(self):
         """When bash result has 'interrupted' in error, flag is set."""
-        from swecli.core.context_engineering.tools.handlers.process_handlers import (
+        from opendev.core.context_engineering.tools.handlers.process_handlers import (
             ProcessToolHandler,
         )
 
@@ -360,7 +360,7 @@ class TestFix5BashInterruptPropagation:
 
     def test_bash_non_interrupt_error_no_flag(self):
         """Regular errors don't set interrupted flag."""
-        from swecli.core.context_engineering.tools.handlers.process_handlers import (
+        from opendev.core.context_engineering.tools.handlers.process_handlers import (
             ProcessToolHandler,
         )
 
@@ -399,7 +399,7 @@ class TestFix6TokenCheckBetweenTools:
 
     def test_sequential_tools_skip_after_interrupt(self):
         """After token is signaled, subsequent tools get synthetic interrupted result."""
-        from swecli.repl.react_executor import ReactExecutor, IterationContext
+        from opendev.repl.react_executor import ReactExecutor, IterationContext
 
         console = Mock()
         session_manager = Mock()
@@ -485,7 +485,7 @@ class TestFixACheckInterrupt:
 
     def _make_executor(self):
         """Create a minimal ReactExecutor with mocked dependencies."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = Mock()
         session_manager = Mock()
@@ -552,7 +552,7 @@ class TestFixACheckInterrupt:
 
     def test_run_iteration_catches_interrupted_error(self):
         """_run_iteration returns BREAK when InterruptedError is raised."""
-        from swecli.repl.react_executor import ReactExecutor, IterationContext, LoopAction
+        from opendev.repl.react_executor import ReactExecutor, IterationContext, LoopAction
 
         executor = self._make_executor()
         # Signal the token so _check_interrupt("pre-thinking") fires
@@ -581,7 +581,7 @@ class TestFixACheckInterrupt:
 
     def test_run_iteration_calls_on_interrupt_when_caught(self):
         """_run_iteration calls on_interrupt() when InterruptedError is caught."""
-        from swecli.repl.react_executor import ReactExecutor, IterationContext
+        from opendev.repl.react_executor import ReactExecutor, IterationContext
 
         executor = self._make_executor()
         token = InterruptToken()
@@ -610,7 +610,7 @@ class TestFixACheckInterrupt:
 
     def test_post_thinking_boundary_prevents_critique(self):
         """After thinking succeeds, signaled token prevents critique phase."""
-        from swecli.repl.react_executor import ReactExecutor, IterationContext, LoopAction
+        from opendev.repl.react_executor import ReactExecutor, IterationContext, LoopAction
 
         executor = self._make_executor()
         executor._compactor = Mock()
@@ -649,7 +649,7 @@ class TestFixACheckInterrupt:
 
     def test_pre_action_boundary_prevents_action_llm(self):
         """After thinking+critique succeed, signaled token prevents action LLM."""
-        from swecli.repl.react_executor import ReactExecutor, IterationContext, LoopAction
+        from opendev.repl.react_executor import ReactExecutor, IterationContext, LoopAction
 
         executor = self._make_executor()
         executor._compactor = Mock()
@@ -688,7 +688,7 @@ class TestFixACheckInterrupt:
 
     def test_pre_thinking_boundary_prevents_thinking_llm(self):
         """Pre-signaled token prevents _get_thinking_trace from being called."""
-        from swecli.repl.react_executor import ReactExecutor, IterationContext, LoopAction
+        from opendev.repl.react_executor import ReactExecutor, IterationContext, LoopAction
 
         executor = self._make_executor()
         executor._compactor = Mock()
@@ -730,7 +730,7 @@ class TestFixBThinkingSpinnerGuard:
 
     def _make_callback(self, token=None):
         """Create a TextualUICallback with optional interrupt token."""
-        from swecli.ui_textual.ui_callback import TextualUICallback
+        from opendev.ui_textual.ui_callback import TextualUICallback
 
         conversation = Mock()
         conversation.lines = []
@@ -793,7 +793,7 @@ class TestFixCParallelToolsGuard:
 
     def _make_executor(self):
         """Create a minimal ReactExecutor with mocked dependencies."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = Mock()
         session_manager = Mock()
@@ -810,7 +810,7 @@ class TestFixCParallelToolsGuard:
 
     def test_parallel_tools_skip_all_when_interrupted(self):
         """All parallel tools get interrupted result when token is signaled."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor = self._make_executor()
         token = InterruptToken()
@@ -855,7 +855,7 @@ class TestFixCParallelToolsGuard:
 
     def test_parallel_tools_execute_normally_when_not_interrupted(self):
         """Parallel tools execute normally when token is not signaled."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
 
         executor = self._make_executor()
         token = InterruptToken()  # NOT signaled
@@ -908,7 +908,7 @@ class TestInterruptIntegrationEdgeCases:
 
     def _make_executor(self):
         """Create a minimal ReactExecutor with mocked dependencies."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = Mock()
         session_manager = Mock()
@@ -977,7 +977,7 @@ class TestInterruptIntegrationEdgeCases:
 
     def test_interrupt_at_every_phase_boundary_returns_break(self):
         """Each of the 3 phase boundaries correctly returns BREAK when signaled."""
-        from swecli.repl.react_executor import IterationContext, LoopAction
+        from opendev.repl.react_executor import IterationContext, LoopAction
 
         for phase, thinking_visible in [
             ("pre-thinking", False),
@@ -1031,7 +1031,7 @@ class TestInterruptIntegrationEdgeCases:
 
     def test_thinking_trace_not_injected_when_interrupted_post_thinking(self):
         """When interrupted at post-thinking, thinking trace is NOT appended to messages."""
-        from swecli.repl.react_executor import IterationContext, LoopAction
+        from opendev.repl.react_executor import IterationContext, LoopAction
 
         executor = self._make_executor()
         executor._compactor = Mock()

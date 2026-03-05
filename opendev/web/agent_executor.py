@@ -9,12 +9,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from swecli.web.state import WebState
-from swecli.web.logging_config import logger
-from swecli.models.message import ChatMessage, Role
-from swecli.models.agent_deps import AgentDependencies
-from swecli.core.runtime import ConfigManager
-from swecli.models.config import AppConfig
+from opendev.web.state import WebState
+from opendev.web.logging_config import logger
+from opendev.models.message import ChatMessage, Role
+from opendev.models.agent_deps import AgentDependencies
+from opendev.core.runtime import ConfigManager
+from opendev.models.config import AppConfig
 
 
 class AgentExecutor:
@@ -174,8 +174,8 @@ class AgentExecutor:
         Returns:
             Agent response
         """
-        from swecli.core.runtime.services import RuntimeService
-        from swecli.core.context_engineering.tools.implementations import (
+        from opendev.core.runtime.services import RuntimeService
+        from opendev.core.context_engineering.tools.implementations import (
             FileOperations,
             WriteTool,
             EditTool,
@@ -184,17 +184,17 @@ class AgentExecutor:
             OpenBrowserTool,
             WebScreenshotTool,
         )
-        from swecli.core.context_engineering.tools.implementations.web_search_tool import (
+        from opendev.core.context_engineering.tools.implementations.web_search_tool import (
             WebSearchTool,
         )
-        from swecli.core.context_engineering.tools.implementations.notebook_edit_tool import (
+        from opendev.core.context_engineering.tools.implementations.notebook_edit_tool import (
             NotebookEditTool,
         )
-        from swecli.core.context_engineering.tools.implementations.ask_user_tool import AskUserTool
-        from swecli.web.web_approval_manager import WebApprovalManager
-        from swecli.web.web_ask_user_manager import WebAskUserManager
-        from swecli.web.web_ui_callback import WebUICallback
-        from swecli.web.ws_tool_broadcaster import WebSocketToolBroadcaster
+        from opendev.core.context_engineering.tools.implementations.ask_user_tool import AskUserTool
+        from opendev.web.web_approval_manager import WebApprovalManager
+        from opendev.web.web_ask_user_manager import WebAskUserManager
+        from opendev.web.web_ui_callback import WebUICallback
+        from opendev.web.ws_tool_broadcaster import WebSocketToolBroadcaster
 
         # Clear any previous interrupt flags
         self.state.clear_interrupt()
@@ -240,8 +240,8 @@ class AgentExecutor:
 
         # Wire hooks system
         try:
-            from swecli.core.hooks.loader import load_hooks_config
-            from swecli.core.hooks.manager import HookManager
+            from opendev.core.hooks.loader import load_hooks_config
+            from opendev.core.hooks.manager import HookManager
 
             hooks_config = load_hooks_config(working_dir)
             if hooks_config and hooks_config.hooks:
@@ -256,7 +256,7 @@ class AgentExecutor:
             logger.warning(f"Failed to wire hooks: {e}")
 
         # Set thinking level from web state
-        from swecli.core.context_engineering.tools.handlers.thinking_handler import ThinkingLevel
+        from opendev.core.context_engineering.tools.handlers.thinking_handler import ThinkingLevel
         thinking_level_str = self.state.get_thinking_level()
         try:
             thinking_level = ThinkingLevel(thinking_level_str)
@@ -305,7 +305,7 @@ class AgentExecutor:
             )
             # Inject thinking trace into messages for the action phase
             if thinking_trace:
-                from swecli.core.agents.prompts.reminders import get_reminder
+                from opendev.core.agents.prompts.reminders import get_reminder
 
                 message_history.append(
                     {
@@ -373,7 +373,7 @@ class AgentExecutor:
         Mirrors ReactExecutor._get_thinking_trace() from the TUI.
         Uses the full conversation history with a swapped thinking system prompt.
         """
-        from swecli.core.agents.prompts.reminders import get_reminder
+        from opendev.core.agents.prompts.reminders import get_reminder
 
         try:
             # Build thinking system prompt

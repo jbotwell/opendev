@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from swecli.core.paths import get_paths
+from opendev.core.paths import get_paths
 
 try:
     import yaml

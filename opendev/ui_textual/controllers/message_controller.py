@@ -6,7 +6,7 @@ import logging
 from typing import Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
-    from swecli.ui_textual.chat_app import SWECLIChatApp
+    from opendev.ui_textual.chat_app import SWECLIChatApp
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class MessageController:
         # where rapid submissions see False before the flag is set in _process_message
         if not already_processing:
             app._is_processing = True  # Set immediately to prevent race
-            from swecli.ui_textual.debug_logger import debug_log
+            from opendev.ui_textual.debug_logger import debug_log
             debug_log("MessageController", "SET _is_processing=True")
             ledger = getattr(app, "_display_ledger", None)
             if ledger:
@@ -148,7 +148,7 @@ class MessageController:
             input_field._clear_completions()
 
     def _set_processing_state(self, active: bool) -> None:
-        from swecli.ui_textual.debug_logger import debug_log
+        from opendev.ui_textual.debug_logger import debug_log
         app = self.app
         debug_log("MessageController", f"_set_processing_state called with active={active}, current={app._is_processing}")
         if active == app._is_processing:

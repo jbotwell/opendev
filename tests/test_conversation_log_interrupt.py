@@ -1,6 +1,6 @@
 """Test that ConversationLog correctly renders interrupted messages."""
 from rich.text import Text
-from swecli.ui_textual.widgets.conversation_log import ConversationLog
+from opendev.ui_textual.widgets.conversation_log import ConversationLog
 
 
 def test_interrupted_message_rendering():

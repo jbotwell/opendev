@@ -8,7 +8,7 @@ from prompt_toolkit.completion import Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import FormattedText
 
-from swecli.ui_textual.style_tokens import GREY
+from opendev.ui_textual.style_tokens import GREY
 
 from .commands import CommandRegistry
 from .utils import FileFinder, FileSizeFormatter

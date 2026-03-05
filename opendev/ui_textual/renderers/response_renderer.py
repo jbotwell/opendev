@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
-from swecli.models.message import ChatMessage, Role
-from swecli.ui_textual.constants import TOOL_ERROR_SENTINEL
-from swecli.ui_textual.utils import build_tool_call_text
-from swecli.ui_textual.utils.text_utils import truncate_tool_output, summarize_error
+from opendev.models.message import ChatMessage, Role
+from opendev.ui_textual.constants import TOOL_ERROR_SENTINEL
+from opendev.ui_textual.utils import build_tool_call_text
+from opendev.ui_textual.utils.text_utils import truncate_tool_output, summarize_error
 
 if TYPE_CHECKING:  # pragma: no cover
-    from swecli.ui_textual.chat_app import SWECLIChatApp
+    from opendev.ui_textual.chat_app import SWECLIChatApp
 
 
 class ResponseRenderer:

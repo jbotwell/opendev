@@ -2,7 +2,7 @@
 
 import pytest
 
-from swecli.core.agents.main_agent import MainAgent
+from opendev.core.agents.main_agent import MainAgent
 
 
 class TestErrorClassification:

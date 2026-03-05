@@ -9,9 +9,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from swecli.ui_textual.constants import TOOL_ERROR_SENTINEL
-from swecli.ui_textual.services import ToolDisplayService
-from swecli.ui_textual.utils.text_utils import summarize_error
+from opendev.ui_textual.constants import TOOL_ERROR_SENTINEL
+from opendev.ui_textual.services import ToolDisplayService
+from opendev.ui_textual.utils.text_utils import summarize_error
 
 
 class ToolRenderer:
@@ -42,7 +42,7 @@ class ToolRenderer:
         if not tool_calls:
             return
 
-        from swecli.ui_textual.formatters.style_formatter import StyleFormatter
+        from opendev.ui_textual.formatters.style_formatter import StyleFormatter
 
         formatter = StyleFormatter()
 

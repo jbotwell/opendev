@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 if 'anthropic' not in sys.modules:
     sys.modules['anthropic'] = MagicMock()
 
-from swecli.core.utils.tool_result_summarizer import summarize_tool_result
-from swecli.core.utils.action_summarizer import ActionSummarizer
+from opendev.core.utils.tool_result_summarizer import summarize_tool_result
+from opendev.core.utils.action_summarizer import ActionSummarizer
 
 
 # --- tool_result_summarizer tests ---

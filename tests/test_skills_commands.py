@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rich.console import Console
 
-from swecli.repl.commands.skills_commands import SkillsCommands, load_skill_generator_prompt
+from opendev.repl.commands.skills_commands import SkillsCommands, load_skill_generator_prompt
 
 
 class TestLoadSkillGeneratorPrompt:
@@ -111,8 +111,8 @@ Instructions here.
 class TestSkillsCommandsCreate:
     """Tests for /skills create."""
 
-    @patch("swecli.repl.commands.skills_commands.Prompt.ask")
-    @patch("swecli.repl.commands.skills_commands.Confirm.ask")
+    @patch("opendev.repl.commands.skills_commands.Prompt.ask")
+    @patch("opendev.repl.commands.skills_commands.Confirm.ask")
     def test_create_skill(self, mock_confirm, mock_prompt):
         """Test creating a skill."""
         console = Console(force_terminal=True)
@@ -128,7 +128,7 @@ class TestSkillsCommandsCreate:
             handler = SkillsCommands(console, config_manager)
 
             # Need to mock the global skills dir
-            with patch("swecli.repl.commands.skills_commands.get_paths") as mock_paths:
+            with patch("opendev.repl.commands.skills_commands.get_paths") as mock_paths:
                 paths = MagicMock()
                 paths.global_skills_dir = tmpdir_path / "global_skills"
                 paths.project_skills_dir = tmpdir_path / "project_skills"
@@ -205,7 +205,7 @@ description: "Use when testing."
 class TestSkillsCommandsDelete:
     """Tests for /skills delete."""
 
-    @patch("swecli.repl.commands.skills_commands.Confirm.ask")
+    @patch("opendev.repl.commands.skills_commands.Confirm.ask")
     def test_delete_skill(self, mock_confirm):
         """Test deleting a skill."""
         mock_confirm.return_value = True

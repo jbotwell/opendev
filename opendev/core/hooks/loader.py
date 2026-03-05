@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from swecli.core.hooks.models import HookConfig, HookMatcher, VALID_EVENT_NAMES
+from opendev.core.hooks.models import HookConfig, HookMatcher, VALID_EVENT_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def load_hooks_config(working_dir: Path | str | None = None) -> HookConfig:
     Returns:
         HookConfig with merged hooks from both sources.
     """
-    from swecli.core.paths import get_paths
+    from opendev.core.paths import get_paths
 
     wd = Path(working_dir) if working_dir else None
     paths = get_paths(wd)

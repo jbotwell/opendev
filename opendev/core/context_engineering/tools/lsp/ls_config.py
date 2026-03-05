@@ -9,7 +9,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.tools.lsp import SolidLanguageServer
+    from opendev.core.context_engineering.tools.lsp import SolidLanguageServer
 
 
 class FilenameMatcher:
@@ -178,143 +178,143 @@ class Language(str, Enum):
     def get_ls_class(self) -> type["SolidLanguageServer"]:
         match self:
             case self.PYTHON:
-                from swecli.core.context_engineering.tools.lsp.language_servers.pyright_server import PyrightServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.pyright_server import PyrightServer
 
                 return PyrightServer
             case self.PYTHON_JEDI:
-                from swecli.core.context_engineering.tools.lsp.language_servers.jedi_server import JediServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.jedi_server import JediServer
 
                 return JediServer
             case self.JAVA:
-                from swecli.core.context_engineering.tools.lsp.language_servers.eclipse_jdtls import EclipseJDTLS
+                from opendev.core.context_engineering.tools.lsp.language_servers.eclipse_jdtls import EclipseJDTLS
 
                 return EclipseJDTLS
             case self.KOTLIN:
-                from swecli.core.context_engineering.tools.lsp.language_servers.kotlin_language_server import KotlinLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.kotlin_language_server import KotlinLanguageServer
 
                 return KotlinLanguageServer
             case self.RUST:
-                from swecli.core.context_engineering.tools.lsp.language_servers.rust_analyzer import RustAnalyzer
+                from opendev.core.context_engineering.tools.lsp.language_servers.rust_analyzer import RustAnalyzer
 
                 return RustAnalyzer
             case self.CSHARP:
-                from swecli.core.context_engineering.tools.lsp.language_servers.csharp_language_server import CSharpLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.csharp_language_server import CSharpLanguageServer
 
                 return CSharpLanguageServer
             case self.CSHARP_OMNISHARP:
-                from swecli.core.context_engineering.tools.lsp.language_servers.omnisharp import OmniSharp
+                from opendev.core.context_engineering.tools.lsp.language_servers.omnisharp import OmniSharp
 
                 return OmniSharp
             case self.TYPESCRIPT:
-                from swecli.core.context_engineering.tools.lsp.language_servers.typescript_language_server import TypeScriptLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.typescript_language_server import TypeScriptLanguageServer
 
                 return TypeScriptLanguageServer
             case self.TYPESCRIPT_VTS:
-                from swecli.core.context_engineering.tools.lsp.language_servers.vts_language_server import VtsLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.vts_language_server import VtsLanguageServer
 
                 return VtsLanguageServer
             case self.GO:
-                from swecli.core.context_engineering.tools.lsp.language_servers.gopls import Gopls
+                from opendev.core.context_engineering.tools.lsp.language_servers.gopls import Gopls
 
                 return Gopls
             case self.RUBY:
-                from swecli.core.context_engineering.tools.lsp.language_servers.ruby_lsp import RubyLsp
+                from opendev.core.context_engineering.tools.lsp.language_servers.ruby_lsp import RubyLsp
 
                 return RubyLsp
             case self.RUBY_SOLARGRAPH:
-                from swecli.core.context_engineering.tools.lsp.language_servers.solargraph import Solargraph
+                from opendev.core.context_engineering.tools.lsp.language_servers.solargraph import Solargraph
 
                 return Solargraph
             case self.DART:
-                from swecli.core.context_engineering.tools.lsp.language_servers.dart_language_server import DartLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.dart_language_server import DartLanguageServer
 
                 return DartLanguageServer
             case self.CPP:
-                from swecli.core.context_engineering.tools.lsp.language_servers.clangd_language_server import ClangdLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.clangd_language_server import ClangdLanguageServer
 
                 return ClangdLanguageServer
             case self.PHP:
-                from swecli.core.context_engineering.tools.lsp.language_servers.intelephense import Intelephense
+                from opendev.core.context_engineering.tools.lsp.language_servers.intelephense import Intelephense
 
                 return Intelephense
             case self.PERL:
-                from swecli.core.context_engineering.tools.lsp.language_servers.perl_language_server import PerlLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.perl_language_server import PerlLanguageServer
 
                 return PerlLanguageServer
             case self.CLOJURE:
-                from swecli.core.context_engineering.tools.lsp.language_servers.clojure_lsp import ClojureLSP
+                from opendev.core.context_engineering.tools.lsp.language_servers.clojure_lsp import ClojureLSP
 
                 return ClojureLSP
             case self.ELIXIR:
-                from swecli.core.context_engineering.tools.lsp.language_servers.elixir_tools.elixir_tools import ElixirTools
+                from opendev.core.context_engineering.tools.lsp.language_servers.elixir_tools.elixir_tools import ElixirTools
 
                 return ElixirTools
             case self.ELM:
-                from swecli.core.context_engineering.tools.lsp.language_servers.elm_language_server import ElmLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.elm_language_server import ElmLanguageServer
 
                 return ElmLanguageServer
             case self.TERRAFORM:
-                from swecli.core.context_engineering.tools.lsp.language_servers.terraform_ls import TerraformLS
+                from opendev.core.context_engineering.tools.lsp.language_servers.terraform_ls import TerraformLS
 
                 return TerraformLS
             case self.SWIFT:
-                from swecli.core.context_engineering.tools.lsp.language_servers.sourcekit_lsp import SourceKitLSP
+                from opendev.core.context_engineering.tools.lsp.language_servers.sourcekit_lsp import SourceKitLSP
 
                 return SourceKitLSP
             case self.BASH:
-                from swecli.core.context_engineering.tools.lsp.language_servers.bash_language_server import BashLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.bash_language_server import BashLanguageServer
 
                 return BashLanguageServer
             case self.YAML:
-                from swecli.core.context_engineering.tools.lsp.language_servers.yaml_language_server import YamlLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.yaml_language_server import YamlLanguageServer
 
                 return YamlLanguageServer
             case self.ZIG:
-                from swecli.core.context_engineering.tools.lsp.language_servers.zls import ZigLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.zls import ZigLanguageServer
 
                 return ZigLanguageServer
             case self.NIX:
-                from swecli.core.context_engineering.tools.lsp.language_servers.nixd_ls import NixLanguageServer  # type: ignore
+                from opendev.core.context_engineering.tools.lsp.language_servers.nixd_ls import NixLanguageServer  # type: ignore
 
                 return NixLanguageServer
             case self.LUA:
-                from swecli.core.context_engineering.tools.lsp.language_servers.lua_ls import LuaLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.lua_ls import LuaLanguageServer
 
                 return LuaLanguageServer
             case self.ERLANG:
-                from swecli.core.context_engineering.tools.lsp.language_servers.erlang_language_server import ErlangLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.erlang_language_server import ErlangLanguageServer
 
                 return ErlangLanguageServer
             case self.AL:
-                from swecli.core.context_engineering.tools.lsp.language_servers.al_language_server import ALLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.al_language_server import ALLanguageServer
 
                 return ALLanguageServer
             case self.REGO:
-                from swecli.core.context_engineering.tools.lsp.language_servers.regal_server import RegalLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.regal_server import RegalLanguageServer
 
                 return RegalLanguageServer
             case self.MARKDOWN:
-                from swecli.core.context_engineering.tools.lsp.language_servers.marksman import Marksman
+                from opendev.core.context_engineering.tools.lsp.language_servers.marksman import Marksman
 
                 return Marksman
             case self.R:
-                from swecli.core.context_engineering.tools.lsp.language_servers.r_language_server import RLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.r_language_server import RLanguageServer
 
                 return RLanguageServer
             case self.SCALA:
-                from swecli.core.context_engineering.tools.lsp.language_servers.scala_language_server import ScalaLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.scala_language_server import ScalaLanguageServer
 
                 return ScalaLanguageServer
             case self.JULIA:
-                from swecli.core.context_engineering.tools.lsp.language_servers.julia_server import JuliaLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.julia_server import JuliaLanguageServer
 
                 return JuliaLanguageServer
             case self.FORTRAN:
-                from swecli.core.context_engineering.tools.lsp.language_servers.fortran_language_server import FortranLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.fortran_language_server import FortranLanguageServer
 
                 return FortranLanguageServer
             case self.HASKELL:
-                from swecli.core.context_engineering.tools.lsp.language_servers.haskell_language_server import HaskellLanguageServer
+                from opendev.core.context_engineering.tools.lsp.language_servers.haskell_language_server import HaskellLanguageServer
 
                 return HaskellLanguageServer
             case _:

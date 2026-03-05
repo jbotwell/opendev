@@ -11,10 +11,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from swecli.core.context_engineering.tools.lsp import ls_types
-from swecli.core.context_engineering.tools.lsp.ls import SolidLanguageServer
-from swecli.core.context_engineering.tools.lsp.ls_config import Language
-from swecli.core.context_engineering.tools.lsp.settings import SolidLSPSettings
+from opendev.core.context_engineering.tools.lsp import ls_types
+from opendev.core.context_engineering.tools.lsp.ls import SolidLanguageServer
+from opendev.core.context_engineering.tools.lsp.ls_config import Language
+from opendev.core.context_engineering.tools.lsp.settings import SolidLSPSettings
 
 from .symbol import Symbol, SymbolKind
 
@@ -471,7 +471,7 @@ class LSPServerWrapper:
         result: dict[str, list[dict[str, Any]]] = {}
 
         # Use the helper function from ls_types
-        from swecli.core.context_engineering.tools.lsp.ls_types import extract_text_edits
+        from opendev.core.context_engineering.tools.lsp.ls_types import extract_text_edits
 
         try:
             changes = extract_text_edits(workspace_edit)

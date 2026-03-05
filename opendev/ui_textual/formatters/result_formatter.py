@@ -29,7 +29,7 @@ from typing import Optional
 
 from rich.text import Text
 
-from swecli.ui_textual import style_tokens
+from opendev.ui_textual import style_tokens
 
 
 class ResultType(Enum):

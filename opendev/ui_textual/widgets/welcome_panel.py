@@ -17,7 +17,7 @@ from textual.reactive import reactive
 from textual.timer import Timer
 from textual.widget import Widget
 
-from swecli.core.runtime import OperationMode
+from opendev.core.runtime import OperationMode
 
 if TYPE_CHECKING:
     pass

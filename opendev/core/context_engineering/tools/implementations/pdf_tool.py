@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from swecli.core.context_engineering.tools.implementations.base import BaseTool
+from opendev.core.context_engineering.tools.implementations.base import BaseTool
 
 
 class PDFTool(BaseTool):

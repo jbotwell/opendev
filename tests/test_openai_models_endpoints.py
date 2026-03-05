@@ -18,7 +18,7 @@ import os
 import pytest
 import requests
 
-from swecli.config.models import get_model_registry
+from opendev.config.models import get_model_registry
 
 # Capabilities that indicate the model needs a specialized API
 SKIP_CAPABILITIES = {"audio", "realtime", "image-generation", "search", "computer-use", "research"}

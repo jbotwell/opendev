@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import ERROR, SUBTLE, SUCCESS, GREEN_BRIGHT, PANEL_BORDER
+from opendev.ui_textual.style_tokens import ERROR, SUBTLE, SUCCESS, GREEN_BRIGHT, PANEL_BORDER
 
 from .base import BaseToolFormatter
 from .utils import LanguageDetector, SizeFormatter

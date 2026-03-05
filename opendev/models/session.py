@@ -7,11 +7,11 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from swecli.models.message import ChatMessage
-from swecli.models.file_change import FileChange, FileChangeType
+from opendev.models.message import ChatMessage
+from opendev.models.file_change import FileChange, FileChangeType
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.memory import Playbook
+    from opendev.core.context_engineering.memory import Playbook
 
 
 class SessionMetadata(BaseModel):
@@ -72,7 +72,7 @@ class Session(BaseModel):
         Returns:
             ACE Playbook instance loaded from session data
         """
-        from swecli.core.context_engineering.memory import Playbook
+        from opendev.core.context_engineering.memory import Playbook
 
         if not self.playbook:
             return Playbook()
@@ -244,7 +244,7 @@ class Session(BaseModel):
         # This is for backward compat only — new sessions use ValidatedMessageList
         # which enforces invariants at write time. Legacy sessions saved before the
         # validator may still have corrupted sequences on disk.
-        from swecli.core.context_engineering.message_pair_validator import (
+        from opendev.core.context_engineering.message_pair_validator import (
             MessagePairValidator,
         )
 

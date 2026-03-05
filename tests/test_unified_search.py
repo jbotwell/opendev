@@ -6,9 +6,9 @@ from unittest.mock import Mock, patch, MagicMock
 import tempfile
 import os
 
-from swecli.core.context_engineering.tools.handlers import FileToolHandler
-from swecli.core.context_engineering.tools.implementations import FileOperations
-from swecli.models.config import AppConfig
+from opendev.core.context_engineering.tools.handlers import FileToolHandler
+from opendev.core.context_engineering.tools.implementations import FileOperations
+from opendev.models.config import AppConfig
 
 
 class TestUnifiedSearchHandler:
@@ -221,7 +221,7 @@ class TestSearchFormatterIntegration:
 
     def test_formatter_handles_file_line_content_format(self):
         """Test formatter correctly formats matches with file/line/content keys."""
-        from swecli.ui_textual.formatters.style_formatter import StyleFormatter
+        from opendev.ui_textual.formatters.style_formatter import StyleFormatter
 
         formatter = StyleFormatter()
 
@@ -245,7 +245,7 @@ class TestSearchFormatterIntegration:
 
     def test_formatter_handles_legacy_location_preview_format(self):
         """Test formatter still handles legacy format with location/preview keys."""
-        from swecli.ui_textual.formatters.style_formatter import StyleFormatter
+        from opendev.ui_textual.formatters.style_formatter import StyleFormatter
 
         formatter = StyleFormatter()
 
@@ -266,7 +266,7 @@ class TestSearchFormatterIntegration:
 
     def test_formatter_handles_no_matches(self):
         """Test formatter handles empty matches."""
-        from swecli.ui_textual.formatters.style_formatter import StyleFormatter
+        from opendev.ui_textual.formatters.style_formatter import StyleFormatter
 
         formatter = StyleFormatter()
 
@@ -282,7 +282,7 @@ class TestSearchFormatterIntegration:
 
     def test_formatter_truncates_many_matches(self):
         """Test formatter shows truncation message for many matches."""
-        from swecli.ui_textual.formatters.style_formatter import StyleFormatter
+        from opendev.ui_textual.formatters.style_formatter import StyleFormatter
 
         formatter = StyleFormatter()
 
@@ -309,7 +309,7 @@ class TestToolDisplay:
 
     def test_text_search_display_shows_type(self):
         """Test text search shows type parameter."""
-        from swecli.ui_textual.utils.tool_display import format_tool_call
+        from opendev.ui_textual.utils.tool_display import format_tool_call
 
         result = format_tool_call("search", {
             "pattern": "def hello",
@@ -322,7 +322,7 @@ class TestToolDisplay:
 
     def test_ast_search_display_shows_type(self):
         """Test AST search shows type parameter."""
-        from swecli.ui_textual.utils.tool_display import format_tool_call
+        from opendev.ui_textual.utils.tool_display import format_tool_call
 
         result = format_tool_call("search", {
             "pattern": "console.log($MSG)",
@@ -336,7 +336,7 @@ class TestToolDisplay:
 
     def test_ast_search_display_shows_lang(self):
         """Test AST search shows lang parameter when provided."""
-        from swecli.ui_textual.utils.tool_display import format_tool_call
+        from opendev.ui_textual.utils.tool_display import format_tool_call
 
         result = format_tool_call("search", {
             "pattern": "def $FUNC($ARGS):",
@@ -354,8 +354,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_node_modules(self):
         """Test node_modules is excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -367,8 +367,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_pycache(self):
         """Test __pycache__ is excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -379,8 +379,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_minified_files(self):
         """Test minified JS files are excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -392,8 +392,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_venv(self):
         """Test virtual environments are excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -404,8 +404,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_rust_target(self):
         """Test Rust target directory is excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -416,8 +416,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_java_gradle(self):
         """Test Java/Gradle directories are excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -428,8 +428,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_elixir_deps(self):
         """Test Elixir deps directory is excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -440,8 +440,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_dotnet_obj(self):
         """Test .NET obj/bin directories are excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -452,8 +452,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_haskell_stack(self):
         """Test Haskell .stack-work directory is excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -464,8 +464,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_swift_pods(self):
         """Test Swift/CocoaPods directories are excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -476,8 +476,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_ide_dirs(self):
         """Test IDE directories are excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -489,8 +489,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_compiled_files(self):
         """Test compiled file extensions are excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()
@@ -503,8 +503,8 @@ class TestSearchExclusions:
 
     def test_is_excluded_path_version_control(self):
         """Test version control directories are excluded."""
-        from swecli.core.context_engineering.tools.implementations import FileOperations
-        from swecli.models.config import AppConfig
+        from opendev.core.context_engineering.tools.implementations import FileOperations
+        from opendev.models.config import AppConfig
         from pathlib import Path
 
         config = AppConfig()

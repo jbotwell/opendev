@@ -23,7 +23,7 @@ class TestThinkingPhaseArchitecture:
 
     def test_get_thinking_trace_makes_separate_call(self):
         """Verify _get_thinking_trace makes a separate LLM call without tools."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         # Create a minimal executor with proper session manager mock
         mock_session_manager = MagicMock()
@@ -79,7 +79,7 @@ class TestThinkingPhaseArchitecture:
 
     def test_get_thinking_trace_returns_none_on_failure(self):
         """Verify _get_thinking_trace returns None when LLM call fails."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         mock_session_manager = MagicMock()
         mock_session_manager.current_session = None
@@ -106,7 +106,7 @@ class TestThinkingPhaseArchitecture:
 
     def test_regular_tool_adds_tool_message(self):
         """Verify regular tools still add tool role messages."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         mock_session_manager = MagicMock()
         mock_session_manager.current_session = None
@@ -183,7 +183,7 @@ class TestCallThinkingLLMSignature:
 
     def test_call_thinking_llm_method_exists(self):
         """Verify call_thinking_llm method exists on MainAgent."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
         import inspect
 
         assert hasattr(MainAgent, "call_thinking_llm"), \
@@ -203,7 +203,7 @@ class TestCallThinkingLLMSignature:
 
     def test_call_llm_method_no_force_think(self):
         """Verify call_llm no longer accepts force_think parameter."""
-        from swecli.core.agents.main_agent import MainAgent
+        from opendev.core.agents.main_agent import MainAgent
         import inspect
 
         sig = inspect.signature(MainAgent.call_llm)

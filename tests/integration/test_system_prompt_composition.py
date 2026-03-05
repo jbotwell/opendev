@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from swecli.core.agents.components.prompts.builders import (
+from opendev.core.agents.components.prompts.builders import (
     SystemPromptBuilder,
     ThinkingPromptBuilder,
 )
@@ -28,7 +28,7 @@ def test_system_prompt_builder_loads_real_prompt():
 
 def test_system_prompt_includes_environment_section():
     """Verify environment context is included."""
-    from swecli.core.agents.components.prompts.environment import EnvironmentContext
+    from opendev.core.agents.components.prompts.environment import EnvironmentContext
 
     env = EnvironmentContext(
         working_dir=str(Path.cwd()),
@@ -78,7 +78,7 @@ def test_thinking_prompt_builder_composition():
 
 def test_system_prompt_with_project_instructions():
     """Verify project instructions (SWECLI.md) are included when available."""
-    from swecli.core.agents.components.prompts.environment import EnvironmentContext
+    from opendev.core.agents.components.prompts.environment import EnvironmentContext
 
     env = EnvironmentContext(
         working_dir=str(Path.cwd()),

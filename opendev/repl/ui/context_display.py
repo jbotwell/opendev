@@ -6,12 +6,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from swecli.repl.ui.text_utils import truncate_text
+from opendev.repl.ui.text_utils import truncate_text
 
 if TYPE_CHECKING:
-    from swecli.core.runtime import ModeManager, ConfigManager
-    from swecli.core.context_engineering.history import SessionManager
-    from swecli.ui_textual.components import NotificationCenter
+    from opendev.core.runtime import ModeManager, ConfigManager
+    from opendev.core.context_engineering.history import SessionManager
+    from opendev.ui_textual.components import NotificationCenter
 
 
 class ContextDisplay:

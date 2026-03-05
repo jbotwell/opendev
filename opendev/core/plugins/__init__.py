@@ -1,6 +1,6 @@
 """Plugin and marketplace system for OpenDev."""
 
-from swecli.core.plugins.models import (
+from opendev.core.plugins.models import (
     MarketplaceInfo,
     KnownMarketplaces,
     PluginMetadata,
@@ -10,14 +10,14 @@ from swecli.core.plugins.models import (
     DirectPlugin,
     DirectPlugins,
 )
-from swecli.core.plugins.manager import (
+from opendev.core.plugins.manager import (
     PluginManager,
     PluginManagerError,
     MarketplaceNotFoundError,
     PluginNotFoundError,
     BundleNotFoundError,
 )
-from swecli.core.plugins.config import (
+from opendev.core.plugins.config import (
     load_known_marketplaces,
     save_known_marketplaces,
     load_installed_plugins,

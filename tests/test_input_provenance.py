@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from swecli.models.message import ChatMessage, InputProvenance, Role
+from opendev.models.message import ChatMessage, InputProvenance, Role
 
 
 class TestInputProvenance:

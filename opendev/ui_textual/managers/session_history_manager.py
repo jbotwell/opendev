@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Callable, Optional, TYPE_CHECKING
 
-from swecli.models.message import ChatMessage, Role
+from opendev.models.message import ChatMessage, Role
 
 if TYPE_CHECKING:  # pragma: no cover
-    from swecli.ui_textual.chat_app import SWECLIChatApp
-    from swecli.core.context_engineering.history import SessionManager
+    from opendev.ui_textual.chat_app import SWECLIChatApp
+    from opendev.core.context_engineering.history import SessionManager
 
 
 class SessionHistoryManager:

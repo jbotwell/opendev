@@ -16,9 +16,9 @@ Repository: https://github.com/kayba-ai/agentic-context-engine
 """
 
 # Import native ACE components
-from swecli.core.context_engineering.memory.playbook import Playbook, Bullet
-from swecli.core.context_engineering.memory.delta import DeltaOperation, DeltaBatch
-from swecli.core.context_engineering.memory.roles import (
+from opendev.core.context_engineering.memory.playbook import Playbook, Bullet
+from opendev.core.context_engineering.memory.delta import DeltaOperation, DeltaBatch
+from opendev.core.context_engineering.memory.roles import (
     AgentResponse,
     Reflector,
     Curator,
@@ -27,11 +27,11 @@ from swecli.core.context_engineering.memory.roles import (
 )
 
 # Legacy imports for backwards compatibility (deprecated)
-from swecli.core.context_engineering.memory.playbook import SessionPlaybook, Strategy
-from swecli.core.context_engineering.memory.reflection import ExecutionReflector, ReflectionResult
+from opendev.core.context_engineering.memory.playbook import SessionPlaybook, Strategy
+from opendev.core.context_engineering.memory.reflection import ExecutionReflector, ReflectionResult
 
 # Conversation summarization for thinking context
-from swecli.core.context_engineering.memory.conversation_summarizer import (
+from opendev.core.context_engineering.memory.conversation_summarizer import (
     ConversationSummarizer,
     ConversationSummary,
 )

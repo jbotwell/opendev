@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Union, TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from swecli.core.runtime.approval import ApprovalResult
-    from swecli.models.operation import Operation
+    from opendev.core.runtime.approval import ApprovalResult
+    from opendev.models.operation import Operation
 
 
 class ApprovalManagerInterface(Protocol):

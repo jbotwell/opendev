@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Sequence
 
-from swecli.models.config import AppConfig
+from opendev.models.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

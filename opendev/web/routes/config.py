@@ -5,9 +5,9 @@ from typing import Dict, Any, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from swecli.web.state import get_state, broadcast_to_all_clients
-from swecli.config import get_model_registry
-from swecli.core.runtime.mode_manager import OperationMode
+from opendev.web.state import get_state, broadcast_to_all_clients
+from opendev.config import get_model_registry
+from opendev.core.runtime.mode_manager import OperationMode
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 

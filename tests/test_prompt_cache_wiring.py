@@ -6,7 +6,7 @@ class TestBuildTwoPart:
     """SystemPromptBuilder.build_two_part() returns a tuple of two strings."""
 
     def test_returns_tuple_of_two_strings(self):
-        from swecli.core.agents.components.prompts.builders import SystemPromptBuilder
+        from opendev.core.agents.components.prompts.builders import SystemPromptBuilder
 
         builder = SystemPromptBuilder(tool_registry=None, working_dir="/tmp")
         result = builder.build_two_part()
@@ -17,7 +17,7 @@ class TestBuildTwoPart:
         assert isinstance(dynamic, str)
 
     def test_stable_is_non_empty(self):
-        from swecli.core.agents.components.prompts.builders import SystemPromptBuilder
+        from opendev.core.agents.components.prompts.builders import SystemPromptBuilder
 
         builder = SystemPromptBuilder(tool_registry=None, working_dir="/tmp")
         stable, _ = builder.build_two_part()
@@ -25,7 +25,7 @@ class TestBuildTwoPart:
 
     def test_combined_matches_build(self):
         """The combined stable+dynamic should contain the same content as build()."""
-        from swecli.core.agents.components.prompts.builders import SystemPromptBuilder
+        from opendev.core.agents.components.prompts.builders import SystemPromptBuilder
 
         builder = SystemPromptBuilder(tool_registry=None, working_dir="/tmp")
         full = builder.build()
@@ -41,7 +41,7 @@ class TestAnthropicPayloadIncludesDynamic:
     """When _system_dynamic is set, it appears in the Anthropic payload."""
 
     def test_system_dynamic_in_anthropic_request(self):
-        from swecli.core.agents.components.api.anthropic_adapter import AnthropicAdapter
+        from opendev.core.agents.components.api.anthropic_adapter import AnthropicAdapter
 
         adapter = AnthropicAdapter(api_key="test-key")
         payload = {
@@ -71,7 +71,7 @@ class TestAnthropicPayloadIncludesDynamic:
         assert "cache_control" not in system[1]
 
     def test_no_dynamic_single_cached_block(self):
-        from swecli.core.agents.components.api.anthropic_adapter import AnthropicAdapter
+        from opendev.core.agents.components.api.anthropic_adapter import AnthropicAdapter
 
         adapter = AnthropicAdapter(api_key="test-key")
         payload = {
@@ -92,7 +92,7 @@ class TestAnthropicPayloadIncludesDynamic:
 
     def test_dynamic_key_stripped_from_anthropic_payload(self):
         """_system_dynamic should not appear in the final Anthropic payload."""
-        from swecli.core.agents.components.api.anthropic_adapter import AnthropicAdapter
+        from opendev.core.agents.components.api.anthropic_adapter import AnthropicAdapter
 
         adapter = AnthropicAdapter(api_key="test-key")
         payload = {

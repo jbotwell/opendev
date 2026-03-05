@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from swecli.repl.query_enhancer import QueryEnhancer
+from opendev.repl.query_enhancer import QueryEnhancer
 
 
 class MockFileOps:
@@ -201,7 +201,7 @@ class TestImageIntegration:
 
         # Mock VLMTool to simulate vision model being available
         with patch(
-            "swecli.core.context_engineering.tools.implementations.vlm_tool.VLMTool"
+            "opendev.core.context_engineering.tools.implementations.vlm_tool.VLMTool"
         ) as mock_vlm_class:
             mock_vlm = MagicMock()
             mock_vlm.is_available.return_value = True

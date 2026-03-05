@@ -6,11 +6,11 @@ from pathlib import Path
 
 def test_modular_composition_loads_all_sections():
     """Verify PromptComposer loads all registered sections."""
-    from swecli.core.agents.prompts.composition import create_default_composer
+    from opendev.core.agents.prompts.composition import create_default_composer
 
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates"
+        / "opendev/core/agents/prompts/templates"
     )
 
     composer = create_default_composer(templates_dir)
@@ -37,11 +37,11 @@ def test_modular_composition_loads_all_sections():
 
 def test_modular_composition_conditional_git():
     """Verify git workflow section is conditionally loaded."""
-    from swecli.core.agents.prompts.composition import create_default_composer
+    from opendev.core.agents.prompts.composition import create_default_composer
 
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates"
+        / "opendev/core/agents/prompts/templates"
     )
 
     composer = create_default_composer(templates_dir)
@@ -69,11 +69,11 @@ def test_modular_composition_conditional_git():
 
 def test_modular_composition_priority_order():
     """Verify sections are loaded in priority order."""
-    from swecli.core.agents.prompts.composition import create_default_composer
+    from opendev.core.agents.prompts.composition import create_default_composer
 
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates"
+        / "opendev/core/agents/prompts/templates"
     )
 
     composer = create_default_composer(templates_dir)
@@ -97,8 +97,8 @@ def test_modular_composition_priority_order():
 
 def test_system_prompt_builder_uses_modular():
     """Verify SystemPromptBuilder uses modular composition."""
-    from swecli.core.agents.components.prompts.builders import SystemPromptBuilder
-    from swecli.core.agents.components.prompts.environment import EnvironmentContext
+    from opendev.core.agents.components.prompts.builders import SystemPromptBuilder
+    from opendev.core.agents.components.prompts.environment import EnvironmentContext
     from pathlib import Path
 
     env = EnvironmentContext(
@@ -134,7 +134,7 @@ def test_modular_files_have_frontmatter():
     """Verify all modular files have proper frontmatter."""
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates/system/main"
+        / "opendev/core/agents/prompts/templates/system/main"
     )
 
     modular_files = list(templates_dir.glob("*.md"))
@@ -155,7 +155,7 @@ def test_thinking_modular_files_have_frontmatter():
     """Verify all thinking modular files have proper frontmatter."""
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates/system/thinking"
+        / "opendev/core/agents/prompts/templates/system/thinking"
     )
 
     modular_files = list(templates_dir.glob("*.md"))
@@ -174,11 +174,11 @@ def test_thinking_modular_files_have_frontmatter():
 
 def test_thinking_composition_loads_sections():
     """Verify thinking composer loads all thinking-specific sections."""
-    from swecli.core.agents.prompts.composition import create_thinking_composer
+    from opendev.core.agents.prompts.composition import create_thinking_composer
 
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates"
+        / "opendev/core/agents/prompts/templates"
     )
 
     composer = create_thinking_composer(templates_dir)
@@ -200,11 +200,11 @@ def test_thinking_composition_loads_sections():
 
 def test_create_composer_dispatches_correctly():
     """Verify create_composer dispatches to the right composer."""
-    from swecli.core.agents.prompts.composition import create_composer
+    from opendev.core.agents.prompts.composition import create_composer
 
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates"
+        / "opendev/core/agents/prompts/templates"
     )
 
     # Main mode should include main sections
@@ -221,11 +221,11 @@ def test_create_composer_dispatches_correctly():
 
 def test_modular_composition_no_unresolved_variables():
     """Verify composed prompt has no unresolved template variables."""
-    from swecli.core.agents.prompts.composition import create_default_composer
+    from opendev.core.agents.prompts.composition import create_default_composer
 
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates"
+        / "opendev/core/agents/prompts/templates"
     )
 
     composer = create_default_composer(templates_dir)
@@ -245,11 +245,11 @@ def test_modular_composition_no_unresolved_variables():
 
 def test_modular_composition_empty_context():
     """Verify composer works with empty context."""
-    from swecli.core.agents.prompts.composition import create_default_composer
+    from opendev.core.agents.prompts.composition import create_default_composer
 
     templates_dir = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates"
+        / "opendev/core/agents/prompts/templates"
     )
 
     composer = create_default_composer(templates_dir)

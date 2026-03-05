@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from swecli.core.context_engineering.memory.playbook import Bullet, Playbook
-from swecli.core.context_engineering.memory.selector import BulletSelector, ScoredBullet
+from opendev.core.context_engineering.memory.playbook import Bullet, Playbook
+from opendev.core.context_engineering.memory.selector import BulletSelector, ScoredBullet
 
 
 class TestBulletSelector:
@@ -672,7 +672,7 @@ class TestSemanticSimilarity:
         assert cache_file.exists()
 
         # Load from file
-        from swecli.core.context_engineering.memory.embeddings import EmbeddingCache
+        from opendev.core.context_engineering.memory.embeddings import EmbeddingCache
         loaded_cache = EmbeddingCache.load_from_file(str(cache_file))
 
         # Verify embeddings are restored

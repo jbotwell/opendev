@@ -15,10 +15,10 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.history import SessionManager
-    from swecli.models.message import ChatMessage
+    from opendev.core.context_engineering.history import SessionManager
+    from opendev.models.message import ChatMessage
 
-from swecli.models.message import Role
+from opendev.models.message import Role
 
 
 class HistoryHydrator:

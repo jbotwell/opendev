@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from swecli.ui_textual.runner_components.message_processor import MessageProcessor
+from opendev.ui_textual.runner_components.message_processor import MessageProcessor
 
 
 class MockApp:

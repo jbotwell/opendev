@@ -12,7 +12,7 @@ a session should be reset based on its channel and activity.
 from datetime import datetime, timedelta
 from typing import Optional
 
-from swecli.models.session import Session
+from opendev.models.session import Session
 
 # Reset policy configurations per channel
 CHANNEL_RESET_POLICIES: dict[str, dict] = {

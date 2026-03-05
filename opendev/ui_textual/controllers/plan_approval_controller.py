@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 if TYPE_CHECKING:
-    from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+    from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
 
 class PlanApprovalController:
@@ -78,7 +78,7 @@ class PlanApprovalController:
 
         # Track state for interrupt handling
         if self._interrupt_manager:
-            from swecli.ui_textual.managers.interrupt_manager import InterruptState
+            from opendev.ui_textual.managers.interrupt_manager import InterruptState
 
             self._interrupt_manager.enter_state(
                 InterruptState.PLAN_APPROVAL,

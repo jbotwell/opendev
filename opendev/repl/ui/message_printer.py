@@ -3,7 +3,7 @@
 from rich.console import Console
 from rich.text import Text
 
-from swecli.ui_textual.formatters_internal.markdown_formatter import markdown_to_plain_text
+from opendev.ui_textual.formatters_internal.markdown_formatter import markdown_to_plain_text
 
 
 class MessagePrinter:

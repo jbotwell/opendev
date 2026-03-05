@@ -7,8 +7,8 @@ import logging
 import queue as queue_mod
 from typing import Any, Optional
 
-from swecli.core.base.abstract import BaseAgent
-from swecli.core.agents.components import (
+from opendev.core.base.abstract import BaseAgent
+from opendev.core.agents.components import (
     ResponseCleaner,
     SystemPromptBuilder,
     ThinkingPromptBuilder,
@@ -16,9 +16,9 @@ from swecli.core.agents.components import (
     create_http_client,
     create_http_client_for_provider,
 )
-from swecli.core.agents.prompts import get_reminder
-from swecli.models.config import AppConfig
-from swecli.core.utils.sound import play_finish_sound
+from opendev.core.agents.prompts import get_reminder
+from opendev.models.config import AppConfig
+from opendev.core.utils.sound import play_finish_sound
 
 
 class WebInterruptMonitor:
@@ -288,7 +288,7 @@ class MainAgent(BaseAgent):
     def _maybe_compact(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Auto-compact messages if approaching the context window limit."""
         if self._compactor is None:
-            from swecli.core.context_engineering.compaction import ContextCompactor
+            from opendev.core.context_engineering.compaction import ContextCompactor
 
             self._compactor = ContextCompactor(self.config, self._http_client)
 
@@ -374,7 +374,7 @@ class MainAgent(BaseAgent):
         Returns:
             Dict with success status and critique content
         """
-        from swecli.core.agents.prompts import load_prompt
+        from opendev.core.agents.prompts import load_prompt
 
         # Use critique model if configured, fallback to thinking, then normal
         if self.config.model_critique:
@@ -538,7 +538,7 @@ class MainAgent(BaseAgent):
             Number of messages drained.
         """
         _logger = logging.getLogger(__name__)
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         session_mgr = getattr(self, "_run_session_manager", None)
         count = 0
@@ -557,7 +557,7 @@ class MainAgent(BaseAgent):
 
     def _final_drain_injection_queue(self) -> None:
         """Persist any late-arriving injected messages before exiting run_sync (EC1)."""
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         session_mgr = getattr(self, "_run_session_manager", None)
         while True:
@@ -580,7 +580,7 @@ class MainAgent(BaseAgent):
         task_monitor: Optional[Any] = None,  # Task monitor for interrupt support
         continue_after_subagent: bool = False,  # If True, don't inject stop signal after subagent
     ) -> dict:
-        from swecli.core.context_engineering.validated_message_list import ValidatedMessageList
+        from opendev.core.context_engineering.validated_message_list import ValidatedMessageList
 
         messages = message_history or []
         if not isinstance(messages, ValidatedMessageList):

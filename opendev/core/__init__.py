@@ -27,24 +27,24 @@ __all__ = [
 ]
 
 _EXPORTS: Dict[str, Tuple[str, str]] = {
-    "MainAgent": ("swecli.core.agents", "MainAgent"),
-    "ConfigManager": ("swecli.core.runtime", "ConfigManager"),
-    "SessionManager": ("swecli.core.context_engineering.history", "SessionManager"),
-    "ModeManager": ("swecli.core.runtime", "ModeManager"),
-    "OperationMode": ("swecli.core.runtime", "OperationMode"),
-    "UndoManager": ("swecli.core.context_engineering.history", "UndoManager"),
-    "ApprovalManager": ("swecli.core.runtime.approval", "ApprovalManager"),
-    "ApprovalChoice": ("swecli.core.runtime.approval", "ApprovalChoice"),
-    "ApprovalResult": ("swecli.core.runtime.approval", "ApprovalResult"),
-    "ErrorHandler": ("swecli.core.runtime.monitoring", "ErrorHandler"),
-    "ErrorAction": ("swecli.core.runtime.monitoring", "ErrorAction"),
-    "ToolRegistry": ("swecli.core.context_engineering.tools", "ToolRegistry"),
+    "MainAgent": ("opendev.core.agents", "MainAgent"),
+    "ConfigManager": ("opendev.core.runtime", "ConfigManager"),
+    "SessionManager": ("opendev.core.context_engineering.history", "SessionManager"),
+    "ModeManager": ("opendev.core.runtime", "ModeManager"),
+    "OperationMode": ("opendev.core.runtime", "OperationMode"),
+    "UndoManager": ("opendev.core.context_engineering.history", "UndoManager"),
+    "ApprovalManager": ("opendev.core.runtime.approval", "ApprovalManager"),
+    "ApprovalChoice": ("opendev.core.runtime.approval", "ApprovalChoice"),
+    "ApprovalResult": ("opendev.core.runtime.approval", "ApprovalResult"),
+    "ErrorHandler": ("opendev.core.runtime.monitoring", "ErrorHandler"),
+    "ErrorAction": ("opendev.core.runtime.monitoring", "ErrorAction"),
+    "ToolRegistry": ("opendev.core.context_engineering.tools", "ToolRegistry"),
 }
 
 
 def __getattr__(name: str):
     if name not in _EXPORTS:
-        raise AttributeError(f"module 'swecli.core' has no attribute '{name}'")
+        raise AttributeError(f"module 'opendev.core' has no attribute '{name}'")
     module_path, attr_name = _EXPORTS[name]
     module = import_module(module_path)
     attr = getattr(module, attr_name)

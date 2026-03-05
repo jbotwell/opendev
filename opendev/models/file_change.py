@@ -38,7 +38,7 @@ class FileChange(BaseModel):
     @classmethod
     def from_tool_result(cls, tool_name: str, tool_args: dict, tool_result: dict, session_id: str) -> "FileChange":
         """Create a FileChange from tool execution result."""
-        from swecli.models.operation import WriteResult, EditResult
+        from opendev.models.operation import WriteResult, EditResult
 
         if tool_name == "write_file":
             write_result = WriteResult.from_dict(tool_result)

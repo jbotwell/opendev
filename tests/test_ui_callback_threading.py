@@ -1,7 +1,7 @@
 """Tests for TextualUICallback threading behavior."""
 from unittest.mock import Mock
 
-from swecli.ui_textual.ui_callback import TextualUICallback
+from opendev.ui_textual.ui_callback import TextualUICallback
 
 
 def test_run_on_ui_uses_call_from_thread():

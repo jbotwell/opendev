@@ -17,11 +17,11 @@ import os
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
-from swecli.core.agents.prompts.loader import load_prompt
+from opendev.core.agents.prompts.loader import load_prompt
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.history.session_manager import SessionManager
-    from swecli.models.config import AppConfig
+    from opendev.core.context_engineering.history.session_manager import SessionManager
+    from opendev.models.config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class TopicDetector:
         else:
             self._provider_id, self._model_id = resolved
             try:
-                from swecli.core.agents.components.api.configuration import (
+                from opendev.core.agents.components.api.configuration import (
                     create_http_client_for_provider,
                 )
 
@@ -162,7 +162,7 @@ class TopicDetector:
         )
 
         # Build payload
-        from swecli.core.agents.components.api.configuration import build_temperature_param
+        from opendev.core.agents.components.api.configuration import build_temperature_param
 
         payload: dict[str, Any] = {
             "model": self._model_id,

@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 
-from swecli.core.context_engineering.history.undo_manager import UndoManager
-from swecli.models.operation import Operation, OperationType
+from opendev.core.context_engineering.history.undo_manager import UndoManager
+from opendev.models.operation import Operation, OperationType
 
 
 def _make_operation(

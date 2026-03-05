@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 
 from rich.text import Text
 
-from swecli.ui_textual.services.display_data import BashOutputData, ToolResultData
-from swecli.ui_textual.utils.tool_display import build_tool_call_text
+from opendev.ui_textual.services.display_data import BashOutputData, ToolResultData
+from opendev.ui_textual.utils.tool_display import build_tool_call_text
 
 
 # Path argument keys that should be resolved to absolute paths
@@ -55,7 +55,7 @@ class ToolDisplayService:
     def formatter(self):
         """Lazy-load the StyleFormatter to avoid circular imports."""
         if self._formatter is None:
-            from swecli.ui_textual.formatters.style_formatter import StyleFormatter
+            from opendev.ui_textual.formatters.style_formatter import StyleFormatter
 
             self._formatter = StyleFormatter()
         return self._formatter

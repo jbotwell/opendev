@@ -7,13 +7,13 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
-from swecli.models.config import AppConfig
-from swecli.models.operation import EditResult, Operation
-from swecli.core.context_engineering.tools.implementations.base import BaseTool
-from swecli.core.context_engineering.tools.implementations.diff_preview import DiffPreview, Diff
+from opendev.models.config import AppConfig
+from opendev.models.operation import EditResult, Operation
+from opendev.core.context_engineering.tools.implementations.base import BaseTool
+from opendev.core.context_engineering.tools.implementations.diff_preview import DiffPreview, Diff
 
 if TYPE_CHECKING:
-    from swecli.core.runtime.task_monitor import TaskMonitor
+    from opendev.core.runtime.task_monitor import TaskMonitor
 
 _LOG = logging.getLogger(__name__)
 

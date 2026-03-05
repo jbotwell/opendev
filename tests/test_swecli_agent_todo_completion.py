@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock
 
-from swecli.core.context_engineering.tools.handlers.todo_handler import TodoHandler
+from opendev.core.context_engineering.tools.handlers.todo_handler import TodoHandler
 
 
 class MockAgent:

@@ -18,14 +18,14 @@ MAX_CONCURRENT_TOOLS = 5
 # Safety cap to prevent runaway loops
 MAX_REACT_ITERATIONS = 200
 
-from swecli.models.message import ChatMessage, Role, ToolCall as ToolCallModel
-from swecli.core.context_engineering.memory import AgentResponse
-from swecli.core.runtime.monitoring import TaskMonitor
-from swecli.ui_textual.utils.tool_display import format_tool_call
-from swecli.ui_textual.components.task_progress import TaskProgressDisplay
-from swecli.core.utils.tool_result_summarizer import summarize_tool_result
-from swecli.core.agents.prompts import get_reminder
-from swecli.core.utils.sound import play_finish_sound
+from opendev.models.message import ChatMessage, Role, ToolCall as ToolCallModel
+from opendev.core.context_engineering.memory import AgentResponse
+from opendev.core.runtime.monitoring import TaskMonitor
+from opendev.ui_textual.utils.tool_display import format_tool_call
+from opendev.ui_textual.components.task_progress import TaskProgressDisplay
+from opendev.core.utils.tool_result_summarizer import summarize_tool_result
+from opendev.core.agents.prompts import get_reminder
+from opendev.core.utils.sound import play_finish_sound
 
 logger = logging.getLogger(__name__)
 
@@ -48,21 +48,21 @@ def _debug_log(message: str) -> None:
 
 def _session_debug() -> "SessionDebugLogger":
     """Get the current session debug logger."""
-    from swecli.core.debug import get_debug_logger
+    from opendev.core.debug import get_debug_logger
 
     return get_debug_logger()
 
 
 if TYPE_CHECKING:
     from rich.console import Console
-    from swecli.core.context_engineering.history import SessionManager
-    from swecli.models.config import Config
-    from swecli.repl.llm_caller import LLMCaller
-    from swecli.repl.tool_executor import ToolExecutor
-    from swecli.core.runtime.approval import ApprovalManager
-    from swecli.core.context_engineering.history import UndoManager
-    from swecli.core.debug.session_debug_logger import SessionDebugLogger
-    from swecli.core.runtime.cost_tracker import CostTracker
+    from opendev.core.context_engineering.history import SessionManager
+    from opendev.models.config import Config
+    from opendev.repl.llm_caller import LLMCaller
+    from opendev.repl.tool_executor import ToolExecutor
+    from opendev.core.runtime.approval import ApprovalManager
+    from opendev.core.context_engineering.history import UndoManager
+    from opendev.core.debug.session_debug_logger import SessionDebugLogger
+    from opendev.core.runtime.cost_tracker import CostTracker
 
 
 class LoopAction(Enum):
@@ -175,7 +175,7 @@ class ReactExecutor:
         Returns:
             True if interrupt was requested, False if no task is running
         """
-        from swecli.ui_textual.debug_logger import debug_log
+        from opendev.ui_textual.debug_logger import debug_log
 
         debug_log("ReactExecutor", "request_interrupt called")
         debug_log("ReactExecutor", f"_current_task_monitor={self._current_task_monitor}")
@@ -313,7 +313,7 @@ class ReactExecutor:
             # No approval manager — fall back to automatic break
             return False
 
-        from swecli.models.operation import Operation, OperationType
+        from opendev.models.operation import Operation, OperationType
         from datetime import datetime
 
         operation = Operation(
@@ -368,7 +368,7 @@ class ReactExecutor:
             except queue_mod.Empty:
                 break
 
-        from swecli.core.runtime.interrupt_token import InterruptToken
+        from opendev.core.runtime.interrupt_token import InterruptToken
 
         # Create a single interrupt token for this entire run
         self._active_interrupt_token = InterruptToken()
@@ -381,7 +381,7 @@ class ReactExecutor:
                 app._interrupt_manager.set_interrupt_token(self._active_interrupt_token)
 
         # Wrap messages in ValidatedMessageList for write-time invariant enforcement
-        from swecli.core.context_engineering.validated_message_list import ValidatedMessageList
+        from opendev.core.context_engineering.validated_message_list import ValidatedMessageList
 
         if not isinstance(messages, ValidatedMessageList):
             messages = ValidatedMessageList(messages)
@@ -407,7 +407,7 @@ class ReactExecutor:
         # Initialize snapshot manager for per-step undo
         if self._snapshot_manager is None:
             try:
-                from swecli.core.context_engineering.history.snapshot import SnapshotManager
+                from opendev.core.context_engineering.history.snapshot import SnapshotManager
 
                 working_dir = getattr(self.config, "working_directory", None) or os.getcwd()
                 self._snapshot_manager = SnapshotManager(working_dir)
@@ -527,7 +527,7 @@ class ReactExecutor:
 
         # Fire Stop hook (can prevent stopping by returning exit code 2)
         if self._hook_manager and not interrupted:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             if self._hook_manager.has_hooks_for(HookEvent.STOP):
                 stop_outcome = self._hook_manager.run_hooks(HookEvent.STOP)
@@ -601,7 +601,7 @@ class ReactExecutor:
                 task_monitor.set_interrupt_token(self._active_interrupt_token)
             # Track task monitor for interrupt support
             self._current_task_monitor = task_monitor
-            from swecli.ui_textual.debug_logger import debug_log
+            from opendev.ui_textual.debug_logger import debug_log
 
             debug_log("ReactExecutor", f"Thinking phase: SET _current_task_monitor={task_monitor}")
             try:
@@ -659,7 +659,7 @@ class ReactExecutor:
         Returns:
             Refined thinking trace (or original if critique fails)
         """
-        from swecli.core.runtime.monitoring import TaskMonitor
+        from opendev.core.runtime.monitoring import TaskMonitor
 
         try:
             # Step 1: Get critique of the thinking trace
@@ -723,7 +723,7 @@ class ReactExecutor:
         Returns:
             Refined thinking trace, or None on failure
         """
-        from swecli.core.runtime.monitoring import TaskMonitor
+        from opendev.core.runtime.monitoring import TaskMonitor
 
         try:
             # Build refinement system prompt
@@ -806,7 +806,7 @@ Please provide refined reasoning that addresses these concerns. Keep it concise 
         - 99%: Full LLM-powered compaction
         """
         if self._compactor is None:
-            from swecli.core.context_engineering.compaction import ContextCompactor
+            from opendev.core.context_engineering.compaction import ContextCompactor
 
             self._compactor = ContextCompactor(self.config, ctx.agent._http_client)
 
@@ -818,7 +818,7 @@ Please provide refined reasoning that addresses these concerns. Keep it concise 
         system_prompt = ctx.agent.system_prompt
 
         # Check staged optimization level
-        from swecli.core.context_engineering.compaction import OptimizationLevel
+        from opendev.core.context_engineering.compaction import OptimizationLevel
 
         level = self._compactor.check_usage(ctx.messages, system_prompt)
 
@@ -1006,7 +1006,7 @@ Please provide refined reasoning that addresses these concerns. Keep it concise 
         task_monitor = TaskMonitor()
         if self._active_interrupt_token:
             task_monitor.set_interrupt_token(self._active_interrupt_token)
-        from swecli.ui_textual.debug_logger import debug_log
+        from opendev.ui_textual.debug_logger import debug_log
 
         debug_log(
             "ReactExecutor",
@@ -1410,7 +1410,7 @@ Please provide refined reasoning that addresses these concerns. Keep it concise 
                     break
 
         # Guard: ensure every tool_call has a result (fills missing with synthetic errors)
-        from swecli.core.context_engineering.message_pair_validator import (
+        from opendev.core.context_engineering.message_pair_validator import (
             MessagePairValidator,
         )
 

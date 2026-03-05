@@ -16,8 +16,8 @@ from pathlib import Path, PurePath
 import charset_normalizer
 import requests
 
-from swecli.core.context_engineering.tools.lsp.ls_exceptions import SolidLSPException
-from swecli.core.context_engineering.tools.lsp.ls_types import UnifiedSymbolInformation
+from opendev.core.context_engineering.tools.lsp.ls_exceptions import SolidLSPException
+from opendev.core.context_engineering.tools.lsp.ls_types import UnifiedSymbolInformation
 
 log = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from swecli.core.agents.prompts.loader import load_tool_description
+from opendev.core.agents.prompts.loader import load_tool_description
 
 
 _BUILTIN_TOOL_SCHEMAS: list[dict[str, Any]] = [

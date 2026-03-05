@@ -12,14 +12,14 @@ from queue import Empty, Queue
 from typing import Any
 
 import psutil
-from swecli.core.context_engineering.tools.lsp.util.compat import ToStringMixin
+from opendev.core.context_engineering.tools.lsp.util.compat import ToStringMixin
 
-from swecli.core.context_engineering.tools.lsp.ls_config import Language
-from swecli.core.context_engineering.tools.lsp.ls_exceptions import SolidLSPException
-from swecli.core.context_engineering.tools.lsp.ls_request import LanguageServerRequest
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_requests import LspNotification
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import ErrorCodes
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.server import (
+from opendev.core.context_engineering.tools.lsp.ls_config import Language
+from opendev.core.context_engineering.tools.lsp.ls_exceptions import SolidLSPException
+from opendev.core.context_engineering.tools.lsp.ls_request import LanguageServerRequest
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_requests import LspNotification
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import ErrorCodes
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.server import (
     ENCODING,
     LSPError,
     MessageType,
@@ -33,7 +33,7 @@ from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.server impor
     make_request,
     make_response,
 )
-from swecli.core.context_engineering.tools.lsp.util.subprocess_util import quote_arg, subprocess_kwargs
+from opendev.core.context_engineering.tools.lsp.util.subprocess_util import quote_arg, subprocess_kwargs
 
 log = logging.getLogger(__name__)
 

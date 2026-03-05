@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from rich.text import Text
 from textual.widgets import Static
 
-from swecli.ui_textual.style_tokens import DIM_GREY
+from opendev.ui_textual.style_tokens import DIM_GREY
 
 if TYPE_CHECKING:
     from textual.timer import Timer

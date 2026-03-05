@@ -2,7 +2,7 @@
 
 import pytest
 
-from swecli.core.context_engineering.tools.implementations.task_complete_tool import TaskCompleteTool
+from opendev.core.context_engineering.tools.implementations.task_complete_tool import TaskCompleteTool
 
 
 class TestTaskCompleteTool:
@@ -96,7 +96,7 @@ class TestTaskCompleteToolIntegration:
 
     def test_tool_registered_in_registry(self):
         """Verify task_complete is registered in tool registry."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
 
@@ -104,7 +104,7 @@ class TestTaskCompleteToolIntegration:
 
     def test_execute_via_registry(self):
         """Verify task_complete can be executed via registry."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         result = registry.execute_tool(
@@ -118,6 +118,6 @@ class TestTaskCompleteToolIntegration:
 
     def test_tool_in_plan_mode_allowed(self):
         """Verify task_complete is allowed in plan mode."""
-        from swecli.core.agents.components import PLANNING_TOOLS
+        from opendev.core.agents.components import PLANNING_TOOLS
 
         assert "task_complete" in PLANNING_TOOLS

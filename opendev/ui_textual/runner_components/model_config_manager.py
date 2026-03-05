@@ -8,8 +8,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Optional
 
-from swecli.core.runtime import ConfigManager
-from swecli.repl.repl import REPL
+from opendev.core.runtime import ConfigManager
+from opendev.repl.repl import REPL
 
 
 class ModelConfigManager:
@@ -39,7 +39,7 @@ class ModelConfigManager:
         config = self._config_manager.get_config()
 
         try:
-            from swecli.config import get_model_registry
+            from opendev.config import get_model_registry
 
             registry = get_model_registry()
         except Exception:  # pragma: no cover - defensive

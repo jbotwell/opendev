@@ -11,10 +11,10 @@ from typing import Any, Optional, Sequence, TYPE_CHECKING
 if TYPE_CHECKING:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 
-from swecli.core.context_engineering.tools.implementations.web_screenshot_tool import (
+from opendev.core.context_engineering.tools.implementations.web_screenshot_tool import (
     _ensure_browsers_installed,
 )
-from swecli.models.config import AppConfig
+from opendev.models.config import AppConfig
 
 
 class WebFetchTool:

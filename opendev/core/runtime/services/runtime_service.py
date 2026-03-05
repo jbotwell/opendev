@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Union
 
-from swecli.core.base.factories import AgentFactory, AgentSuite, ToolDependencies, ToolFactory
-from swecli.core.base.interfaces import ConfigManagerInterface, ToolRegistryInterface
-from swecli.core.runtime import ModeManager
+from opendev.core.base.factories import AgentFactory, AgentSuite, ToolDependencies, ToolFactory
+from opendev.core.base.interfaces import ConfigManagerInterface, ToolRegistryInterface
+from opendev.core.runtime import ModeManager
 
 
 @dataclass
@@ -74,7 +74,7 @@ class RuntimeService:
     ) -> RuntimeSuite:
         """Create a runtime suite containing the tool registry and agents."""
         # Collect environment once at startup
-        from swecli.core.agents.components.prompts.environment import EnvironmentCollector
+        from opendev.core.agents.components.prompts.environment import EnvironmentCollector
 
         env_context = EnvironmentCollector(
             self._config_manager.working_dir,

@@ -6,10 +6,10 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from swecli.repl.commands.base import CommandHandler, CommandResult
+from opendev.repl.commands.base import CommandHandler, CommandResult
 
 if TYPE_CHECKING:
-    from swecli.core.runtime import ModeManager
+    from opendev.core.runtime import ModeManager
 
 
 class HelpCommand(CommandHandler):

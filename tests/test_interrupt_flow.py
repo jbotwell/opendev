@@ -4,9 +4,9 @@ import threading
 import time
 from unittest.mock import Mock, MagicMock, patch
 
-from swecli.core.runtime.monitoring import TaskMonitor
-from swecli.repl.llm_caller import LLMCaller
-from swecli.repl.query_processor import QueryProcessor
+from opendev.core.runtime.monitoring import TaskMonitor
+from opendev.repl.llm_caller import LLMCaller
+from opendev.repl.query_processor import QueryProcessor
 
 
 def test_task_monitor_interrupt():

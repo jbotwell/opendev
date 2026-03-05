@@ -6,9 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
 
-from swecli.core.context_engineering.history.file_locks import exclusive_session_lock
-from swecli.models.message import ChatMessage
-from swecli.models.session import Session, SessionMetadata
+from opendev.core.context_engineering.history.file_locks import exclusive_session_lock
+from opendev.models.message import ChatMessage
+from opendev.models.session import Session, SessionMetadata
 
 _INDEX_VERSION = 1
 
@@ -44,12 +44,12 @@ class SessionManager:
         if session_dir is not None:
             self.session_dir = Path(session_dir).expanduser()
         elif working_dir is not None:
-            from swecli.core.paths import get_paths
+            from opendev.core.paths import get_paths
 
             paths = get_paths()
             self.session_dir = paths.project_sessions_dir(working_dir)
         else:
-            from swecli.core.paths import get_paths, FALLBACK_PROJECT_DIR_NAME
+            from opendev.core.paths import get_paths, FALLBACK_PROJECT_DIR_NAME
 
             paths = get_paths()
             self.session_dir = paths.global_projects_dir / FALLBACK_PROJECT_DIR_NAME
@@ -65,7 +65,7 @@ class SessionManager:
     @property
     def _index_path(self) -> Path:
         """Path to the sessions index file."""
-        from swecli.core.paths import SESSIONS_INDEX_FILE_NAME
+        from opendev.core.paths import SESSIONS_INDEX_FILE_NAME
 
         return self.session_dir / SESSIONS_INDEX_FILE_NAME
 
@@ -195,7 +195,7 @@ class SessionManager:
         Returns:
             Number of sessions migrated
         """
-        from swecli.core.paths import SESSIONS_INDEX_FILE_NAME
+        from opendev.core.paths import SESSIONS_INDEX_FILE_NAME
 
         migrated_count = 0
 
@@ -263,7 +263,7 @@ class SessionManager:
         Returns:
             List of ``SessionMetadata`` for all valid, non-empty sessions.
         """
-        from swecli.core.paths import SESSIONS_INDEX_FILE_NAME
+        from opendev.core.paths import SESSIONS_INDEX_FILE_NAME
 
         entries: list[dict] = []
         metadata_list: list[SessionMetadata] = []
@@ -384,7 +384,7 @@ class SessionManager:
         Returns:
             List of workspace directory paths that have sessions
         """
-        from swecli.core.paths import get_paths
+        from opendev.core.paths import get_paths
 
         paths = get_paths()
         workspaces: list[str] = []
@@ -398,7 +398,7 @@ class SessionManager:
                 continue
 
             # Skip the unknown/fallback directory
-            from swecli.core.paths import FALLBACK_PROJECT_DIR_NAME
+            from opendev.core.paths import FALLBACK_PROJECT_DIR_NAME
 
             if project_dir.name == FALLBACK_PROJECT_DIR_NAME:
                 continue
@@ -542,7 +542,7 @@ class SessionManager:
             return session
 
         # Fall back to searching all project directories
-        from swecli.core.paths import get_paths
+        from opendev.core.paths import get_paths
 
         paths = get_paths()
         projects_dir = paths.global_projects_dir
@@ -665,7 +665,7 @@ class SessionManager:
             List of session metadata from all projects, sorted by update time
             (newest first).
         """
-        from swecli.core.paths import get_paths, SESSIONS_INDEX_FILE_NAME
+        from opendev.core.paths import get_paths, SESSIONS_INDEX_FILE_NAME
 
         paths = get_paths()
         projects_dir = paths.global_projects_dir
@@ -786,7 +786,7 @@ class SessionManager:
             return self._load_from_file(session_file)
 
         # Fall back to scanning all project directories
-        from swecli.core.paths import get_paths
+        from opendev.core.paths import get_paths
 
         paths = get_paths()
         projects_dir = paths.global_projects_dir

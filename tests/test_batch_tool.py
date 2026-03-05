@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from swecli.core.context_engineering.tools.implementations.batch_tool import (
+from opendev.core.context_engineering.tools.implementations.batch_tool import (
     MAX_PARALLEL_WORKERS,
     BatchTool,
 )

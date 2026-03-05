@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from textual.app import App
-    from swecli.core.context_engineering.tools.background_task_manager import (
+    from opendev.core.context_engineering.tools.background_task_manager import (
         BackgroundTaskManager,
         TaskStatus,
     )
@@ -63,7 +63,7 @@ class BackgroundTaskStatusProvider:
             if footer is None:
                 # Try to query for it
                 try:
-                    from swecli.ui_textual.widgets.status_bar import ModelFooter
+                    from opendev.ui_textual.widgets.status_bar import ModelFooter
                     footer = self.app.query_one(ModelFooter)
                 except Exception:
                     return

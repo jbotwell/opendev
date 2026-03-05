@@ -3,8 +3,8 @@
 import pytest
 from pathlib import Path
 
-from swecli.core.agents.prompts.renderer import PromptRenderer
-from swecli.core.agents.prompts.variables import PromptVariables
+from opendev.core.agents.prompts.renderer import PromptRenderer
+from opendev.core.agents.prompts.variables import PromptVariables
 
 
 def test_variable_registry():
@@ -89,8 +89,8 @@ Explore count: ${EXPLORE_AGENT_COUNT}
 
 def test_tool_description_loading(tmp_path):
     """Test that tool descriptions load from markdown files via loader."""
-    from swecli.core.agents.prompts.loader import load_tool_description
-    from swecli.core.context_engineering.tools.implementations.present_plan_tool import (
+    from opendev.core.agents.prompts.loader import load_tool_description
+    from opendev.core.context_engineering.tools.implementations.present_plan_tool import (
         PresentPlanTool,
     )
 

@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock
 
-from swecli.core.context_engineering.tools.handlers.ask_user_handler import AskUserHandler
+from opendev.core.context_engineering.tools.handlers.ask_user_handler import AskUserHandler
 
 
 class TestAskUserHandlerOutputFormat:

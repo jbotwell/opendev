@@ -4,7 +4,7 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
 
-from swecli.ui_textual import style_tokens
+from opendev.ui_textual import style_tokens
 
 class DisplayFormatter:
     """Formats general UI messages like errors, info, and warnings."""

@@ -6,7 +6,7 @@ from typing import List
 
 import tiktoken
 
-from swecli.models.message import ChatMessage, ToolCall
+from opendev.models.message import ChatMessage, ToolCall
 
 
 class ContextTokenMonitor:

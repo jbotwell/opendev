@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 import asyncio
 
-from swecli.core.agents.subagents import (
+from opendev.core.agents.subagents import (
     SubAgentSpec,
     CompiledSubAgent,
     SubAgentManager,
@@ -12,8 +12,8 @@ from swecli.core.agents.subagents import (
     TASK_TOOL_NAME,
     ALL_SUBAGENTS,
 )
-from swecli.core.agents.subagents.manager import SubAgentDeps
-from swecli.models.config import AppConfig
+from opendev.core.agents.subagents.manager import SubAgentDeps
+from opendev.models.config import AppConfig
 
 
 class TestSubAgentSpec:
@@ -140,7 +140,7 @@ class TestSubAgentManager:
         """Test that no descriptions before registration."""
         assert manager.get_descriptions() == {}
 
-    @patch("swecli.core.agents.MainAgent")
+    @patch("opendev.core.agents.MainAgent")
     def test_register_subagent(self, mock_agent_class, manager):
         """Test registering a custom subagent."""
         mock_agent = MagicMock()
@@ -157,7 +157,7 @@ class TestSubAgentManager:
         assert "custom-agent" in manager.get_available_types()
         assert manager.get_descriptions()["custom-agent"] == "A custom test agent"
 
-    @patch("swecli.core.agents.MainAgent")
+    @patch("opendev.core.agents.MainAgent")
     def test_register_defaults(self, mock_agent_class, manager):
         """Test registering default subagents."""
         mock_agent = MagicMock()
@@ -172,7 +172,7 @@ class TestSubAgentManager:
         assert "Web-Generator" in available
         assert "Planner" in available
 
-    @patch("swecli.core.agents.MainAgent")
+    @patch("opendev.core.agents.MainAgent")
     def test_get_subagent(self, mock_agent_class, manager):
         """Test getting a registered subagent."""
         mock_agent = MagicMock()
@@ -210,7 +210,7 @@ class TestSubAgentManager:
         assert result["success"] is False
         assert "Unknown subagent type" in result["error"]
 
-    @patch("swecli.core.agents.MainAgent")
+    @patch("opendev.core.agents.MainAgent")
     def test_execute_subagent_success(self, mock_agent_class, manager):
         """Test successful subagent execution."""
         mock_agent = MagicMock()
@@ -242,7 +242,7 @@ class TestSubAgentManager:
         assert result["success"] is True
         mock_agent.run_sync.assert_called_once()
 
-    @patch("swecli.core.agents.MainAgent")
+    @patch("opendev.core.agents.MainAgent")
     def test_subagent_config_with_model_override(self, mock_agent_class, mock_config, mock_tool_registry, mock_mode_manager):
         """Test that model override creates new config."""
         mock_agent = MagicMock()
@@ -294,7 +294,7 @@ class TestSubAgentManagerAsync:
             working_dir="/tmp/test",
         )
 
-    @patch("swecli.core.agents.MainAgent")
+    @patch("opendev.core.agents.MainAgent")
     @pytest.mark.asyncio
     async def test_execute_subagent_async(self, mock_agent_class, manager):
         """Test async subagent execution."""
@@ -326,7 +326,7 @@ class TestSubAgentManagerAsync:
 
         assert result["success"] is True
 
-    @patch("swecli.core.agents.MainAgent")
+    @patch("opendev.core.agents.MainAgent")
     @pytest.mark.asyncio
     async def test_execute_parallel(self, mock_agent_class, manager):
         """Test parallel subagent execution."""
@@ -438,13 +438,13 @@ class TestToolRegistryIntegration:
     def skip_if_lsp_unavailable(self):
         """Skip tests if LSP modules are not available."""
         try:
-            from swecli.core.context_engineering.tools.registry import ToolRegistry  # noqa: F401
+            from opendev.core.context_engineering.tools.registry import ToolRegistry  # noqa: F401
         except (ImportError, ModuleNotFoundError) as e:
             pytest.skip(f"ToolRegistry import failed: {e}")
 
     def test_tool_registry_set_subagent_manager(self):
         """Test setting subagent manager on tool registry."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         mock_manager = MagicMock()
@@ -455,7 +455,7 @@ class TestToolRegistryIntegration:
 
     def test_tool_registry_get_subagent_manager(self):
         """Test getting subagent manager from tool registry."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         mock_manager = MagicMock()
@@ -465,14 +465,14 @@ class TestToolRegistryIntegration:
 
     def test_tool_registry_spawn_subagent_handler_exists(self):
         """Test that spawn_subagent handler is registered."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         assert "spawn_subagent" in registry._handlers
 
     def test_execute_spawn_subagent_without_manager(self):
         """Test executing spawn_subagent tool without manager returns error."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         # Don't set subagent manager
@@ -487,7 +487,7 @@ class TestToolRegistryIntegration:
 
     def test_execute_spawn_subagent_without_description(self):
         """Test executing spawn_subagent tool without description returns error."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
         mock_manager = MagicMock()
@@ -505,7 +505,7 @@ class TestToolRegistryIntegration:
 def _can_import_agent_factory():
     """Check if AgentFactory can be imported."""
     try:
-        from swecli.core.base.factories.agent_factory import AgentFactory  # noqa: F401
+        from opendev.core.base.factories.agent_factory import AgentFactory  # noqa: F401
         return True
     except (ImportError, ModuleNotFoundError):
         return False
@@ -542,14 +542,14 @@ class TestAgentFactoryIntegration:
         """Create a mock mode manager."""
         return MagicMock()
 
-    @patch("swecli.core.base.factories.agent_factory.MainAgent")
-    @patch("swecli.core.base.factories.agent_factory.SubAgentManager")
+    @patch("opendev.core.base.factories.agent_factory.MainAgent")
+    @patch("opendev.core.base.factories.agent_factory.SubAgentManager")
     def test_agent_factory_creates_subagent_manager(
         self, mock_subagent_manager_class, mock_swecli,
         mock_config, mock_tool_registry, mock_mode_manager
     ):
         """Test that AgentFactory creates SubAgentManager when enabled."""
-        from swecli.core.base.factories.agent_factory import AgentFactory
+        from opendev.core.base.factories.agent_factory import AgentFactory
 
         mock_manager_instance = MagicMock()
         mock_subagent_manager_class.return_value = mock_manager_instance
@@ -567,13 +567,13 @@ class TestAgentFactoryIntegration:
         mock_tool_registry.set_subagent_manager.assert_called_once_with(mock_manager_instance)
         assert suite.subagent_manager == mock_manager_instance
 
-    @patch("swecli.core.base.factories.agent_factory.MainAgent")
+    @patch("opendev.core.base.factories.agent_factory.MainAgent")
     def test_agent_factory_skips_subagents_when_disabled(
         self, mock_swecli,
         mock_config, mock_tool_registry, mock_mode_manager
     ):
         """Test that AgentFactory skips SubAgentManager when disabled."""
-        from swecli.core.base.factories.agent_factory import AgentFactory
+        from opendev.core.base.factories.agent_factory import AgentFactory
 
         factory = AgentFactory(
             config=mock_config,
@@ -592,7 +592,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_initialization(self):
         """Test that NestedUICallback initializes correctly."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         parent_callback = MagicMock()
         callback = NestedUICallback(
@@ -607,7 +607,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_forwards_tool_call(self):
         """Test that on_tool_call forwards to parent with nesting info."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         parent_callback = MagicMock()
         parent_callback.on_nested_tool_call = MagicMock()
@@ -633,7 +633,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_forwards_tool_result(self):
         """Test that on_tool_result forwards to parent with nesting info."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         parent_callback = MagicMock()
         parent_callback.on_nested_tool_result = MagicMock()
@@ -661,7 +661,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_fallback_to_regular_methods(self):
         """Test fallback to regular methods when nested methods unavailable."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
         from unittest.mock import ANY
 
         parent_callback = MagicMock(spec=["on_tool_call", "on_tool_result"])
@@ -678,7 +678,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_handles_none_parent(self):
         """Test that NestedUICallback handles None parent gracefully."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         callback = NestedUICallback(
             parent_callback=None,
@@ -692,7 +692,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_create_nested(self):
         """Test creating further nested callbacks."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         parent_callback = MagicMock()
 
@@ -710,7 +710,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_suppresses_thinking_events(self):
         """Test that thinking events are suppressed for subagents."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         parent_callback = MagicMock()
         parent_callback.on_thinking_start = MagicMock()
@@ -731,7 +731,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_suppresses_assistant_messages(self):
         """Test that assistant messages are suppressed for subagents."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         parent_callback = MagicMock()
         parent_callback.on_assistant_message = MagicMock()
@@ -749,7 +749,7 @@ class TestNestedUICallback:
 
     def test_nested_callback_forwards_debug(self):
         """Test that debug messages are forwarded with context prefix."""
-        from swecli.ui_textual.nested_callback import NestedUICallback
+        from opendev.ui_textual.nested_callback import NestedUICallback
 
         parent_callback = MagicMock()
         parent_callback.on_debug = MagicMock()

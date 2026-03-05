@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from swecli.ui_textual.managers.display_ledger import DisplayLedger, TurnState
+from opendev.ui_textual.managers.display_ledger import DisplayLedger, TurnState
 
 
 @pytest.fixture

@@ -6,14 +6,14 @@ from pathlib import Path
 
 def test_variable_substitution_in_real_template():
     """Test variable substitution with actual template file."""
-    from swecli.core.agents.prompts.renderer import PromptRenderer
+    from opendev.core.agents.prompts.renderer import PromptRenderer
 
     renderer = PromptRenderer()
 
     # Use actual reminder template
     template_path = (
         Path(__file__).parent.parent.parent
-        / "swecli/core/agents/prompts/templates/reminders/reminder-plan-mode-active.md"
+        / "opendev/core/agents/prompts/templates/reminders/reminder-plan-mode-active.md"
     )
 
     if not template_path.exists():
@@ -33,7 +33,7 @@ def test_variable_substitution_in_real_template():
 
 def test_all_tool_variables_resolve():
     """Verify all tool variables in registry resolve correctly."""
-    from swecli.core.agents.prompts.variables import PromptVariables
+    from opendev.core.agents.prompts.variables import PromptVariables
 
     variables = PromptVariables()
     var_dict = variables.to_dict()
@@ -51,7 +51,7 @@ def test_all_tool_variables_resolve():
 
 def test_agent_count_variables():
     """Verify agent count variables are set."""
-    from swecli.core.agents.prompts.variables import PromptVariables
+    from opendev.core.agents.prompts.variables import PromptVariables
 
     variables = PromptVariables()
     var_dict = variables.to_dict()
@@ -62,7 +62,7 @@ def test_agent_count_variables():
 
 def test_system_reminder_variable():
     """Verify system reminder variable includes plan file context."""
-    from swecli.core.agents.prompts.variables import PromptVariables
+    from opendev.core.agents.prompts.variables import PromptVariables
     import tempfile
     import os
 
@@ -88,7 +88,7 @@ def test_system_reminder_variable():
 
 def test_runtime_variables_merge():
     """Verify runtime variables can be merged into variable dict."""
-    from swecli.core.agents.prompts.variables import PromptVariables
+    from opendev.core.agents.prompts.variables import PromptVariables
 
     variables = PromptVariables()
 
@@ -109,7 +109,7 @@ def test_runtime_variables_merge():
 
 def test_prompt_renderer_integration():
     """Verify PromptRenderer uses PromptVariables correctly."""
-    from swecli.core.agents.prompts.renderer import PromptRenderer
+    from opendev.core.agents.prompts.renderer import PromptRenderer
 
     renderer = PromptRenderer()
 
@@ -117,14 +117,14 @@ def test_prompt_renderer_integration():
     assert hasattr(renderer, "variables")
 
     # Verify variables are PromptVariables instance
-    from swecli.core.agents.prompts.variables import PromptVariables
+    from opendev.core.agents.prompts.variables import PromptVariables
 
     assert isinstance(renderer.variables, PromptVariables)
 
 
 def test_template_variable_syntax():
     """Verify template variable syntax is correctly processed."""
-    from swecli.core.agents.prompts.renderer import PromptRenderer
+    from opendev.core.agents.prompts.renderer import PromptRenderer
     import tempfile
 
     renderer = PromptRenderer()
@@ -156,7 +156,7 @@ Count: ${EXPLORE_AGENT_COUNT}
 
 def test_nested_variable_access():
     """Verify nested variable access (e.g., TOOL.name) works."""
-    from swecli.core.agents.prompts.variables import PromptVariables
+    from opendev.core.agents.prompts.variables import PromptVariables
 
     variables = PromptVariables()
 
@@ -173,7 +173,7 @@ def test_nested_variable_access():
 
 def test_no_unresolved_variables_in_tool_descriptions():
     """Verify tool descriptions have no unresolved template variables."""
-    from swecli.core.agents.prompts.loader import load_tool_description
+    from opendev.core.agents.prompts.loader import load_tool_description
 
     present_desc = load_tool_description("present_plan")
 

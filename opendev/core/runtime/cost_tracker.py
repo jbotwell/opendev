@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from swecli.config.models import ModelInfo
+    from opendev.config.models import ModelInfo
 
 logger = logging.getLogger(__name__)
 

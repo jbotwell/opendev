@@ -13,12 +13,12 @@ from typing import Any
 
 from overrides import override
 
-from swecli.core.context_engineering.tools.lsp.ls import SolidLanguageServer
-from swecli.core.context_engineering.tools.lsp.ls_config import LanguageServerConfig
-from swecli.core.context_engineering.tools.lsp.ls_utils import PlatformId, PlatformUtils
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams, InitializeParams
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from swecli.core.context_engineering.tools.lsp.settings import SolidLSPSettings
+from opendev.core.context_engineering.tools.lsp.ls import SolidLanguageServer
+from opendev.core.context_engineering.tools.lsp.ls_config import LanguageServerConfig
+from opendev.core.context_engineering.tools.lsp.ls_utils import PlatformId, PlatformUtils
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams, InitializeParams
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from opendev.core.context_engineering.tools.lsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 

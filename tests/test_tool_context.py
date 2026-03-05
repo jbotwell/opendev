@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from swecli.core.context_engineering.tools.context import ToolExecutionContext
+from opendev.core.context_engineering.tools.context import ToolExecutionContext
 
 def test_tool_execution_context_defaults():
     """Verify ToolExecutionContext defaults to None/False."""

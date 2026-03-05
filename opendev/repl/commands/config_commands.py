@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
 
-from swecli.config import get_model_registry
-from swecli.repl.commands.base import CommandHandler, CommandResult
+from opendev.config import get_model_registry
+from opendev.repl.commands.base import CommandHandler, CommandResult
 
 if TYPE_CHECKING:
-    from swecli.core.runtime import ConfigManager
+    from opendev.core.runtime import ConfigManager
 
 
 class ConfigCommands(CommandHandler):
@@ -108,7 +108,7 @@ class ConfigCommands(CommandHandler):
         Returns:
             Selected category ("normal", "thinking", "vlm") or None if cancelled
         """
-        from swecli.ui_textual.components.category_selector_message import (
+        from opendev.ui_textual.components.category_selector_message import (
             create_category_selector_message,
             get_category_items
         )

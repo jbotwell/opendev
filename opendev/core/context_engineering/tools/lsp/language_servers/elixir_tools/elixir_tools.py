@@ -8,13 +8,13 @@ from typing import Any, cast
 
 from overrides import override
 
-from swecli.core.context_engineering.tools.lsp.ls import SolidLanguageServer
-from swecli.core.context_engineering.tools.lsp.ls_config import LanguageServerConfig
-from swecli.core.context_engineering.tools.lsp.ls_utils import FileUtils, PlatformId, PlatformUtils
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import InitializeParams
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from swecli.core.context_engineering.tools.lsp.settings import SolidLSPSettings
+from opendev.core.context_engineering.tools.lsp.ls import SolidLanguageServer
+from opendev.core.context_engineering.tools.lsp.ls_config import LanguageServerConfig
+from opendev.core.context_engineering.tools.lsp.ls_utils import FileUtils, PlatformId, PlatformUtils
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import InitializeParams
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from opendev.core.context_engineering.tools.lsp.settings import SolidLSPSettings
 
 from ..common import RuntimeDependency
 
@@ -65,7 +65,7 @@ class ElixirTools(SolidLanguageServer):
     @override
     def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
         """Override to filter out Next LS internal files from references."""
-        from swecli.core.context_engineering.tools.lsp.ls_utils import PathUtils
+        from opendev.core.context_engineering.tools.lsp.ls_utils import PathUtils
 
         # Get the raw response from the parent implementation
         raw_response = super()._send_references_request(relative_file_path, line, column)

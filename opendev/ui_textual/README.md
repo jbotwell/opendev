@@ -30,7 +30,7 @@ The existing prompt_toolkit UI has issues with full-screen terminal display. Tex
 ## Directory Structure
 
 ```
-swecli/ui_textual/
+opendev/ui_textual/
 ├── __init__.py
 ├── README.md                 # This file
 ├── chat_app.py               # Main Textual application
@@ -175,7 +175,7 @@ The POC uses the same color scheme as the current UI:
 ### Adding New Widgets
 
 ```python
-# swecli/ui_textual/widgets/custom_widget.py
+# opendev/ui_textual/widgets/custom_widget.py
 from textual.widget import Widget
 
 class CustomWidget(Widget):
@@ -186,7 +186,7 @@ class CustomWidget(Widget):
 ### Adding Modal Screens
 
 ```python
-# swecli/ui_textual/screens/modal_screen.py
+# opendev/ui_textual/screens/modal_screen.py
 from textual.screen import ModalScreen
 
 class CustomModal(ModalScreen[bool]):

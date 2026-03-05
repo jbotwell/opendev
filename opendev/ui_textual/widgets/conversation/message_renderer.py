@@ -6,8 +6,8 @@ from typing import Any
 from rich.text import Text
 from textual.widgets import RichLog
 
-from swecli.ui_textual.renderers import render_markdown_text_segment
-from swecli.ui_textual.style_tokens import (
+from opendev.ui_textual.renderers import render_markdown_text_segment
+from opendev.ui_textual.style_tokens import (
     ERROR,
     PRIMARY,
     SUBTLE,
@@ -15,8 +15,8 @@ from swecli.ui_textual.style_tokens import (
     THINKING,
     THINKING_ICON,
 )
-from swecli.ui_textual.widgets.conversation.protocols import RichLogInterface
-from swecli.ui_textual.widgets.conversation.spacing_manager import SpacingManager
+from opendev.ui_textual.widgets.conversation.protocols import RichLogInterface
+from opendev.ui_textual.widgets.conversation.spacing_manager import SpacingManager
 
 
 class DefaultMessageRenderer:

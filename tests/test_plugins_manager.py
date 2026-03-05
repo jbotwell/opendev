@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from swecli.core.plugins.models import (
+from opendev.core.plugins.models import (
     MarketplaceInfo,
     KnownMarketplaces,
     PluginMetadata,
@@ -15,20 +15,20 @@ from swecli.core.plugins.models import (
     InstalledPlugins,
     SkillMetadata,
 )
-from swecli.core.plugins.config import (
+from opendev.core.plugins.config import (
     load_known_marketplaces,
     save_known_marketplaces,
     load_installed_plugins,
     save_installed_plugins,
     get_all_installed_plugins,
 )
-from swecli.core.plugins.manager import (
+from opendev.core.plugins.manager import (
     PluginManager,
     PluginManagerError,
     MarketplaceNotFoundError,
     PluginNotFoundError,
 )
-from swecli.core.paths import reset_paths, ENV_OPENDEV_DIR
+from opendev.core.paths import reset_paths, ENV_OPENDEV_DIR
 
 
 class TestModels:
@@ -411,7 +411,7 @@ Content here.
         marketplaces = manager.list_marketplaces()
         assert marketplaces == []
 
-    @patch("swecli.core.plugins.manager.subprocess.run")
+    @patch("opendev.core.plugins.manager.subprocess.run")
     def test_add_marketplace_success(self, mock_run, tmp_path, monkeypatch):
         """Test adding a marketplace successfully."""
         swecli_dir = tmp_path / ".opendev"

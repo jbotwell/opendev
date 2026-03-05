@@ -1,7 +1,7 @@
 """Unit tests for TodoHandler, focusing on _find_todo() lookup logic."""
 
 import pytest
-from swecli.core.context_engineering.tools.handlers.todo_handler import TodoHandler, TodoItem
+from opendev.core.context_engineering.tools.handlers.todo_handler import TodoHandler, TodoItem
 
 
 class TestTodoHandlerFindTodo:

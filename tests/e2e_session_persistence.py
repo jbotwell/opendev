@@ -11,13 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rich.console import Console
 
-from swecli.core.context_engineering.history import SessionManager
-from swecli.core.context_engineering.memory.conversation_summarizer import (
+from opendev.core.context_engineering.history import SessionManager
+from opendev.core.context_engineering.memory.conversation_summarizer import (
     ConversationSummarizer,
     ConversationSummary,
 )
-from swecli.models.message import ChatMessage, Role
-from swecli.repl.react_executor import ReactExecutor
+from opendev.models.message import ChatMessage, Role
+from opendev.repl.react_executor import ReactExecutor
 
 
 def test_chat_message_new_fields():

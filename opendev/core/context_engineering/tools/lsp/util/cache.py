@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Optional
 
-from swecli.core.context_engineering.tools.lsp.util.compat import dump_pickle, load_pickle
+from opendev.core.context_engineering.tools.lsp.util.compat import dump_pickle, load_pickle
 
 log = logging.getLogger(__name__)
 

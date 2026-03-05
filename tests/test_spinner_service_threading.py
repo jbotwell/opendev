@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock
 
-from swecli.ui_textual.managers.spinner_service import SpinnerService
+from opendev.ui_textual.managers.spinner_service import SpinnerService
 
 
 def _make_service() -> SpinnerService:

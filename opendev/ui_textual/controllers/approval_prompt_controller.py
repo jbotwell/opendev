@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 if TYPE_CHECKING:
-    from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+    from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
 
 class ApprovalPromptController:
@@ -77,7 +77,7 @@ class ApprovalPromptController:
 
         # Track state for interrupt handling
         if self._interrupt_manager:
-            from swecli.ui_textual.managers.interrupt_manager import InterruptState
+            from opendev.ui_textual.managers.interrupt_manager import InterruptState
             self._interrupt_manager.enter_state(
                 InterruptState.APPROVAL_PROMPT,
                 controller_ref=self,
@@ -154,7 +154,7 @@ class ApprovalPromptController:
                 conversation._replace_tool_call_line("⏺", success=False)
 
             # Always show interrupt message, regardless of tool call state
-            from swecli.ui_textual.utils.interrupt_utils import create_interrupt_text, APPROVAL_INTERRUPT_MESSAGE
+            from opendev.ui_textual.utils.interrupt_utils import create_interrupt_text, APPROVAL_INTERRUPT_MESSAGE
             result_line = create_interrupt_text(APPROVAL_INTERRUPT_MESSAGE)
             conversation.write(result_line, scroll_end=True, animate=False)
             conversation.write(Text(""))

@@ -2,7 +2,7 @@
 This module contains the exceptions raised by the framework.
 """
 
-from swecli.core.context_engineering.tools.lsp.ls_config import Language
+from opendev.core.context_engineering.tools.lsp.ls_config import Language
 
 
 class SolidLSPException(Exception):

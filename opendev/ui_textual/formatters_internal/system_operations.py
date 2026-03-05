@@ -6,7 +6,7 @@ from typing import Any, Dict
 from rich.panel import Panel
 from rich.tree import Tree
 
-from swecli.ui_textual.style_tokens import ERROR, SUBTLE, GREEN_BRIGHT, GREEN_PROMPT
+from opendev.ui_textual.style_tokens import ERROR, SUBTLE, GREEN_BRIGHT, GREEN_PROMPT
 
 from .base import BaseToolFormatter
 

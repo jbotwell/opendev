@@ -1,9 +1,9 @@
 """Tests for the ProviderAdapter ABC and concrete adapters."""
 
-from swecli.core.agents.components.api.base_adapter import ProviderAdapter
-from swecli.core.agents.components.api.anthropic_adapter import AnthropicAdapter
-from swecli.core.agents.components.api.openai_responses_adapter import OpenAIResponsesAdapter
-from swecli.core.agents.components.api.http_client import AgentHttpClient
+from opendev.core.agents.components.api.base_adapter import ProviderAdapter
+from opendev.core.agents.components.api.anthropic_adapter import AnthropicAdapter
+from opendev.core.agents.components.api.openai_responses_adapter import OpenAIResponsesAdapter
+from opendev.core.agents.components.api.http_client import AgentHttpClient
 
 
 class TestProviderAdapterABC:
@@ -89,7 +89,7 @@ class TestFactoryReturnTypes:
         config.model_provider = "anthropic"
         config.get_api_key.return_value = "test-key"
 
-        from swecli.core.agents.components.api.configuration import create_http_client
+        from opendev.core.agents.components.api.configuration import create_http_client
 
         client = create_http_client(config)
         assert isinstance(client, ProviderAdapter)
@@ -102,7 +102,7 @@ class TestFactoryReturnTypes:
         config.model_provider = "openai"
         config.get_api_key.return_value = "test-key"
 
-        from swecli.core.agents.components.api.configuration import create_http_client
+        from opendev.core.agents.components.api.configuration import create_http_client
 
         client = create_http_client(config)
         assert isinstance(client, ProviderAdapter)
@@ -116,7 +116,7 @@ class TestFactoryReturnTypes:
         config.api_base_url = "https://api.fireworks.ai/inference/v1"
         config.get_api_key.return_value = "test-key"
 
-        from swecli.core.agents.components.api.configuration import create_http_client
+        from opendev.core.agents.components.api.configuration import create_http_client
 
         client = create_http_client(config)
         assert isinstance(client, ProviderAdapter)

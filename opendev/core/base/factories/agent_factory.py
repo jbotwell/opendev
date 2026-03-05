@@ -6,15 +6,15 @@ import logging
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
-from swecli.core.agents import MainAgent
-from swecli.core.agents.subagents import SubAgentManager
-from swecli.core.base.interfaces import AgentInterface, ToolRegistryInterface
-from swecli.core.runtime import ModeManager
-from swecli.models.config import AppConfig
+from opendev.core.agents import MainAgent
+from opendev.core.agents.subagents import SubAgentManager
+from opendev.core.base.interfaces import AgentInterface, ToolRegistryInterface
+from opendev.core.runtime import ModeManager
+from opendev.models.config import AppConfig
 
 if TYPE_CHECKING:
-    from swecli.core.skills import SkillLoader
-    from swecli.core.runtime.config import ConfigManager
+    from opendev.core.skills import SkillLoader
+    from opendev.core.runtime.config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ class AgentFactory:
             return
 
         try:
-            from swecli.core.skills import SkillLoader
+            from opendev.core.skills import SkillLoader
 
             skill_dirs = self._config_manager.get_skill_dirs()
             if skill_dirs:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-from swecli.core.paths import get_paths
-from swecli.core.skills import SkillLoader
+from opendev.core.paths import get_paths
+from opendev.core.skills import SkillLoader
 
 SAMPLE_SKILL = textwrap.dedent("""\
     ---
@@ -114,7 +114,7 @@ class TestInvokeSkillDedup:
 
     def test_second_invoke_returns_already_loaded(self, tmp_path: Path):
         """Second invoke of same skill should return short dedup message."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         # Create a test skill
         skill_file = tmp_path / "test-skill.md"
@@ -137,7 +137,7 @@ class TestInvokeSkillDedup:
 
     def test_different_skills_not_deduped(self, tmp_path: Path):
         """Different skill names should not trigger dedup."""
-        from swecli.core.context_engineering.tools.registry import ToolRegistry
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
 
         # Create a test skill
         skill_file = tmp_path / "test-skill.md"

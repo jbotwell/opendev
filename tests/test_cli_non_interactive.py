@@ -5,13 +5,13 @@ from types import SimpleNamespace
 import pytest
 from rich.console import Console
 
-from swecli.cli import _run_non_interactive
-from swecli.core.runtime.approval import ApprovalManager
-from swecli.core.runtime import ConfigManager
-from swecli.core.context_engineering.history.session_manager import SessionManager
-from swecli.core.context_engineering.history.undo_manager import UndoManager
-from swecli.core.runtime.services import RuntimeService
-from swecli.models.message import ChatMessage, Role
+from opendev.cli import _run_non_interactive
+from opendev.core.runtime.approval import ApprovalManager
+from opendev.core.runtime import ConfigManager
+from opendev.core.context_engineering.history.session_manager import SessionManager
+from opendev.core.context_engineering.history.undo_manager import UndoManager
+from opendev.core.runtime.services import RuntimeService
+from opendev.models.message import ChatMessage, Role
 
 
 class _StubAgent:

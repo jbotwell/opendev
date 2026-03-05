@@ -8,7 +8,7 @@ This package provides foundational components:
 """
 
 # Re-export commonly used base classes
-from swecli.core.base.abstract import BaseAgent
+from opendev.core.base.abstract import BaseAgent
 
 __all__ = [
     "BaseAgent",

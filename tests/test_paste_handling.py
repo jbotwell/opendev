@@ -3,7 +3,7 @@
 from unittest.mock import patch, PropertyMock
 from textual.events import Paste
 
-from swecli.ui_textual.chat_app import ChatTextArea
+from opendev.ui_textual.chat_app import ChatTextArea
 
 
 def _make_textarea(threshold: int = 10) -> ChatTextArea:

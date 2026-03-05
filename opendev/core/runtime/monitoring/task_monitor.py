@@ -7,7 +7,7 @@ import time
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from swecli.core.runtime.interrupt_token import InterruptToken
+    from opendev.core.runtime.interrupt_token import InterruptToken
 
 
 class TaskMonitor:

@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from swecli.core.context_engineering.compaction import (
+from opendev.core.context_engineering.compaction import (
     STAGE_COMPACT,
     STAGE_AGGRESSIVE,
     STAGE_MASK,
@@ -13,7 +13,7 @@ from swecli.core.context_engineering.compaction import (
     ContextCompactor,
     OptimizationLevel,
 )
-from swecli.models.config import AppConfig
+from opendev.models.config import AppConfig
 
 
 def _make_compactor(max_context_tokens: int = 100_000) -> ContextCompactor:

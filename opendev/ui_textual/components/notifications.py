@@ -10,7 +10,7 @@ from typing import Deque, List, Sequence, Union
 from rich.console import Console
 from rich.table import Table
 
-from swecli.ui_textual import style_tokens
+from opendev.ui_textual import style_tokens
 
 
 @dataclass

@@ -6,9 +6,9 @@ import requests
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from swecli.models.config import AppConfig
-from swecli.config import get_model_registry
-from swecli.core.agents.components import build_max_tokens_param
+from opendev.models.config import AppConfig
+from opendev.config import get_model_registry
+from opendev.core.agents.components import build_max_tokens_param
 
 
 class VLMTool:

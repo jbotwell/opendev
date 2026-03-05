@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
-from swecli.core.paths import get_paths
-from swecli.core.plugins.config import (
+from opendev.core.paths import get_paths
+from opendev.core.plugins.config import (
     load_known_marketplaces,
     save_known_marketplaces,
     load_installed_plugins,
@@ -20,7 +20,7 @@ from swecli.core.plugins.config import (
     save_direct_plugins,
     get_all_direct_plugins,
 )
-from swecli.core.plugins.models import (
+from opendev.core.plugins.models import (
     MarketplaceInfo,
     KnownMarketplaces,
     PluginMetadata,

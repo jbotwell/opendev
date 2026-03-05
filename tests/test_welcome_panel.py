@@ -1,10 +1,10 @@
 """Tests for AnimatedWelcomePanel widget."""
 
-from swecli.ui_textual.widgets.welcome_panel import (
+from opendev.ui_textual.widgets.welcome_panel import (
     AnimatedWelcomePanel,
     hsl_to_ansi256,
 )
-from swecli.core.runtime import OperationMode
+from opendev.core.runtime import OperationMode
 
 
 class TestHslToAnsi256:
@@ -138,7 +138,7 @@ class TestWelcomePanelSessionResumption:
 
     def test_chat_app_new_session_defaults(self):
         """New session should have welcome_visible=True by default."""
-        from swecli.ui_textual.chat_app import SWECLIChatApp
+        from opendev.ui_textual.chat_app import SWECLIChatApp
 
         app = SWECLIChatApp(is_resumed_session=False)
         assert app._is_resumed_session is False
@@ -146,7 +146,7 @@ class TestWelcomePanelSessionResumption:
 
     def test_chat_app_resumed_session_flags(self):
         """Resumed session should have welcome_visible=False."""
-        from swecli.ui_textual.chat_app import SWECLIChatApp
+        from opendev.ui_textual.chat_app import SWECLIChatApp
 
         app = SWECLIChatApp(is_resumed_session=True)
         assert app._is_resumed_session is True
@@ -154,7 +154,7 @@ class TestWelcomePanelSessionResumption:
 
     def test_create_chat_app_accepts_resumed_flag(self):
         """create_chat_app should accept is_resumed_session parameter."""
-        from swecli.ui_textual.chat_app import create_chat_app
+        from opendev.ui_textual.chat_app import create_chat_app
 
         # New session
         app_new = create_chat_app(is_resumed_session=False)
@@ -172,7 +172,7 @@ class TestAnimatedWelcomePanelIntegration:
 
     def test_import_from_widgets(self):
         """Can import from widgets package."""
-        from swecli.ui_textual.widgets import AnimatedWelcomePanel as Imported
+        from opendev.ui_textual.widgets import AnimatedWelcomePanel as Imported
 
         assert Imported is AnimatedWelcomePanel
 

@@ -6,7 +6,7 @@ import termios
 from typing import List, Tuple, Optional
 from rich.console import Console
 
-from swecli.ui_textual.style_tokens import BLUE_BG_ACTIVE, MENU_HINT, RAIL_BAR, ACCENT
+from opendev.ui_textual.style_tokens import BLUE_BG_ACTIVE, MENU_HINT, RAIL_BAR, ACCENT
 
 console = Console()
 

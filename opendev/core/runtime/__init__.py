@@ -8,8 +8,8 @@ This package manages runtime/operational concerns:
 - services/: High-level service orchestration
 """
 
-from swecli.core.runtime.config import ConfigManager
-from swecli.core.runtime.mode_manager import ModeManager, OperationMode
+from opendev.core.runtime.config import ConfigManager
+from opendev.core.runtime.mode_manager import ModeManager, OperationMode
 
 __all__ = [
     "ConfigManager",

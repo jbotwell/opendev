@@ -10,13 +10,13 @@ from rich.text import Text
 from textual.geometry import Size
 from textual.strip import Strip
 
-from swecli.ui_textual.style_tokens import GREY
-from swecli.ui_textual.widgets.conversation.protocols import RichLogInterface
+from opendev.ui_textual.style_tokens import GREY
+from opendev.ui_textual.widgets.conversation.protocols import RichLogInterface
 
 from textual.strip import Strip
 
-from swecli.ui_textual.style_tokens import GREY, BLUE_BRIGHT
-from swecli.ui_textual.widgets.conversation.protocols import RichLogInterface
+from opendev.ui_textual.style_tokens import GREY, BLUE_BRIGHT
+from opendev.ui_textual.widgets.conversation.protocols import RichLogInterface
 
 
 class DefaultSpinnerManager:

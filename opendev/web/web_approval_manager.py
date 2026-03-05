@@ -7,9 +7,9 @@ import threading
 import uuid
 from typing import Any, Optional, Union
 
-from swecli.models.operation import Operation
-from swecli.web.state import get_state
-from swecli.web.logging_config import logger
+from opendev.models.operation import Operation
+from opendev.web.state import get_state
+from opendev.web.logging_config import logger
 
 
 class ApprovalResult:

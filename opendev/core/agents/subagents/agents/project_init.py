@@ -1,7 +1,7 @@
 """Project Init subagent for OPENDEV.md generation."""
 
-from swecli.core.agents.prompts.loader import load_prompt
-from swecli.core.agents.subagents.specs import SubAgentSpec
+from opendev.core.agents.prompts.loader import load_prompt
+from opendev.core.agents.subagents.specs import SubAgentSpec
 
 PROJECT_INIT_SUBAGENT = SubAgentSpec(
     name="Project-Init",

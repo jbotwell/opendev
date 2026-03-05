@@ -11,11 +11,11 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import BLUE_BG_ACTIVE, BLUE_LIGHT, GREY
+from opendev.ui_textual.style_tokens import BLUE_BG_ACTIVE, BLUE_LIGHT, GREY
 
 if TYPE_CHECKING:
-    from swecli.ui_textual.chat_app import SWECLIChatApp
-    from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+    from opendev.ui_textual.chat_app import SWECLIChatApp
+    from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
 
 class ModelPickerController:
@@ -61,7 +61,7 @@ class ModelPickerController:
             return
 
         try:
-            from swecli.config import get_model_registry
+            from opendev.config import get_model_registry
 
             registry = get_model_registry()
         except Exception as exc:  # pragma: no cover
@@ -85,7 +85,7 @@ class ModelPickerController:
 
         # Track state for interrupt handling
         if self._interrupt_manager:
-            from swecli.ui_textual.managers.interrupt_manager import InterruptState
+            from opendev.ui_textual.managers.interrupt_manager import InterruptState
 
             self._interrupt_manager.enter_state(
                 InterruptState.MODEL_PICKER,

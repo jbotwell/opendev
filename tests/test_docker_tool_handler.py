@@ -22,7 +22,7 @@ class TestDockerToolHandlerArgumentNames:
     @pytest.fixture
     def handler(self, mock_runtime):
         """Create a DockerToolHandler with mocked runtime."""
-        from swecli.core.docker.tool_handler import DockerToolHandler
+        from opendev.core.docker.tool_handler import DockerToolHandler
         return DockerToolHandler(mock_runtime, workspace_dir="/workspace/repo")
 
     # --- read_file tests ---
@@ -296,7 +296,7 @@ class TestDockerToolHandlerArgumentNames:
     @pytest.mark.asyncio
     async def test_run_command_basic(self, handler, mock_runtime):
         """Test run_command executes commands."""
-        from swecli.core.docker.models import BashObservation
+        from opendev.core.docker.models import BashObservation
 
         mock_obs = MagicMock()
         mock_obs.output = "hello world"

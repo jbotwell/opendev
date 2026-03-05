@@ -15,8 +15,8 @@ from typing import Any, Dict, List, Optional, Union
 
 import httpx
 
-from swecli.core.agents.components.api.base_adapter import ProviderAdapter
-from swecli.core.agents.components.api.http_client import (
+from opendev.core.agents.components.api.base_adapter import ProviderAdapter
+from opendev.core.agents.components.api.http_client import (
     MAX_RETRIES,
     RETRYABLE_STATUS_CODES,
     RETRY_DELAYS,

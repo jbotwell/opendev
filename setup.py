@@ -17,7 +17,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "opendev=swecli.cli:main",
+            "opendev=opendev.cli:main",
         ],
     },
     python_requires=">=3.9",

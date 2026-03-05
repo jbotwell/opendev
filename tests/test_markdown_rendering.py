@@ -3,7 +3,7 @@
 from rich.table import Table
 from rich.text import Text
 
-from swecli.ui_textual.renderers.markdown import (
+from opendev.ui_textual.renderers.markdown import (
     render_markdown_text_segment,
     _is_table_row,
     _is_table_separator,
@@ -11,7 +11,7 @@ from swecli.ui_textual.renderers.markdown import (
     _parse_table,
     _render_table,
 )
-from swecli.ui_textual.formatters_internal.markdown_formatter import markdown_to_plain_text
+from opendev.ui_textual.formatters_internal.markdown_formatter import markdown_to_plain_text
 
 
 def _render_plain(content: str, leading: bool = False) -> list[str]:

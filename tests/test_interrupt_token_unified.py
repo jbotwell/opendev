@@ -13,8 +13,8 @@ import threading
 import time
 from unittest.mock import Mock, MagicMock, patch
 
-from swecli.core.runtime.interrupt_token import InterruptToken
-from swecli.core.runtime.monitoring import TaskMonitor
+from opendev.core.runtime.interrupt_token import InterruptToken
+from opendev.core.runtime.monitoring import TaskMonitor
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ class TestScenario1AgentThinking:
 
     def test_token_propagates_to_llm_caller_monitor(self):
         """When LLMCaller is calling LLM, the token reaches the monitor."""
-        from swecli.repl.llm_caller import LLMCaller
+        from opendev.repl.llm_caller import LLMCaller
 
         console = Mock()
         caller = LLMCaller(console)
@@ -186,7 +186,7 @@ class TestScenario1AgentThinking:
 
     def test_react_executor_token_created_per_run(self):
         """ReactExecutor creates a fresh InterruptToken for each execute() call."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = Mock()
         session_manager = Mock()
@@ -200,7 +200,7 @@ class TestScenario1AgentThinking:
         assert executor._active_interrupt_token is None
 
         # Simulate the token creation that happens at start of execute()
-        from swecli.core.runtime.interrupt_token import InterruptToken
+        from opendev.core.runtime.interrupt_token import InterruptToken
         executor._active_interrupt_token = InterruptToken()
         assert not executor._active_interrupt_token.is_requested()
 
@@ -210,7 +210,7 @@ class TestScenario1AgentThinking:
 
     def test_request_interrupt_triggers_token(self):
         """ReactExecutor.request_interrupt() signals the active token."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = Mock()
         session_manager = Mock()
@@ -228,7 +228,7 @@ class TestScenario1AgentThinking:
 
     def test_thinking_phase_monitor_gets_token(self):
         """TaskMonitor in _get_thinking_trace gets the run token attached."""
-        from swecli.repl.react_executor import ReactExecutor
+        from opendev.repl.react_executor import ReactExecutor
 
         console = Mock()
         session_manager = Mock()
@@ -272,7 +272,7 @@ class TestScenario2ToolExecution:
 
     def test_tool_executor_interrupt_propagates(self):
         """ToolExecutor.request_interrupt triggers attached token via monitor."""
-        from swecli.repl.tool_executor import ToolExecutor
+        from opendev.repl.tool_executor import ToolExecutor
 
         console = Mock()
         output_formatter = Mock()
@@ -305,7 +305,7 @@ class TestScenario2ToolExecution:
         output_formatter = Mock()
         status_line = Mock()
 
-        from swecli.repl.query_processor import QueryProcessor
+        from opendev.repl.query_processor import QueryProcessor
 
         qp = QueryProcessor(
             console=console,
@@ -368,7 +368,7 @@ class TestScenario3ApprovalPanel:
 
     def test_controller_registry_cancel_active(self):
         """InterruptManager cancels registered active controller."""
-        from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+        from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
         app = Mock()
         app.input_field = Mock()
@@ -389,7 +389,7 @@ class TestScenario3ApprovalPanel:
 
     def test_controller_registry_skips_inactive(self):
         """Registry skips inactive controllers."""
-        from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+        from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
         # Use a minimal mock that won't trigger fallback controller lookups
         app = Mock(spec=[])
@@ -408,7 +408,7 @@ class TestScenario3ApprovalPanel:
 
     def test_controller_registry_unregister(self):
         """Unregistered controller is no longer cancelled."""
-        from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+        from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
         # Use a minimal mock that won't trigger fallback controller lookups
         app = Mock(spec=[])
@@ -429,7 +429,7 @@ class TestScenario3ApprovalPanel:
 
     def test_request_run_interrupt_via_token(self):
         """InterruptManager.request_run_interrupt() triggers the active token."""
-        from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+        from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
         app = Mock()
         manager = InterruptManager(app)
@@ -443,7 +443,7 @@ class TestScenario3ApprovalPanel:
 
     def test_request_run_interrupt_no_token(self):
         """request_run_interrupt returns False when no token is set."""
-        from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+        from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
         app = Mock()
         manager = InterruptManager(app)
@@ -496,7 +496,7 @@ class TestEndToEndInterruptPath:
 
     def test_interrupt_message_format(self):
         """Verify the standard ⎿ interrupt message format."""
-        from swecli.ui_textual.utils.interrupt_utils import (
+        from opendev.ui_textual.utils.interrupt_utils import (
             create_interrupt_text,
             create_interrupt_message,
             STANDARD_INTERRUPT_MESSAGE,
@@ -542,7 +542,7 @@ class TestHttpClientCompatibility:
 
     def test_token_as_task_monitor_duck_type(self):
         """InterruptToken can be used directly where TaskMonitor is expected."""
-        from swecli.core.agents.components.api.http_client import AgentHttpClient
+        from opendev.core.agents.components.api.http_client import AgentHttpClient
 
         token = InterruptToken()
 
@@ -554,7 +554,7 @@ class TestHttpClientCompatibility:
 
     def test_monitor_with_token_works_with_http_client(self):
         """TaskMonitor with attached token works with AgentHttpClient._should_interrupt."""
-        from swecli.core.agents.components.api.http_client import AgentHttpClient
+        from opendev.core.agents.components.api.http_client import AgentHttpClient
 
         token = InterruptToken()
         monitor = TaskMonitor()

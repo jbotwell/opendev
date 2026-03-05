@@ -80,7 +80,7 @@ class ToolSchemaBuilder:
         if not subagent_manager:
             return None
 
-        from swecli.core.agents.subagents.task_tool import create_task_tool_schema
+        from opendev.core.agents.subagents.task_tool import create_task_tool_schema
 
         return create_task_tool_schema(subagent_manager)
 

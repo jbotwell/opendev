@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from swecli.core.paths import get_paths
+from opendev.core.paths import get_paths
 
 _LOG = logging.getLogger(__name__)
 

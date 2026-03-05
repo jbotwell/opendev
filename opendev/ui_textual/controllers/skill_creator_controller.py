@@ -8,7 +8,7 @@ from typing import Any, Optional, TYPE_CHECKING
 from rich.console import RenderableType
 from rich.text import Text
 
-from swecli.ui_textual.components.skill_creator_panels import (
+from opendev.ui_textual.components.skill_creator_panels import (
     create_location_panel,
     create_method_panel,
     create_identifier_input_panel,
@@ -17,11 +17,11 @@ from swecli.ui_textual.components.skill_creator_panels import (
     create_generating_panel,
     create_success_panel,
 )
-from swecli.ui_textual.managers.spinner_service import SpinnerType
+from opendev.ui_textual.managers.spinner_service import SpinnerType
 
 if TYPE_CHECKING:
-    from swecli.ui_textual.chat_app import SWECLIChatApp
-    from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+    from opendev.ui_textual.chat_app import SWECLIChatApp
+    from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
 
 # Default template for new skills
@@ -139,7 +139,7 @@ class SkillCreatorController:
 
         # Track state for interrupt handling
         if self._interrupt_manager:
-            from swecli.ui_textual.managers.interrupt_manager import InterruptState
+            from opendev.ui_textual.managers.interrupt_manager import InterruptState
 
             self._interrupt_manager.enter_state(
                 InterruptState.SKILL_WIZARD,
@@ -423,7 +423,7 @@ class SkillCreatorController:
 
     def _get_skills_dir(self) -> Path:
         """Get the appropriate skills directory based on location choice."""
-        from swecli.core.paths import get_paths
+        from opendev.core.paths import get_paths
 
         state = self.state
         if not state:
@@ -541,7 +541,7 @@ class SkillCreatorController:
 
             config = self._config_manager.get_config()
 
-            from swecli.core.agents.components import (
+            from opendev.core.agents.components import (
                 create_http_client,
                 build_max_tokens_param,
                 build_temperature_param,

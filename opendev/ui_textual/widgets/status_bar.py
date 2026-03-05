@@ -10,7 +10,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.widgets import Footer, Static
 
-from swecli.ui_textual.style_tokens import (
+from opendev.ui_textual.style_tokens import (
     BLUE_BRIGHT,
     BLUE_TASK,
     CYAN,
@@ -188,7 +188,7 @@ class StatusBar(Static):
         """
         import logging as _log
 
-        _log.getLogger("swecli.context_debug").info(
+        _log.getLogger("opendev.context_debug").info(
             "set_context_usage: old=%.2f new=%.2f", self.context_usage_pct, pct
         )
         self.context_usage_pct = pct

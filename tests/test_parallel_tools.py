@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from swecli.repl.react_executor import ReactExecutor
+from opendev.repl.react_executor import ReactExecutor
 
 
 class TestParallelizableToolsSet:
@@ -63,7 +63,7 @@ class TestParallelismDecision:
     @pytest.fixture
     def ctx(self):
         """Create a minimal IterationContext."""
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
         return IterationContext(
             query="test",
             messages=[],
@@ -172,7 +172,7 @@ class TestSilentParallelExecution:
 
     @pytest.fixture
     def ctx(self):
-        from swecli.repl.react_executor import IterationContext
+        from opendev.repl.react_executor import IterationContext
         return IterationContext(
             query="test",
             messages=[],

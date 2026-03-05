@@ -9,12 +9,12 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-from swecli.ui_textual.formatters.style_formatter import StyleFormatter
-from swecli.ui_textual.style_tokens import GREY, PRIMARY
-from swecli.ui_textual.services import ToolDisplayService
-from swecli.ui_textual.constants import TOOL_ERROR_SENTINEL
-from swecli.ui_textual.utils.text_utils import summarize_error
-from swecli.models.message import ToolCall
+from opendev.ui_textual.formatters.style_formatter import StyleFormatter
+from opendev.ui_textual.style_tokens import GREY, PRIMARY
+from opendev.ui_textual.services import ToolDisplayService
+from opendev.ui_textual.constants import TOOL_ERROR_SENTINEL
+from opendev.ui_textual.utils.text_utils import summarize_error
+from opendev.models.message import ToolCall
 
 
 class TextualUICallback:
@@ -349,7 +349,7 @@ class TextualUICallback:
                     self.conversation._truncate_from(len(self.conversation.lines) - 1)
 
             # Write interrupt message using shared utility
-            from swecli.ui_textual.utils.interrupt_utils import (
+            from opendev.ui_textual.utils.interrupt_utils import (
                 create_interrupt_text,
                 STANDARD_INTERRUPT_MESSAGE,
             )
@@ -529,7 +529,7 @@ class TextualUICallback:
             output = result.get("output") or result.get("error") or ""
             if output and self._app is not None:
                 from rich.text import Text
-                from swecli.ui_textual.style_tokens import GREY
+                from opendev.ui_textual.style_tokens import GREY
 
                 result_line = Text("  ⎿  ", style=GREY)
                 result_line.append(output, style=GREY)
@@ -1073,7 +1073,7 @@ class TextualUICallback:
             return
 
         try:
-            from swecli.ui_textual.widgets.todo_panel import TodoPanel
+            from opendev.ui_textual.widgets.todo_panel import TodoPanel
 
             panel = self.chat_app.query_one("#todo-panel", TodoPanel)
             logger.debug("[CALLBACK] _refresh_todo_panel: calling panel.refresh_display()")
@@ -1101,7 +1101,7 @@ class TextualUICallback:
             message: Result message to display
             details: Optional additional details (shown dimmed)
         """
-        from swecli.ui_textual.formatters.result_formatter import (
+        from opendev.ui_textual.formatters.result_formatter import (
             ToolResultFormatter,
             ResultType,
         )
@@ -1180,7 +1180,7 @@ class TextualUICallback:
         """Update context usage display in the status bar."""
         import logging as _log
 
-        _log.getLogger("swecli.context_debug").info(
+        _log.getLogger("opendev.context_debug").info(
             "on_context_usage called: pct=%.2f, has_app=%s",
             usage_pct,
             self._app is not None,
@@ -1191,7 +1191,7 @@ class TextualUICallback:
             if hasattr(self._app, "status_bar") and self._app.status_bar is not None:
                 self._run_on_ui(self._app.status_bar.set_context_usage, usage_pct)
             else:
-                from swecli.ui_textual.widgets.status_bar import StatusBar
+                from opendev.ui_textual.widgets.status_bar import StatusBar
 
                 sb = self._app.query_one("#status-bar", StatusBar)
                 self._run_on_ui(sb.set_context_usage, usage_pct)
@@ -1206,7 +1206,7 @@ class TextualUICallback:
             if hasattr(self._app, "status_bar") and self._app.status_bar is not None:
                 self._run_on_ui(self._app.status_bar.set_session_cost, total_cost_usd)
             else:
-                from swecli.ui_textual.widgets.status_bar import StatusBar
+                from opendev.ui_textual.widgets.status_bar import StatusBar
 
                 sb = self._app.query_one("#status-bar", StatusBar)
                 self._run_on_ui(sb.set_session_cost, total_cost_usd)

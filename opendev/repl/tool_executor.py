@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Iterable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from swecli.models.message import ToolCall
+    from opendev.models.message import ToolCall
 
 
 class ToolExecutor:
@@ -68,10 +68,10 @@ class ToolExecutor:
             Tool execution result
         """
         import time as _time
-        from swecli.core.debug import get_debug_logger
-        from swecli.core.runtime.monitoring import TaskMonitor
-        from swecli.ui_textual.components.task_progress import TaskProgressDisplay
-        from swecli.ui_textual.utils.tool_display import format_tool_call
+        from opendev.core.debug import get_debug_logger
+        from opendev.core.runtime.monitoring import TaskMonitor
+        from opendev.ui_textual.components.task_progress import TaskProgressDisplay
+        from opendev.ui_textual.utils.tool_display import format_tool_call
 
         tool_name = tool_call["function"]["name"]
         tool_args = json.loads(tool_call["function"]["arguments"])

@@ -12,26 +12,26 @@ from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.panel import Panel
 
-from swecli.core.runtime.approval import ApprovalManager
-from swecli.core.runtime import (
+from opendev.core.runtime.approval import ApprovalManager
+from opendev.core.runtime import (
     ConfigManager,
     ModeManager,
     OperationMode,
 )
-from swecli.core.context_engineering.history import SessionManager, UndoManager
-from swecli.core.runtime.monitoring import ErrorHandler
-from swecli.core.runtime.services import RuntimeService
-from swecli.core.context_engineering.tools.implementations import (
+from opendev.core.context_engineering.history import SessionManager, UndoManager
+from opendev.core.runtime.monitoring import ErrorHandler
+from opendev.core.runtime.services import RuntimeService
+from opendev.core.context_engineering.tools.implementations import (
     FileOperations,
     WriteTool,
     EditTool,
     BashTool,
 )
-from swecli.ui_textual.components.console_animations import Spinner
-from swecli.ui_textual.components import StatusLine, NotificationCenter
-from swecli.ui_textual.autocomplete import SwecliCompleter
-from swecli.ui_textual.formatters_internal.output_formatter import OutputFormatter
-from swecli.ui_textual.style_tokens import (
+from opendev.ui_textual.components.console_animations import Spinner
+from opendev.ui_textual.components import StatusLine, NotificationCenter
+from opendev.ui_textual.autocomplete import SwecliCompleter
+from opendev.ui_textual.formatters_internal.output_formatter import OutputFormatter
+from opendev.ui_textual.style_tokens import (
     CYAN,
     ERROR,
     GREY,
@@ -45,7 +45,7 @@ from swecli.ui_textual.style_tokens import (
 )
 
 # Command handlers
-from swecli.repl.commands import (
+from opendev.repl.commands import (
     SessionCommands,
     ModeCommands,
     MCPCommands,
@@ -58,7 +58,7 @@ from swecli.repl.commands import (
 )
 
 # UI components
-from swecli.repl.ui import (
+from opendev.repl.ui import (
     MessagePrinter,
     InputFrame,
     PromptBuilder,
@@ -67,7 +67,7 @@ from swecli.repl.ui import (
 )
 
 # Query processing
-from swecli.repl.query_processor import QueryProcessor
+from opendev.repl.query_processor import QueryProcessor
 
 
 class REPL:
@@ -115,21 +115,21 @@ class REPL:
 
     def _init_tools(self):
         """Initialize file operation and command tools."""
-        from swecli.core.context_engineering.tools.implementations import (
+        from opendev.core.context_engineering.tools.implementations import (
             WebFetchTool,
             OpenBrowserTool,
             VLMTool,
             WebScreenshotTool,
         )
-        from swecli.core.context_engineering.tools.implementations.web_search_tool import (
+        from opendev.core.context_engineering.tools.implementations.web_search_tool import (
             WebSearchTool,
         )
-        from swecli.core.context_engineering.tools.implementations.notebook_edit_tool import (
+        from opendev.core.context_engineering.tools.implementations.notebook_edit_tool import (
             NotebookEditTool,
         )
-        from swecli.core.context_engineering.tools.implementations.ask_user_tool import AskUserTool
-        from swecli.core.context_engineering.mcp.manager import MCPManager
-        from swecli.core.context_engineering.tools.background_task_manager import (
+        from opendev.core.context_engineering.tools.implementations.ask_user_tool import AskUserTool
+        from opendev.core.context_engineering.mcp.manager import MCPManager
+        from opendev.core.context_engineering.tools.background_task_manager import (
             BackgroundTaskManager,
         )
 
@@ -213,7 +213,7 @@ class REPL:
     def _init_prompt_session(self):
         """Initialize prompt session with history and autocomplete."""
         # Setup prompt session with history
-        from swecli.core.paths import get_paths
+        from opendev.core.paths import get_paths
 
         paths = get_paths(self.config_manager.working_dir)
         history_file = paths.global_history_file
@@ -319,8 +319,8 @@ class REPL:
 
     def _init_hooks(self):
         """Initialize hooks system from settings.json."""
-        from swecli.core.hooks.loader import load_hooks_config
-        from swecli.core.hooks.manager import HookManager
+        from opendev.core.hooks.loader import load_hooks_config
+        from opendev.core.hooks.manager import HookManager
 
         try:
             config = load_hooks_config(self.config_manager.working_dir)
@@ -382,7 +382,7 @@ class REPL:
 
         @kb.add("s-tab")
         def _(event) -> None:
-            from swecli.core.runtime.mode_manager import OperationMode
+            from opendev.core.runtime.mode_manager import OperationMode
 
             if self.mode_manager.current_mode == OperationMode.PLAN:
                 # Switch back to normal mode
@@ -451,7 +451,7 @@ class REPL:
 
         # Fire SessionStart hook
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             self._hook_manager.run_hooks(
                 HookEvent.SESSION_START, match_value=startup_type
@@ -496,7 +496,7 @@ class REPL:
 
     def _print_welcome(self) -> None:
         """Print compact welcome banner using shared welcome module."""
-        from swecli.ui_textual.components import WelcomeMessage
+        from opendev.ui_textual.components import WelcomeMessage
 
         # Generate welcome content using shared module
         welcome_lines = WelcomeMessage.generate_full_welcome(
@@ -632,7 +632,7 @@ class REPL:
         elif cmd == "/compact":
             self.session_commands.compact()
         elif cmd == "/sound":
-            from swecli.core.utils.sound import play_finish_sound
+            from opendev.core.utils.sound import play_finish_sound
             play_finish_sound()
             self.console.print("  ⎿  [cyan]Playing test sound...[/cyan]")
         else:
@@ -665,7 +665,7 @@ class REPL:
         """Cleanup resources."""
         # Fire SessionEnd hook
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             try:
                 self._hook_manager.run_hooks(HookEvent.SESSION_END)

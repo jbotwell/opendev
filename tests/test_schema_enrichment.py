@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from swecli.core.agents.components.schemas.definitions import _BUILTIN_TOOL_SCHEMAS
+from opendev.core.agents.components.schemas.definitions import _BUILTIN_TOOL_SCHEMAS
 
 
 def _get_schema_by_name(name: str) -> dict | None:

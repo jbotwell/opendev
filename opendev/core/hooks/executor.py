@@ -8,7 +8,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from swecli.core.hooks.models import HookCommand
+from opendev.core.hooks.models import HookCommand
 
 logger = logging.getLogger(__name__)
 

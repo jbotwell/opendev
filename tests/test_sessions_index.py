@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from swecli.core.context_engineering.history.session_manager import SessionManager
-from swecli.core.paths import SESSIONS_INDEX_FILE_NAME
-from swecli.models.message import ChatMessage, Role
+from opendev.core.context_engineering.history.session_manager import SessionManager
+from opendev.core.paths import SESSIONS_INDEX_FILE_NAME
+from opendev.models.message import ChatMessage, Role
 
 
 def _add_user_message(mgr: SessionManager, content: str = "Hello world") -> None:

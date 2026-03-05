@@ -3,7 +3,7 @@
 import pytest
 from rich.text import Text
 
-from swecli.ui_textual.widgets.conversation.block_registry import (
+from opendev.ui_textual.widgets.conversation.block_registry import (
     BlockRegistry,
     ContentBlock,
 )

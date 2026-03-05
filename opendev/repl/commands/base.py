@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from rich.console import Console
 
-from swecli.ui_textual.formatters.result_formatter import (
+from opendev.ui_textual.formatters.result_formatter import (
     ToolResultFormatter,
     get_formatter,
     RESULT_PREFIX,

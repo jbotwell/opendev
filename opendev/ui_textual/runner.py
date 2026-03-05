@@ -36,14 +36,14 @@ def _reset_terminal_mouse_mode() -> None:
 atexit.register(_reset_terminal_mouse_mode)
 
 
-from swecli.core.agents.components import extract_plan_from_response
-from swecli.core.runtime import ConfigManager, OperationMode
-from swecli.core.context_engineering.history import SessionManager
-from swecli.models.message import ChatMessage, Role
-from swecli.repl.repl import REPL
-from swecli.ui_textual.managers.approval_manager import ChatApprovalManager
-from swecli.ui_textual.chat_app import create_chat_app
-from swecli.ui_textual.runner_components import (
+from opendev.core.agents.components import extract_plan_from_response
+from opendev.core.runtime import ConfigManager, OperationMode
+from opendev.core.context_engineering.history import SessionManager
+from opendev.models.message import ChatMessage, Role
+from opendev.repl.repl import REPL
+from opendev.ui_textual.managers.approval_manager import ChatApprovalManager
+from opendev.ui_textual.chat_app import create_chat_app
+from opendev.ui_textual.runner_components import (
     HistoryHydrator,
     ToolRenderer,
     ModelConfigManager,
@@ -232,7 +232,7 @@ class TextualRunner:
                     self.repl.mode_manager.set_plan_file_path(str(plan_file_path))
                 else:
                     # Legacy fallback: old sessions used {session.id}.md
-                    from swecli.core.paths import get_paths
+                    from opendev.core.paths import get_paths
 
                     plans_dir = get_paths().global_plans_dir
                     plans_dir.mkdir(parents=True, exist_ok=True)
@@ -248,8 +248,8 @@ class TextualRunner:
                     plan_content = Path(plan_file_path).read_text(encoding="utf-8")
 
                     if plan_content and plan_content.strip():
-                        from swecli.core.agents.prompts.reminders import get_reminder
-                        from swecli.models.message import ChatMessage, Role
+                        from opendev.core.agents.prompts.reminders import get_reminder
+                        from opendev.models.message import ChatMessage, Role
 
                         reminder = get_reminder(
                             "plan_file_reference",
@@ -272,7 +272,7 @@ class TextualRunner:
 
     def _init_debug_logger(self) -> None:
         """Initialize the per-session debug logger when verbose mode is active."""
-        from swecli.core.debug import SessionDebugLogger, set_debug_logger
+        from opendev.core.debug import SessionDebugLogger, set_debug_logger
 
         if not getattr(self.config, "verbose", False):
             set_debug_logger(None)
@@ -390,7 +390,7 @@ class TextualRunner:
             if hasattr(self.app, "_skill_creator"):
                 self.app._skill_creator.set_config_manager(self.config_manager)
             # Wire DisplayLedger as single entry point for all display paths
-            from swecli.ui_textual.managers.display_ledger import DisplayLedger
+            from opendev.ui_textual.managers.display_ledger import DisplayLedger
 
             if hasattr(self.app, "conversation"):
                 self.app._display_ledger = DisplayLedger(self.app.conversation)
@@ -409,7 +409,7 @@ class TextualRunner:
             if self._dangerously_skip_permissions and hasattr(self.app, "status_bar"):
                 self.app.status_bar.set_autonomy("Auto")
             # Wire up background task status provider
-            from swecli.ui_textual.managers.background_task_status import (
+            from opendev.ui_textual.managers.background_task_status import (
                 BackgroundTaskStatusProvider,
             )
 
@@ -421,7 +421,7 @@ class TextualRunner:
             # Post initial message as a Submitted event so it flows through
             # the normal UI submit path (welcome panel dismissal, MessageController, etc.)
             if self._initial_message:
-                from swecli.ui_textual.widgets.chat_text_area import ChatTextArea
+                from opendev.ui_textual.widgets.chat_text_area import ChatTextArea
 
                 self.app.input_field.post_message(
                     ChatTextArea.Submitted(self.app.input_field, self._initial_message)
@@ -528,7 +528,7 @@ class TextualRunner:
     def _run_query(self, message: str) -> list[ChatMessage]:
         """Execute a user query via the REPL and return new session messages."""
         import traceback
-        from swecli.core.debug import get_debug_logger
+        from opendev.core.debug import get_debug_logger
 
         get_debug_logger().log(
             "message_submitted", "runner", text=message[:200], source="user"
@@ -571,7 +571,7 @@ class TextualRunner:
             conversation_widget = None
             try:
                 # Use the same query method the app uses to get the conversation widget
-                from swecli.ui_textual.chat_app import ConversationLog
+                from opendev.ui_textual.chat_app import ConversationLog
 
                 conversation_widget = self.app.query_one("#conversation", ConversationLog)
             except Exception:
@@ -584,7 +584,7 @@ class TextualRunner:
                 config = self.config_manager.get_config()
                 conversation_widget.set_debug_enabled(config.debug_logging)
 
-                from swecli.ui_textual.ui_callback import TextualUICallback
+                from opendev.ui_textual.ui_callback import TextualUICallback
 
                 ui_callback = TextualUICallback(conversation_widget, self.app, self.working_dir)
 
@@ -594,7 +594,7 @@ class TextualRunner:
             else:
                 # Create a mock callback for when app is not mounted (e.g., during testing)
                 # BaseUICallback provides no-op implementations for all methods
-                from swecli.ui_textual.callback_interface import BaseUICallback
+                from opendev.ui_textual.callback_interface import BaseUICallback
 
                 ui_callback = BaseUICallback()
 
@@ -724,7 +724,7 @@ class TextualRunner:
         # Create todos from plan steps
         todo_handler = getattr(self.repl.tool_registry, "todo_handler", None)
         if todo_handler:
-            from swecli.core.agents.components import extract_plan_from_response
+            from opendev.core.agents.components import extract_plan_from_response
 
             parsed = extract_plan_from_response(f"---BEGIN PLAN---\n{plan_text}\n---END PLAN---")
             if parsed:
@@ -787,7 +787,7 @@ Work through each implementation step in order. Mark each todo item as 'in_progr
         Returns:
             True if interrupt was requested, False if no task is running
         """
-        from swecli.ui_textual.debug_logger import debug_log
+        from opendev.ui_textual.debug_logger import debug_log
         debug_log("Runner", "_handle_interrupt called")
 
         interrupted = False
@@ -890,7 +890,7 @@ Work through each implementation step in order. Mark each todo item as 'in_progr
             self._loop.run_until_complete(self._run_app())
         finally:
             # Log session end before cleanup
-            from swecli.core.debug import get_debug_logger, set_debug_logger
+            from opendev.core.debug import get_debug_logger, set_debug_logger
 
             get_debug_logger().log("session_end", "runner")
             set_debug_logger(None)

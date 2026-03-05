@@ -3,26 +3,26 @@
 import json
 from typing import TYPE_CHECKING, Iterable
 
-from swecli.core.context_engineering.memory import (
+from opendev.core.context_engineering.memory import (
     Reflector,
     Curator,
 )
-from swecli.core.agents.prompts import get_reminder
-from swecli.repl.react_executor import ReactExecutor
+from opendev.core.agents.prompts import get_reminder
+from opendev.repl.react_executor import ReactExecutor
 
 
 if TYPE_CHECKING:
     from rich.console import Console
-    from swecli.core.runtime import ModeManager
-    from swecli.core.context_engineering.history import SessionManager
-    from swecli.core.runtime.approval import ApprovalManager
-    from swecli.core.context_engineering.history import UndoManager
-    from swecli.core.context_engineering.tools.implementations import FileOperations
-    from swecli.ui_textual.formatters_internal.output_formatter import OutputFormatter
-    from swecli.ui_textual.components import StatusLine
-    from swecli.models.config import Config
-    from swecli.core.runtime import ConfigManager
-    from swecli.models.message import ToolCall
+    from opendev.core.runtime import ModeManager
+    from opendev.core.context_engineering.history import SessionManager
+    from opendev.core.runtime.approval import ApprovalManager
+    from opendev.core.context_engineering.history import UndoManager
+    from opendev.core.context_engineering.tools.implementations import FileOperations
+    from opendev.ui_textual.formatters_internal.output_formatter import OutputFormatter
+    from opendev.ui_textual.components import StatusLine
+    from opendev.models.config import Config
+    from opendev.core.runtime import ConfigManager
+    from opendev.models.message import ToolCall
 
 
 class QueryProcessor:
@@ -102,7 +102,7 @@ class QueryProcessor:
         self._topic_detector: Optional[Any] = None
 
         # Composed components (SOLID refactoring)
-        from swecli.repl.query_enhancer import QueryEnhancer
+        from opendev.repl.query_enhancer import QueryEnhancer
 
         self._query_enhancer = QueryEnhancer(
             file_ops=file_ops,
@@ -112,7 +112,7 @@ class QueryProcessor:
         )
 
         # Context Picker - unified context engineering
-        from swecli.core.context_engineering.context_picker import ContextPicker
+        from opendev.core.context_engineering.context_picker import ContextPicker
 
         self._context_picker = ContextPicker(
             session_manager=session_manager,
@@ -121,11 +121,11 @@ class QueryProcessor:
             console=console,
         )
 
-        from swecli.repl.llm_caller import LLMCaller
+        from opendev.repl.llm_caller import LLMCaller
 
         self._llm_caller = LLMCaller(console=console)
 
-        from swecli.repl.tool_executor import ToolExecutor
+        from opendev.repl.tool_executor import ToolExecutor
 
         self._tool_executor = ToolExecutor(
             console,
@@ -135,7 +135,7 @@ class QueryProcessor:
             self._ace_reflector,
             self._ace_curator,
         )
-        from swecli.core.runtime.cost_tracker import CostTracker
+        from opendev.core.runtime.cost_tracker import CostTracker
 
         self._cost_tracker = CostTracker()
         self._react_executor = ReactExecutor(
@@ -168,7 +168,7 @@ class QueryProcessor:
         Returns:
             True if interrupt was requested, False if no task is running
         """
-        from swecli.ui_textual.debug_logger import debug_log
+        from opendev.ui_textual.debug_logger import debug_log
 
         debug_log("QueryProcessor", "request_interrupt called")
         debug_log(
@@ -401,7 +401,7 @@ class QueryProcessor:
 
     def _trigger_topic_detection(self, query: str) -> None:
         """Fire-and-forget LLM topic detection for dynamic session titling."""
-        from swecli.models.message import Role
+        from opendev.models.message import Role
 
         session = self.session_manager.get_current_session()
         if not session:
@@ -409,7 +409,7 @@ class QueryProcessor:
 
         if self._topic_detector is None:
             try:
-                from swecli.core.context_engineering.history import TopicDetector
+                from opendev.core.context_engineering.history import TopicDetector
 
                 self._topic_detector = TopicDetector(self.config)
             except Exception:
@@ -445,7 +445,7 @@ class QueryProcessor:
         Returns:
             Tuple of (last_operation_summary, last_error, last_latency_ms)
         """
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         # Add user message to session
         user_msg = ChatMessage(role=Role.USER, content=query)
@@ -454,7 +454,7 @@ class QueryProcessor:
 
         # Fire UserPromptSubmit hook
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             if self._hook_manager.has_hooks_for(HookEvent.USER_PROMPT_SUBMIT):
                 outcome = self._hook_manager.run_hooks(
@@ -513,7 +513,7 @@ class QueryProcessor:
         Returns:
             Tuple of (last_operation_summary, last_error, last_latency_ms)
         """
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         # Add user message to session
         user_msg = ChatMessage(role=Role.USER, content=query)
@@ -522,7 +522,7 @@ class QueryProcessor:
 
         # Fire UserPromptSubmit hook
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             if self._hook_manager.has_hooks_for(HookEvent.USER_PROMPT_SUBMIT):
                 outcome = self._hook_manager.run_hooks(

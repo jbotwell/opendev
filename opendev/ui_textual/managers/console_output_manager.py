@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 from rich.ansi import AnsiDecoder
 from rich.text import Text
 
-from swecli.ui_textual.utils.text_utils import is_spinner_text, is_spinner_tip, normalize_console_text
+from opendev.ui_textual.utils.text_utils import is_spinner_text, is_spinner_tip, normalize_console_text
 
 if TYPE_CHECKING:  # pragma: no cover
-    from swecli.ui_textual.chat_app import SWECLIChatApp
+    from opendev.ui_textual.chat_app import SWECLIChatApp
 
 
 class ConsoleOutputManager:

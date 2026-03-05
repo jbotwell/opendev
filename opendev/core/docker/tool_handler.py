@@ -260,7 +260,7 @@ class DockerToolHandler:
             new_content = content.replace(actual_old_text, new_text, 1)
 
             # Calculate diff statistics before writing
-            from swecli.core.context_engineering.tools.implementations.diff_preview import Diff
+            from opendev.core.context_engineering.tools.implementations.diff_preview import Diff
             diff = Diff(container_path, content, new_content)
             stats = diff.get_stats()
             diff_text = diff.generate_unified_diff(context_lines=3)
@@ -764,7 +764,7 @@ class DockerToolRegistry:
             if has_error:
                 # Inject retry prompt to force LLM to fix before proceeding
                 # Store in _llm_suffix so UI doesn't display it, only LLM sees it
-                from swecli.core.agents.prompts.reminders import get_reminder
+                from opendev.core.agents.prompts.reminders import get_reminder
 
                 retry_prompt = get_reminder(
                     "docker_command_failed_nudge", exit_code=str(exit_code)

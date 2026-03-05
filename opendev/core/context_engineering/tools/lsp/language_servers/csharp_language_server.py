@@ -17,14 +17,14 @@ from typing import Any, cast
 
 from overrides import override
 
-from swecli.core.context_engineering.tools.lsp.ls import SolidLanguageServer
-from swecli.core.context_engineering.tools.lsp.ls_config import LanguageServerConfig
-from swecli.core.context_engineering.tools.lsp.ls_exceptions import SolidLSPException
-from swecli.core.context_engineering.tools.lsp.ls_utils import PathUtils
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from swecli.core.context_engineering.tools.lsp.settings import SolidLSPSettings
-from swecli.core.context_engineering.tools.lsp.util.zip import SafeZipExtractor
+from opendev.core.context_engineering.tools.lsp.ls import SolidLanguageServer
+from opendev.core.context_engineering.tools.lsp.ls_config import LanguageServerConfig
+from opendev.core.context_engineering.tools.lsp.ls_exceptions import SolidLSPException
+from opendev.core.context_engineering.tools.lsp.ls_utils import PathUtils
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from opendev.core.context_engineering.tools.lsp.settings import SolidLSPSettings
+from opendev.core.context_engineering.tools.lsp.util.zip import SafeZipExtractor
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 

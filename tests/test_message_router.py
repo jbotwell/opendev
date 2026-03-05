@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from swecli.core.channels.base import InboundMessage, OutboundMessage
-from swecli.core.channels.mock import MockChannelAdapter
-from swecli.core.channels.router import MessageRouter
-from swecli.core.channels.workspace_selector import WorkspaceSelector
-from swecli.core.context_engineering.history.session_manager import SessionManager
+from opendev.core.channels.base import InboundMessage, OutboundMessage
+from opendev.core.channels.mock import MockChannelAdapter
+from opendev.core.channels.router import MessageRouter
+from opendev.core.channels.workspace_selector import WorkspaceSelector
+from opendev.core.context_engineering.history.session_manager import SessionManager
 
 
 @pytest.fixture
@@ -206,7 +206,7 @@ class TestMessageRouter:
             channel_user_id="known-user",
             workspace_confirmed=True,
         )
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         session.add_message(ChatMessage(role=Role.USER, content="Previous"))
         session_manager.save_session(session)
@@ -288,7 +288,7 @@ class TestMessageRouter:
         from datetime import datetime, timedelta
 
         # Use telegram adapter to test idle policy
-        from swecli.core.channels.mock import MockChannelAdapter
+        from opendev.core.channels.mock import MockChannelAdapter
 
         telegram_adapter = MockChannelAdapter("telegram")
         router = MessageRouter(session_manager)
@@ -319,7 +319,7 @@ class TestMessageRouter:
     async def test_recent_session_not_reset(self, session_manager, mock_adapter, temp_session_dir):
         """Test that recent sessions are not reset."""
         from datetime import datetime, timedelta
-        from swecli.core.channels.mock import MockChannelAdapter
+        from opendev.core.channels.mock import MockChannelAdapter
 
         # Use telegram adapter to test idle policy
         telegram_adapter = MockChannelAdapter("telegram")
@@ -336,7 +336,7 @@ class TestMessageRouter:
             workspace_confirmed=True,
         )
         session.last_activity = recent_time
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         session.add_message(ChatMessage(role=Role.USER, content="Previous"))
         session_manager.save_session(session)
@@ -359,7 +359,7 @@ class TestMessageRouter:
     @pytest.mark.asyncio
     async def test_router_tags_messages_with_provenance(self, session_manager, temp_session_dir):
         """Test that router tags incoming messages with provenance."""
-        from swecli.core.channels.mock import MockChannelAdapter
+        from opendev.core.channels.mock import MockChannelAdapter
 
         telegram_adapter = MockChannelAdapter("telegram")
         router = MessageRouter(session_manager)
@@ -367,7 +367,7 @@ class TestMessageRouter:
         await telegram_adapter.start()
 
         # Create session with a message
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         session = session_manager.create_session(
             working_directory=str(temp_session_dir),

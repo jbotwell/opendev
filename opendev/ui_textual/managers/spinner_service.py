@@ -21,13 +21,13 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import GREY, PRIMARY, GREEN_BRIGHT, BLUE_BRIGHT, ERROR, WARNING
+from opendev.ui_textual.style_tokens import GREY, PRIMARY, GREEN_BRIGHT, BLUE_BRIGHT, ERROR, WARNING
 
 if TYPE_CHECKING:
     from textual.app import App
     from textual.timer import Timer
-    from swecli.ui_textual.widgets.conversation_log import ConversationLog
-    from swecli.ui_textual.components import TipsManager
+    from opendev.ui_textual.widgets.conversation_log import ConversationLog
+    from opendev.ui_textual.components import TipsManager
 
 
 class SpinnerType(Enum):

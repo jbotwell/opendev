@@ -14,7 +14,7 @@ from typing import List, Dict, Any
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from openai import OpenAI
-from swecli.core.context_engineering.memory.conversation_summarizer import (
+from opendev.core.context_engineering.memory.conversation_summarizer import (
     ConversationSummarizer,
 )
 

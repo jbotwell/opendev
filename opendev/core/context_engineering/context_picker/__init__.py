@@ -5,7 +5,7 @@ before LLM calls. It coordinates file references, conversation history,
 playbook strategies, and system prompt assembly.
 
 Usage:
-    from swecli.core.context_engineering.context_picker import ContextPicker
+    from opendev.core.context_engineering.context_picker import ContextPicker
     
     picker = ContextPicker(session_manager, config, file_ops)
     context = picker.pick_context("Explain @main.py", agent)
@@ -17,14 +17,14 @@ Usage:
     print(context.summary())
 """
 
-from swecli.core.context_engineering.context_picker.models import (
+from opendev.core.context_engineering.context_picker.models import (
     AssembledContext,
     ContextCategory,
     ContextPiece,
     ContextReason,
 )
-from swecli.core.context_engineering.context_picker.picker import ContextPicker
-from swecli.core.context_engineering.context_picker.tracer import (
+from opendev.core.context_engineering.context_picker.picker import ContextPicker
+from opendev.core.context_engineering.context_picker.tracer import (
     ContextTracer,
     get_tracer,
 )

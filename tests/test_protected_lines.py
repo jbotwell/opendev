@@ -2,7 +2,7 @@
 
 import pytest
 from rich.text import Text
-from swecli.ui_textual.widgets.conversation_log import ConversationLog
+from opendev.ui_textual.widgets.conversation_log import ConversationLog
 
 
 class TestProtectedLineTracking:

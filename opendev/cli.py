@@ -6,18 +6,18 @@ from pathlib import Path
 
 from rich.console import Console
 
-from swecli.ui_textual.style_tokens import CYAN, ERROR, SUCCESS, WARNING
+from opendev.ui_textual.style_tokens import CYAN, ERROR, SUCCESS, WARNING
 
-from swecli.core.runtime.approval import ApprovalManager
-from swecli.core.runtime import ConfigManager, ModeManager
-from swecli.core.context_engineering.history import SessionManager, UndoManager
-from swecli.core.runtime.services import RuntimeService
-from swecli.models.agent_deps import AgentDependencies
-from swecli.models.message import ChatMessage, Role
-from swecli.ui_textual.runner import launch_textual_cli
-from swecli.setup import run_setup_wizard
-from swecli.setup.wizard import config_exists
-from swecli.core.context_engineering.tools.implementations import (
+from opendev.core.runtime.approval import ApprovalManager
+from opendev.core.runtime import ConfigManager, ModeManager
+from opendev.core.context_engineering.history import SessionManager, UndoManager
+from opendev.core.runtime.services import RuntimeService
+from opendev.models.agent_deps import AgentDependencies
+from opendev.models.message import ChatMessage, Role
+from opendev.ui_textual.runner import launch_textual_cli
+from opendev.setup import run_setup_wizard
+from opendev.setup.wizard import config_exists
+from opendev.core.context_engineering.tools.implementations import (
     BashTool,
     EditTool,
     FileOperations,
@@ -26,11 +26,11 @@ from swecli.core.context_engineering.tools.implementations import (
     WebScreenshotTool,
     WriteTool,
 )
-from swecli.core.context_engineering.tools.implementations.web_search_tool import WebSearchTool
-from swecli.core.context_engineering.tools.implementations.notebook_edit_tool import (
+from opendev.core.context_engineering.tools.implementations.web_search_tool import WebSearchTool
+from opendev.core.context_engineering.tools.implementations.notebook_edit_tool import (
     NotebookEditTool,
 )
-from swecli.core.context_engineering.tools.implementations.ask_user_tool import AskUserTool
+from opendev.core.context_engineering.tools.implementations.ask_user_tool import AskUserTool
 
 
 def main() -> None:
@@ -324,7 +324,7 @@ Examples:
 
             # Initialize debug logger for non-interactive mode
             if config.verbose:
-                from swecli.core.debug import SessionDebugLogger, set_debug_logger
+                from opendev.core.debug import SessionDebugLogger, set_debug_logger
 
                 session = session_manager.get_current_session()
                 if session:
@@ -348,7 +348,7 @@ Examples:
 
             # Clean up debug logger
             if config.verbose:
-                from swecli.core.debug import get_debug_logger, set_debug_logger as _set_dl
+                from opendev.core.debug import get_debug_logger, set_debug_logger as _set_dl
 
                 get_debug_logger().log("session_end", "runner")
                 _set_dl(None)
@@ -400,7 +400,7 @@ def _handle_config_command(args) -> None:
 
     elif args.config_command == "show":
         # Display current configuration
-        from swecli.core.paths import get_paths
+        from opendev.core.paths import get_paths
 
         config_file = get_paths().global_settings
 
@@ -457,7 +457,7 @@ def _handle_mcp_command(args) -> None:
     Args:
         args: Parsed command-line arguments
     """
-    from swecli.core.context_engineering.mcp.manager import MCPManager
+    from opendev.core.context_engineering.mcp.manager import MCPManager
     from rich.table import Table
 
     console = Console()
@@ -539,7 +539,7 @@ def _handle_mcp_command(args) -> None:
             if args.no_auto_start:
                 config = mcp_manager.get_config()
                 config.mcp_servers[args.name].auto_start = False
-                from swecli.core.context_engineering.mcp.config import save_config
+                from opendev.core.context_engineering.mcp.config import save_config
 
                 save_config(config)
 
@@ -597,10 +597,10 @@ def _handle_run_command(args) -> None:
             # Show spinner while starting up
             with console.status(f"[{CYAN}]Starting Web UI…[/{CYAN}]", spinner="dots"):
                 # Initialize managers for backend
-                from swecli.core.runtime import ConfigManager, ModeManager
-                from swecli.core.context_engineering.history import SessionManager, UndoManager
-                from swecli.core.runtime.approval import ApprovalManager
-                from swecli.core.context_engineering.mcp.manager import MCPManager
+                from opendev.core.runtime import ConfigManager, ModeManager
+                from opendev.core.context_engineering.history import SessionManager, UndoManager
+                from opendev.core.runtime.approval import ApprovalManager
+                from opendev.core.context_engineering.mcp.manager import MCPManager
                 import webbrowser
 
                 working_dir = Path.cwd()
@@ -617,7 +617,7 @@ def _handle_run_command(args) -> None:
                 backend_host = getattr(args, "ui_host", "127.0.0.1")
 
                 # Find an available port
-                from swecli.web.port_utils import find_available_port
+                from opendev.web.port_utils import find_available_port
 
                 backend_port = find_available_port(backend_host, preferred_port, max_attempts=10)
 
@@ -628,7 +628,7 @@ def _handle_run_command(args) -> None:
                     sys.exit(1)
 
                 # Check for static files
-                from swecli.web import find_static_directory
+                from opendev.web import find_static_directory
 
                 static_dir = find_static_directory()
 
@@ -637,7 +637,7 @@ def _handle_run_command(args) -> None:
                     sys.exit(1)
 
                 try:
-                    from swecli.web import start_server
+                    from opendev.web import start_server
 
                     web_server_thread = start_server(
                         config_manager=config_manager,
@@ -730,7 +730,7 @@ def _run_non_interactive(
     # Initialize plan file path for plan mode
     session = session_manager.get_current_session()
     if session:
-        from swecli.core.paths import get_paths
+        from opendev.core.paths import get_paths
 
         plans_dir = get_paths().global_dir / "plans"
         plans_dir.mkdir(parents=True, exist_ok=True)

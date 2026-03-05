@@ -6,8 +6,8 @@ import pytest
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy, BestFirstCrawlingStrategy, DFSDeepCrawlStrategy
 from crawl4ai.deep_crawling.filters import DomainFilter, FilterChain, URLPatternFilter
 
-from swecli.models.config import AppConfig
-from swecli.core.context_engineering.tools.implementations import WebFetchTool
+from opendev.models.config import AppConfig
+from opendev.core.context_engineering.tools.implementations import WebFetchTool
 
 
 @pytest.fixture()

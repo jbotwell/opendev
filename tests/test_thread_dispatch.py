@@ -3,7 +3,7 @@
 import threading
 from unittest.mock import Mock, patch, MagicMock
 
-from swecli.ui_textual.chat_app import SWECLIChatApp
+from opendev.ui_textual.chat_app import SWECLIChatApp
 
 
 def _make_app() -> SWECLIChatApp:

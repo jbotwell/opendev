@@ -1,7 +1,7 @@
 """Tests for MCPViewerModal."""
 from unittest.mock import Mock, patch
 from prompt_toolkit.keys import Keys
-from swecli.ui_textual.modals.mcp_viewer_modal import MCPViewerModal
+from opendev.ui_textual.modals.mcp_viewer_modal import MCPViewerModal
 from prompt_toolkit.formatted_text import to_formatted_text
 
 def test_mcp_viewer_modal_initialization():

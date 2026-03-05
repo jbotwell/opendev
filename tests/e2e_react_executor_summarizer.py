@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from unittest.mock import MagicMock
-from swecli.repl.react_executor import ReactExecutor
+from opendev.repl.react_executor import ReactExecutor
 
 
 def test_thinking_trace_passes_full_history():

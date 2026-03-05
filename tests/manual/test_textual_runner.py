@@ -2,7 +2,7 @@
 """Test script to verify Textual runner works with tool calling."""
 
 import os
-from swecli.ui_textual.runner import launch_textual_cli
+from opendev.ui_textual.runner import launch_textual_cli
 
 if __name__ == "__main__":
     print("=" * 80)

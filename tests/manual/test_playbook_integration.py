@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Test script to verify playbook integration."""
 
-from swecli.models.session import Session
-from swecli.core.context_engineering.memory import SessionPlaybook, ExecutionReflector
-from swecli.models.message import ToolCall
+from opendev.models.session import Session
+from opendev.core.context_engineering.memory import SessionPlaybook, ExecutionReflector
+from opendev.models.message import ToolCall
 
 def test_session_playbook():
     """Test that Session properly handles playbook."""

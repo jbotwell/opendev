@@ -8,7 +8,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import FormattedText
 
-from swecli.ui_textual.modals.base import BaseModal
+from opendev.ui_textual.modals.base import BaseModal
 
 
 class MCPViewerModal(BaseModal):

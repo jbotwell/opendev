@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
-from swecli.core.agents.components.api.http_client import HttpResult
+from opendev.core.agents.components.api.http_client import HttpResult
 
 
 class ProviderAdapter(ABC):
@@ -51,7 +51,7 @@ class ProviderAdapter(ABC):
 
         Default delegates to the standalone function in ``configuration``.
         """
-        from swecli.core.agents.components.api.configuration import (
+        from opendev.core.agents.components.api.configuration import (
             build_temperature_param,
         )
 
@@ -62,7 +62,7 @@ class ProviderAdapter(ABC):
 
         Default delegates to the standalone function in ``configuration``.
         """
-        from swecli.core.agents.components.api.configuration import (
+        from opendev.core.agents.components.api.configuration import (
             build_max_tokens_param,
         )
 

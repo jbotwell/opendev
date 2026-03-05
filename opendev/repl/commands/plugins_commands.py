@@ -7,15 +7,15 @@ from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
 
-from swecli.repl.commands.base import CommandHandler, CommandResult
-from swecli.core.plugins import (
+from opendev.repl.commands.base import CommandHandler, CommandResult
+from opendev.core.plugins import (
     PluginManager,
     PluginManagerError,
     MarketplaceNotFoundError,
     PluginNotFoundError,
     BundleNotFoundError,
 )
-from swecli.ui_textual.components.plugin_panels import create_scope_selection_panel
+from opendev.ui_textual.components.plugin_panels import create_scope_selection_panel
 
 
 class PluginsCommands(CommandHandler):

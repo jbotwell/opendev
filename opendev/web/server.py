@@ -13,15 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 
-from swecli.web.routes import chat_router, sessions_router, config_router, commands_router, mcp_router
-from swecli.web.websocket import websocket_endpoint
-from swecli.web.state import init_state
-from swecli.core.runtime import ConfigManager, ModeManager
-from swecli.core.context_engineering.history import SessionManager, UndoManager
-from swecli.core.runtime.approval import ApprovalManager
+from opendev.web.routes import chat_router, sessions_router, config_router, commands_router, mcp_router
+from opendev.web.websocket import websocket_endpoint
+from opendev.web.state import init_state
+from opendev.core.runtime import ConfigManager, ModeManager
+from opendev.core.context_engineering.history import SessionManager, UndoManager
+from opendev.core.runtime.approval import ApprovalManager
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.mcp.manager import MCPManager
+    from opendev.core.context_engineering.mcp.manager import MCPManager
 
 
 def create_app() -> FastAPI:

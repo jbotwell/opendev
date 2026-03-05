@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from swecli.models.operation import Operation, OperationType
+from opendev.models.operation import Operation, OperationType
 
 
 class UndoResult:

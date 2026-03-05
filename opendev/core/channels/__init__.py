@@ -12,7 +12,7 @@ Example:
     # Outgoing responses are sent back via the adapter
 """
 
-from swecli.core.channels.base import (
+from opendev.core.channels.base import (
     ChannelAdapter,
     InboundMessage,
     OutboundMessage,

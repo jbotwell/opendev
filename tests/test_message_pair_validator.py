@@ -2,7 +2,7 @@
 
 import pytest
 
-from swecli.core.context_engineering.message_pair_validator import (
+from opendev.core.context_engineering.message_pair_validator import (
     MessagePairValidator,
     ValidationResult,
     ViolationType,

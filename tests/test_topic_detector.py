@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
-from swecli.core.context_engineering.history.topic_detector import TopicDetector
-from swecli.models.config import AppConfig
+from opendev.core.context_engineering.history.topic_detector import TopicDetector
+from opendev.models.config import AppConfig
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ class TestTopicDetectorInit:
     """Tests for TopicDetector initialization and model resolution."""
 
     @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False)
-    @patch("swecli.core.agents.components.api.configuration" ".create_http_client_for_provider")
+    @patch("opendev.core.agents.components.api.configuration" ".create_http_client_for_provider")
     def test_openai_provider_selects_gpt4o_mini(self, mock_create):
         mock_create.return_value = MagicMock()
         config = AppConfig(model_provider="openai", model="gpt-4o")
@@ -57,7 +57,7 @@ class TestTopicDetectorInit:
         assert detector._client is not None
 
     @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=False)
-    @patch("swecli.core.agents.components.api.configuration" ".create_http_client_for_provider")
+    @patch("opendev.core.agents.components.api.configuration" ".create_http_client_for_provider")
     def test_anthropic_provider_selects_haiku(self, mock_create):
         mock_create.return_value = MagicMock()
         config = AppConfig(model_provider="anthropic", model="claude-3-opus-20240229")
@@ -82,7 +82,7 @@ class TestTopicDetectorInit:
         assert detector._client is None
 
     @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False)
-    @patch("swecli.core.agents.components.api.configuration" ".create_http_client_for_provider")
+    @patch("opendev.core.agents.components.api.configuration" ".create_http_client_for_provider")
     def test_disabled_config_is_noop(self, mock_create):
         mock_create.return_value = MagicMock()
         config = AppConfig(model_provider="openai", model="gpt-4o", topic_detection=False)
@@ -106,7 +106,7 @@ class TestTopicDetection:
         """Create a detector with a mocked client."""
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False):
             with patch(
-                "swecli.core.agents.components.api.configuration" ".create_http_client_for_provider"
+                "opendev.core.agents.components.api.configuration" ".create_http_client_for_provider"
             ) as mock_create:
                 mock_create.return_value = MagicMock()
                 config = AppConfig(model_provider="openai", model="gpt-4o")
@@ -192,7 +192,7 @@ class TestPromptTemplate:
     """Tests for the prompt template loading and message format."""
 
     def test_prompt_loads_from_template_file(self):
-        from swecli.core.agents.prompts.loader import load_prompt
+        from opendev.core.agents.prompts.loader import load_prompt
 
         prompt = load_prompt("memory/topic_detection_prompt")
         assert "isNewTopic" in prompt
@@ -203,7 +203,7 @@ class TestPromptTemplate:
         """Verify that conversation messages are sent as proper role-based API messages."""
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False):
             with patch(
-                "swecli.core.agents.components.api.configuration" ".create_http_client_for_provider"
+                "opendev.core.agents.components.api.configuration" ".create_http_client_for_provider"
             ) as mock_create:
                 mock_client = MagicMock()
                 mock_create.return_value = mock_client

@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
-from swecli.ui_textual.formatters_internal.formatter_base import STATUS_ICONS
-from swecli.ui_textual.utils.tool_display import get_tool_display_parts
-from swecli.ui_textual.utils.text_utils import summarize_error
-from swecli.ui_textual.constants import TOOL_ERROR_SENTINEL
-from swecli.ui_textual.utils.interrupt_utils import (
+from opendev.ui_textual.formatters_internal.formatter_base import STATUS_ICONS
+from opendev.ui_textual.utils.tool_display import get_tool_display_parts
+from opendev.ui_textual.utils.text_utils import summarize_error
+from opendev.ui_textual.constants import TOOL_ERROR_SENTINEL
+from opendev.ui_textual.utils.interrupt_utils import (
     create_interrupt_message,
     STANDARD_INTERRUPT_MESSAGE,
 )
@@ -165,7 +165,7 @@ class StyleFormatter:
     def _format_edit_file_result(
         self, tool_args: Dict[str, Any], result: Dict[str, Any]
     ) -> List[str]:
-        from swecli.ui_textual.formatters_internal.utils import DiffParser
+        from opendev.ui_textual.formatters_internal.utils import DiffParser
 
         if not result.get("success"):
             error_msg = result.get("error") or "Unknown error"

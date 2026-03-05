@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from swecli.core.context_engineering.tools.handlers.todo_handler import TodoHandler, TodoItem
+from opendev.core.context_engineering.tools.handlers.todo_handler import TodoHandler, TodoItem
 
 
 class TestTodoPanelAutoHide:

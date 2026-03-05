@@ -1,7 +1,7 @@
 """Ask-user built-in subagent for gathering user input."""
 
-from swecli.core.agents.prompts.loader import load_prompt
-from swecli.core.agents.subagents.specs import SubAgentSpec
+from opendev.core.agents.prompts.loader import load_prompt
+from opendev.core.agents.subagents.specs import SubAgentSpec
 
 ASK_USER_SUBAGENT: SubAgentSpec = {
     "name": "ask-user",

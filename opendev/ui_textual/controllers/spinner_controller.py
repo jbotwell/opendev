@@ -7,12 +7,12 @@ from typing import Optional, TYPE_CHECKING
 
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import GREY, BLUE_BRIGHT
+from opendev.ui_textual.style_tokens import GREY, BLUE_BRIGHT
 
 if TYPE_CHECKING:  # pragma: no cover
-    from swecli.ui_textual.chat_app import SWECLIChatApp
-    from swecli.ui_textual.components import TipsManager
-    from swecli.core.context_engineering.tools.todo_handler import TodoHandler
+    from opendev.ui_textual.chat_app import SWECLIChatApp
+    from opendev.ui_textual.components import TipsManager
+    from opendev.core.context_engineering.tools.todo_handler import TodoHandler
 
 
 class SpinnerController:
@@ -114,7 +114,7 @@ class SpinnerController:
     @staticmethod
     def _default_message() -> str:
         try:
-            from swecli.repl.llm_caller import LLMCaller
+            from opendev.repl.llm_caller import LLMCaller
 
             verb = random.choice(LLMCaller.THINKING_VERBS)
         except Exception:

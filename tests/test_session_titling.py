@@ -3,7 +3,7 @@
 from pathlib import Path
 
 
-from swecli.core.context_engineering.history.session_manager import SessionManager
+from opendev.core.context_engineering.history.session_manager import SessionManager
 
 
 class TestSessionTitling:
@@ -31,7 +31,7 @@ class TestSessionTitling:
         mgr = SessionManager(session_dir=tmp_path)
         session = mgr.create_session()
         # Add a dummy message so save works
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         session.add_message(ChatMessage(role=Role.USER, content="Hello"))
         mgr.save_session()
@@ -46,7 +46,7 @@ class TestSessionTitling:
         """Session listing should show title alongside ID."""
         mgr = SessionManager(session_dir=tmp_path)
         session = mgr.create_session()
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         session.add_message(ChatMessage(role=Role.USER, content="Hello"))
         session.metadata["title"] = "My Session"
@@ -73,7 +73,7 @@ class TestSessionTitling:
         """set_title should truncate to 50 chars."""
         mgr = SessionManager(session_dir=tmp_path)
         session = mgr.create_session()
-        from swecli.models.message import ChatMessage, Role
+        from opendev.models.message import ChatMessage, Role
 
         session.add_message(ChatMessage(role=Role.USER, content="Hello"))
         mgr.save_session()

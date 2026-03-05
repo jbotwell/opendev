@@ -1,7 +1,7 @@
 """Test interrupt display via UI callback."""
 from unittest.mock import Mock
 from rich.text import Text
-from swecli.ui_textual.ui_callback import TextualUICallback
+from opendev.ui_textual.ui_callback import TextualUICallback
 
 
 def test_on_interrupt_removes_blank_line_and_shows_message():

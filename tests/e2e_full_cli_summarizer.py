@@ -11,8 +11,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import MagicMock, patch
 from rich.console import Console
 
-from swecli.repl.react_executor import ReactExecutor
-from swecli.core.context_engineering.memory.conversation_summarizer import ConversationSummarizer
+from opendev.repl.react_executor import ReactExecutor
+from opendev.core.context_engineering.memory.conversation_summarizer import ConversationSummarizer
 from openai import OpenAI
 
 

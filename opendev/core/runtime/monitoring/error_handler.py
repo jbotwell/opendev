@@ -6,7 +6,7 @@ from typing import Optional
 from rich.console import Console
 from prompt_toolkit import prompt
 
-from swecli.models.operation import Operation
+from opendev.models.operation import Operation
 
 
 class ErrorAction(str, Enum):

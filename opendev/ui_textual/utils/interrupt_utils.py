@@ -2,7 +2,7 @@
 
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import ERROR, GREY
+from opendev.ui_textual.style_tokens import ERROR, GREY
 
 
 def create_interrupt_message(message: str) -> str:

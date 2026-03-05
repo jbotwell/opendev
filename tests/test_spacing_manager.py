@@ -8,7 +8,7 @@ import pytest
 from rich.text import Text
 from textual.strip import Strip
 
-from swecli.ui_textual.widgets.conversation.spacing_manager import SpacingManager
+from opendev.ui_textual.widgets.conversation.spacing_manager import SpacingManager
 
 
 class MockRichLog:

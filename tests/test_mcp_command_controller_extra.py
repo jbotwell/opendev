@@ -2,7 +2,7 @@
 from unittest.mock import Mock, patch, ANY
 import pytest
 
-from swecli.ui_textual.controllers.mcp_command_controller import MCPCommandController
+from opendev.ui_textual.controllers.mcp_command_controller import MCPCommandController
 
 @pytest.fixture
 def mock_app():
@@ -32,7 +32,7 @@ def test_handle_view_opens_modal(controller, mock_app, mock_repl):
 
     # Mock MCPViewerModal import within the method
     # Note: We need to patch where it is IMPORTED, which is inside the method.
-    # But patching 'swecli.ui_textual.modals.mcp_viewer_modal.MCPViewerModal'
+    # But patching 'opendev.ui_textual.modals.mcp_viewer_modal.MCPViewerModal'
     # works if the module is loaded.
 
     # Actually, since it's a local import `from ... import ...`, we need to patch
@@ -40,7 +40,7 @@ def test_handle_view_opens_modal(controller, mock_app, mock_repl):
     # BUT that name only exists inside the function scope.
     # So we must patch `swecli.ui_textual.modals.mcp_viewer_modal.MCPViewerModal`.
 
-    with patch("swecli.ui_textual.modals.mcp_viewer_modal.MCPViewerModal") as MockModal:
+    with patch("opendev.ui_textual.modals.mcp_viewer_modal.MCPViewerModal") as MockModal:
         controller.handle_view("/mcp view")
 
         # Verify modal instantiated with correct data

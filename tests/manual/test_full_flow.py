@@ -6,8 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from swecli.ui_textual.runner import TextualRunner
-from swecli.models.message import Role
+from opendev.ui_textual.runner import TextualRunner
+from opendev.models.message import Role
 
 def test_full_flow():
     """Test the complete message processing flow."""

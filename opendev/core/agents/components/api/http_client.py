@@ -227,7 +227,7 @@ class AgentHttpClient:
         request_thread = threading.Thread(target=make_request, daemon=True)
         request_thread.start()
 
-        from swecli.ui_textual.debug_logger import debug_log
+        from opendev.ui_textual.debug_logger import debug_log
 
         poll_count = 0
         while request_thread.is_alive():

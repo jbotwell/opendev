@@ -8,7 +8,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from swecli.ui_textual.chat_app import create_chat_app
+from opendev.ui_textual.chat_app import create_chat_app
 
 
 def clear_terminal():

@@ -8,7 +8,7 @@ merges them with the existing summary to save tokens.
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass
 
-from swecli.core.agents.prompts.loader import load_prompt
+from opendev.core.agents.prompts.loader import load_prompt
 
 
 @dataclass

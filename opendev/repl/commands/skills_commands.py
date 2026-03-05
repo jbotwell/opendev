@@ -9,8 +9,8 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 
-from swecli.repl.commands.base import CommandHandler, CommandResult
-from swecli.core.paths import get_paths, APP_DIR_NAME
+from opendev.repl.commands.base import CommandHandler, CommandResult
+from opendev.core.paths import get_paths, APP_DIR_NAME
 
 
 def load_skill_generator_prompt() -> str:
@@ -247,7 +247,7 @@ Confirm that the desired outcome was achieved.
         Returns:
             CommandResult with skill list
         """
-        from swecli.core.plugins import PluginManager
+        from opendev.core.plugins import PluginManager
 
         paths = get_paths(self.config_manager.working_dir)
 

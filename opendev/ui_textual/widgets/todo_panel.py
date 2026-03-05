@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Optional
 
 from textual.widgets import Static
 
-from swecli.ui_textual.style_tokens import SUCCESS, WARNING
+from opendev.ui_textual.style_tokens import SUCCESS, WARNING
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from swecli.ui_textual.managers.spinner_service import SpinnerService, SpinnerFrame
+    from opendev.ui_textual.managers.spinner_service import SpinnerService, SpinnerFrame
 
 
 class TodoPanel(Static):
@@ -190,7 +190,7 @@ class TodoPanel(Static):
         self._stop_spinner()
 
         # Import here to avoid circular import
-        from swecli.ui_textual.managers.spinner_service import SpinnerType
+        from opendev.ui_textual.managers.spinner_service import SpinnerType
 
         # Register with SpinnerService
         self._spinner_id = self._spinner_service.register(

@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import BLUE_BG_ACTIVE, BLUE_LIGHT, GREY
+from opendev.ui_textual.style_tokens import BLUE_BG_ACTIVE, BLUE_LIGHT, GREY
 
 # Maximum number of tools to show at once
 _MAX_VISIBLE_TOOLS = 10

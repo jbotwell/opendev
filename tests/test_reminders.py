@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from swecli.core.agents.prompts.reminders import get_reminder, _parse_sections
+from opendev.core.agents.prompts.reminders import get_reminder, _parse_sections
 
 
 class TestParseSections:

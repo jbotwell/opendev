@@ -3,12 +3,12 @@
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
-from swecli.models.config import AppConfig
-from swecli.models.operation import WriteResult, Operation
-from swecli.core.context_engineering.tools.implementations.base import BaseTool
+from opendev.models.config import AppConfig
+from opendev.models.operation import WriteResult, Operation
+from opendev.core.context_engineering.tools.implementations.base import BaseTool
 
 if TYPE_CHECKING:
-    from swecli.core.runtime.task_monitor import TaskMonitor
+    from opendev.core.runtime.task_monitor import TaskMonitor
 
 
 class WriteTool(BaseTool):

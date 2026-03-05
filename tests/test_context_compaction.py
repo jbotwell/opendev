@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from swecli.core.context_engineering.compaction import (
+from opendev.core.context_engineering.compaction import (
     STAGE_COMPACT,
     ContextCompactor,
     OptimizationLevel,
@@ -11,8 +11,8 @@ from swecli.core.context_engineering.compaction import (
 
 # Backwards-compat alias used by tests
 COMPACTION_THRESHOLD = STAGE_COMPACT
-from swecli.core.context_engineering.retrieval.token_monitor import ContextTokenMonitor
-from swecli.models.config import AppConfig
+from opendev.core.context_engineering.retrieval.token_monitor import ContextTokenMonitor
+from opendev.models.config import AppConfig
 
 
 def _make_compactor(max_context_tokens: int = 1000) -> ContextCompactor:

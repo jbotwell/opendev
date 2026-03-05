@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from swecli.core.paths import (
+from opendev.core.paths import (
     APP_DIR_NAME,
     SETTINGS_FILE_NAME,
     SESSIONS_DIR_NAME,

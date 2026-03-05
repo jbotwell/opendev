@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from swecli.models.config import AppConfig
+from opendev.models.config import AppConfig
 
 # Default directories/patterns to exclude from search
 # Covers 20+ programming languages and ecosystems

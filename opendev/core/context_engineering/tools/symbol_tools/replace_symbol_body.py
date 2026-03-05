@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from swecli.core.context_engineering.tools.lsp import SymbolRetriever, Symbol, SymbolKind
+from opendev.core.context_engineering.tools.lsp import SymbolRetriever, Symbol, SymbolKind
 
 
 def handle_replace_symbol_body(arguments: dict[str, Any]) -> dict[str, Any]:

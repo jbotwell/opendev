@@ -1,15 +1,15 @@
 """Pydantic models for OpenDev."""
 
-from swecli.models.message import ChatMessage, Role
-from swecli.models.session import Session, SessionMetadata
-from swecli.models.config import (
+from opendev.models.message import ChatMessage, Role
+from opendev.models.session import Session, SessionMetadata
+from opendev.models.config import (
     AppConfig,
     PermissionConfig,
     ToolPermission,
     AutoModeConfig,
     OperationConfig,
 )
-from swecli.models.operation import (
+from opendev.models.operation import (
     Operation,
     OperationType,
     OperationStatus,

@@ -6,7 +6,7 @@ import concurrent.futures
 import logging
 from typing import Any, Union
 
-from swecli.core.context_engineering.tools.implementations.base import BaseTool
+from opendev.core.context_engineering.tools.implementations.base import BaseTool
 
 logger = logging.getLogger(__name__)
 

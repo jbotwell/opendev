@@ -8,7 +8,7 @@ from typing import Any, Optional, TYPE_CHECKING
 from rich.console import RenderableType
 from rich.text import Text
 
-from swecli.ui_textual.components.agent_creator_panels import (
+from opendev.ui_textual.components.agent_creator_panels import (
     create_location_panel,
     create_method_panel,
     create_identifier_input_panel,
@@ -18,11 +18,11 @@ from swecli.ui_textual.components.agent_creator_panels import (
     create_success_panel,
     create_tool_selection_panel,
 )
-from swecli.ui_textual.managers.spinner_service import SpinnerType
+from opendev.ui_textual.managers.spinner_service import SpinnerType
 
 if TYPE_CHECKING:
-    from swecli.ui_textual.chat_app import SWECLIChatApp
-    from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+    from opendev.ui_textual.chat_app import SWECLIChatApp
+    from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
 
 # Default template for new agents
@@ -50,7 +50,7 @@ def _format_tools_list(selected_tools: list[str]) -> str:
         return "tools: []"  # No tools
 
     # If all built-in tools are selected, use wildcard
-    from swecli.core.agents.subagents.tool_metadata import get_available_tools
+    from opendev.core.agents.subagents.tool_metadata import get_available_tools
 
     all_tools = get_available_tools()
     all_tool_names = {t.name for t in all_tools}
@@ -123,7 +123,7 @@ class AgentCreatorController:
             return
 
         # Load available tools for selection
-        from swecli.core.agents.subagents.tool_metadata import get_available_tools
+        from opendev.core.agents.subagents.tool_metadata import get_available_tools
 
         available_tools = get_available_tools()
 
@@ -148,7 +148,7 @@ class AgentCreatorController:
 
         # Track state for interrupt handling
         if self._interrupt_manager:
-            from swecli.ui_textual.managers.interrupt_manager import InterruptState
+            from opendev.ui_textual.managers.interrupt_manager import InterruptState
 
             self._interrupt_manager.enter_state(
                 InterruptState.AGENT_WIZARD,
@@ -555,7 +555,7 @@ class AgentCreatorController:
 
     def _get_agents_dir(self) -> Path:
         """Get the appropriate agents directory based on location choice."""
-        from swecli.core.paths import get_paths, APP_DIR_NAME
+        from opendev.core.paths import get_paths, APP_DIR_NAME
 
         state = self.state
         if not state:
@@ -671,7 +671,7 @@ class AgentCreatorController:
 
             config = self._config_manager.get_config()
 
-            from swecli.core.agents.components import (
+            from opendev.core.agents.components import (
                 create_http_client,
                 build_max_tokens_param,
                 build_temperature_param,

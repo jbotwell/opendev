@@ -5,8 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Mapping, Sequence
 
-from swecli.core.base.interfaces.tool_interface import ToolRegistryInterface
-from swecli.models.config import AppConfig
+from opendev.core.base.interfaces.tool_interface import ToolRegistryInterface
+from opendev.models.config import AppConfig
 
 Message = Mapping[str, Any]
 Response = Mapping[str, Any]

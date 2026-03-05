@@ -1,5 +1,5 @@
 """REPL interface for OpenDev."""
 
-from swecli.repl.repl import REPL
+from opendev.repl.repl import REPL
 
 __all__ = ["REPL"]

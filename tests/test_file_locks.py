@@ -7,7 +7,7 @@ from multiprocessing import Process
 
 import pytest
 
-from swecli.core.context_engineering.history.file_locks import exclusive_session_lock
+from opendev.core.context_engineering.history.file_locks import exclusive_session_lock
 
 
 # Module-level functions for multiprocessing (must be picklable)

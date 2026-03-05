@@ -1,6 +1,6 @@
 """ReAct loop control flow and safety mechanisms."""
 
-from swecli.core.agents.prompts import get_reminder
+from opendev.core.agents.prompts import get_reminder
 
 
 class ReActController:

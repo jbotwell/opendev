@@ -41,7 +41,7 @@ from swecli.core.agents.prompts.composition import create_default_composer
 from pathlib import Path
 
 # Create composer
-templates_dir = Path("swecli/core/agents/prompts/templates")
+templates_dir = Path("opendev/core/agents/prompts/templates")
 composer = create_default_composer(templates_dir)
 
 # Build context
@@ -360,7 +360,7 @@ ls templates/system/main_system_prompt.*
 
 Check `variables.py` for variable definition:
 ```python
-grep "MY_VAR" swecli/core/agents/prompts/variables.py
+grep "MY_VAR" opendev/core/agents/prompts/variables.py
 ```
 
 ### "Section not loading"

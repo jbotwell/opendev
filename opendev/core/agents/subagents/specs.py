@@ -3,7 +3,7 @@
 from typing import Any, NotRequired, TypedDict, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from swecli.core.docker.deployment import DockerConfig
+    from opendev.core.docker.deployment import DockerConfig
 
 
 class SubAgentSpec(TypedDict):

@@ -1,7 +1,7 @@
 """Tests for LSP symbol classes and name path matching."""
 
 import pytest
-from swecli.core.context_engineering.tools.lsp.symbol import Symbol, SymbolKind, NamePathMatcher, find_symbols_by_pattern
+from opendev.core.context_engineering.tools.lsp.symbol import Symbol, SymbolKind, NamePathMatcher, find_symbols_by_pattern
 
 
 class TestSymbolKind:

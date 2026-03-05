@@ -187,7 +187,7 @@ class LLMCaller:
         import traceback
         logger = logging.getLogger(__name__)
 
-        from swecli.ui_textual.components.task_progress import TaskProgressDisplay
+        from opendev.ui_textual.components.task_progress import TaskProgressDisplay
 
         # Get random thinking verb
         thinking_verb = random.choice(self.THINKING_VERBS)
@@ -195,7 +195,7 @@ class LLMCaller:
 
         # Track current monitor for interrupt support
         self._current_task_monitor = task_monitor
-        from swecli.ui_textual.debug_logger import debug_log
+        from opendev.ui_textual.debug_logger import debug_log
         debug_log("LLMCaller", f"SET _current_task_monitor={task_monitor}")
 
         # Create progress display with live updates
@@ -240,7 +240,7 @@ class LLMCaller:
             logger.error(f"[LLM_CALLER] Exception during LLM call: {type(e).__name__}: {e}")
             logger.error(f"[LLM_CALLER] Full traceback:\n{traceback.format_exc()}")
 
-            from swecli.core.debug import get_debug_logger
+            from opendev.core.debug import get_debug_logger
             get_debug_logger().log(
                 "llm_call_error",
                 "llm",
@@ -265,7 +265,7 @@ class LLMCaller:
         Returns:
             True if interrupt was requested, False if no task is running
         """
-        from swecli.ui_textual.debug_logger import debug_log
+        from opendev.ui_textual.debug_logger import debug_log
         debug_log("LLMCaller", "request_interrupt called")
         debug_log("LLMCaller", f"_current_task_monitor={self._current_task_monitor}")
 

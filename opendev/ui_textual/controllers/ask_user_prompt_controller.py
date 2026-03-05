@@ -9,13 +9,13 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.text import Text
 
-from swecli.core.context_engineering.tools.implementations.ask_user_tool import (
+from opendev.core.context_engineering.tools.implementations.ask_user_tool import (
     Question,
     QuestionOption,
 )
 
 if TYPE_CHECKING:
-    from swecli.ui_textual.managers.interrupt_manager import InterruptManager
+    from opendev.ui_textual.managers.interrupt_manager import InterruptManager
 
 
 class AskUserPromptController:
@@ -86,7 +86,7 @@ class AskUserPromptController:
 
         # Track state for interrupt handling
         if self._interrupt_manager:
-            from swecli.ui_textual.managers.interrupt_manager import InterruptState
+            from opendev.ui_textual.managers.interrupt_manager import InterruptState
             self._interrupt_manager.enter_state(
                 InterruptState.ASK_USER_PROMPT,
                 controller_ref=self,

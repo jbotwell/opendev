@@ -148,7 +148,7 @@ No action required - the system automatically uses modular composition when avai
 1. **Add a new modular section**:
    ```bash
    # Create new section file
-   touch swecli/core/agents/prompts/templates/system/modular/system-prompt-my-section.md
+   touch opendev/core/agents/prompts/templates/system/modular/system-prompt-my-section.md
    ```
 
    ```markdown

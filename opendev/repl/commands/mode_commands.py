@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 
-from swecli.repl.commands.base import CommandHandler, CommandResult
+from opendev.repl.commands.base import CommandHandler, CommandResult
 
 if TYPE_CHECKING:
-    from swecli.repl.repl import REPL
+    from opendev.repl.repl import REPL
 
 
 class ModeCommands(CommandHandler):
@@ -53,7 +53,7 @@ class ModeCommands(CommandHandler):
         Returns:
             CommandResult indicating success or failure
         """
-        from swecli.core.runtime.mode_manager import OperationMode
+        from opendev.core.runtime.mode_manager import OperationMode
 
         if not mode_name:
             # Show current status

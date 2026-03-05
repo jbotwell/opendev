@@ -109,8 +109,8 @@ class Reflector:
         max_retries: int = 3,
         retry_prompt: str | None = None,
     ) -> None:
-        from swecli.core.agents.prompts.reminders import get_reminder
-        from swecli.core.agents.prompts.loader import load_prompt
+        from opendev.core.agents.prompts.reminders import get_reminder
+        from opendev.core.agents.prompts.loader import load_prompt
 
         self.llm_client = llm_client
         self.prompt_template = (
@@ -217,8 +217,8 @@ class Curator:
         max_retries: int = 3,
         retry_prompt: str | None = None,
     ) -> None:
-        from swecli.core.agents.prompts.reminders import get_reminder
-        from swecli.core.agents.prompts.loader import load_prompt
+        from opendev.core.agents.prompts.reminders import get_reminder
+        from opendev.core.agents.prompts.loader import load_prompt
 
         self.llm_client = llm_client
         self.prompt_template = (

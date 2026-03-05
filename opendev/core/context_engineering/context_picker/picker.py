@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from swecli.core.paths import get_paths
+from opendev.core.paths import get_paths
 from .models import (
     AssembledContext,
     ContextCategory,
@@ -24,10 +24,10 @@ from .models import (
 from .tracer import get_tracer
 
 if TYPE_CHECKING:
-    from swecli.core.context_engineering.history import SessionManager
-    from swecli.core.context_engineering.memory import Playbook
-    from swecli.core.context_engineering.tools.implementations import FileOperations
-    from swecli.models.config import Config
+    from opendev.core.context_engineering.history import SessionManager
+    from opendev.core.context_engineering.memory import Playbook
+    from opendev.core.context_engineering.tools.implementations import FileOperations
+    from opendev.models.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ class ContextPicker:
         Returns:
             Tuple of (context pieces, image blocks)
         """
-        from swecli.repl.file_content_injector import FileContentInjector
+        from opendev.repl.file_content_injector import FileContentInjector
         
         pieces: list[ContextPiece] = []
         

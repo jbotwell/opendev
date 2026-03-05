@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, Union
 
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types
 
 if TYPE_CHECKING:
     from .ls_handler import SolidLanguageServerHandler

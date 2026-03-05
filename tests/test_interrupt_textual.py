@@ -1,8 +1,8 @@
 """Test interrupt display in Textual UI."""
 import asyncio
 from unittest.mock import Mock, MagicMock
-from swecli.ui_textual.runner import TextualRunner
-from swecli.repl.repl import REPL
+from opendev.ui_textual.runner import TextualRunner
+from opendev.repl.repl import REPL
 
 
 def test_interrupt_during_thinking():

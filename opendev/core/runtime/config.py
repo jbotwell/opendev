@@ -7,8 +7,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from swecli.core.paths import get_paths
-from swecli.models.config import AppConfig
+from opendev.core.paths import get_paths
+from opendev.models.config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +268,7 @@ class ConfigManager:
         """
         bundle_dirs = []
         try:
-            from swecli.core.plugins import PluginManager
+            from opendev.core.plugins import PluginManager
 
             plugin_manager = PluginManager(self.working_dir)
             for bundle in plugin_manager.list_bundles():

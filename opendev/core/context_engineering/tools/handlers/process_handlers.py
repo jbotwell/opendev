@@ -7,9 +7,9 @@ import re
 from datetime import datetime
 from typing import Any
 
-from swecli.core.context_engineering.tools.context import ToolExecutionContext
-from swecli.core.context_engineering.tools.implementations.bash_tool import truncate_output
-from swecli.models.operation import Operation, OperationType
+from opendev.core.context_engineering.tools.context import ToolExecutionContext
+from opendev.core.context_engineering.tools.implementations.bash_tool import truncate_output
+from opendev.models.operation import Operation, OperationType
 
 
 class ProcessToolHandler:

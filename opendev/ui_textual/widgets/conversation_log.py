@@ -11,16 +11,16 @@ from textual.geometry import Size
 from textual.strip import Strip
 from textual.timer import Timer
 from textual.widgets import RichLog
-from swecli.ui_textual.style_tokens import SUBTLE, CYAN
+from opendev.ui_textual.style_tokens import SUBTLE, CYAN
 
 if TYPE_CHECKING:
     from typing_extensions import Self
 
-from swecli.ui_textual.widgets.conversation.spinner_manager import DefaultSpinnerManager
-from swecli.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
-from swecli.ui_textual.widgets.conversation.tool_renderer import DefaultToolRenderer
-from swecli.ui_textual.widgets.conversation.scroll_controller import DefaultScrollController
-from swecli.ui_textual.widgets.conversation.block_registry import BlockRegistry, ContentBlock
+from opendev.ui_textual.widgets.conversation.spinner_manager import DefaultSpinnerManager
+from opendev.ui_textual.widgets.conversation.message_renderer import DefaultMessageRenderer
+from opendev.ui_textual.widgets.conversation.tool_renderer import DefaultToolRenderer
+from opendev.ui_textual.widgets.conversation.scroll_controller import DefaultScrollController
+from opendev.ui_textual.widgets.conversation.block_registry import BlockRegistry, ContentBlock
 
 
 class ConversationLog(RichLog):

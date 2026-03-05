@@ -8,8 +8,8 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
-    from swecli.ui_textual.chat_app import SWECLIChatApp
-    from swecli.repl.repl import REPL
+    from opendev.ui_textual.chat_app import SWECLIChatApp
+    from opendev.repl.repl import REPL
 
 
 class MCPCommandController:
@@ -96,7 +96,7 @@ class MCPCommandController:
             command: The full command (e.g., "/mcp view")
         """
         # Import here to avoid circular dependency
-        from swecli.ui_textual.modals.mcp_viewer_modal import MCPViewerModal
+        from opendev.ui_textual.modals.mcp_viewer_modal import MCPViewerModal
 
         mcp_manager = getattr(self.repl, "mcp_manager", None)
         if not mcp_manager:

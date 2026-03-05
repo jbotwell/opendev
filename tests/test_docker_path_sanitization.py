@@ -15,7 +15,7 @@ class TestSanitizeLocalPaths:
 
     def _create_registry(self):
         """Create a minimal DockerToolRegistry for testing."""
-        from swecli.core.docker.tool_handler import DockerToolRegistry, DockerToolHandler
+        from opendev.core.docker.tool_handler import DockerToolRegistry, DockerToolHandler
 
         # Create a mock docker handler
         mock_runtime = MagicMock()
@@ -103,7 +103,7 @@ class TestRewriteTaskForDocker:
 
     def _create_manager(self, working_dir: str = "/Users/nghibui/codes/test_opencli"):
         """Create a minimal SubAgentManager for testing."""
-        from swecli.core.agents.subagents.manager import SubAgentManager
+        from opendev.core.agents.subagents.manager import SubAgentManager
 
         mock_tool_registry = MagicMock()
         mock_config = MagicMock()
@@ -201,7 +201,7 @@ class TestTranslatePath:
 
     def _create_handler(self):
         """Create a DockerToolHandler for testing."""
-        from swecli.core.docker.tool_handler import DockerToolHandler
+        from opendev.core.docker.tool_handler import DockerToolHandler
 
         mock_runtime = MagicMock()
         return DockerToolHandler(mock_runtime, workspace_dir="/workspace")

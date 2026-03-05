@@ -18,17 +18,17 @@ from typing import Self, Union, cast
 
 import pathspec
 
-from swecli.core.context_engineering.tools.lsp.util.compat import getstate, load_pickle, MatchedConsecutiveLines, match_path
-from swecli.core.context_engineering.tools.lsp import ls_types
-from swecli.core.context_engineering.tools.lsp.ls_config import Language, LanguageServerConfig
-from swecli.core.context_engineering.tools.lsp.ls_exceptions import SolidLSPException
-from swecli.core.context_engineering.tools.lsp.ls_handler import SolidLanguageServerHandler
-from swecli.core.context_engineering.tools.lsp.ls_types import UnifiedSymbolInformation
-from swecli.core.context_engineering.tools.lsp.ls_utils import FileUtils, PathUtils, TextUtils
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types as LSPTypes
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_constants import LSPConstants
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import (
+from opendev.core.context_engineering.tools.lsp.util.compat import getstate, load_pickle, MatchedConsecutiveLines, match_path
+from opendev.core.context_engineering.tools.lsp import ls_types
+from opendev.core.context_engineering.tools.lsp.ls_config import Language, LanguageServerConfig
+from opendev.core.context_engineering.tools.lsp.ls_exceptions import SolidLSPException
+from opendev.core.context_engineering.tools.lsp.ls_handler import SolidLanguageServerHandler
+from opendev.core.context_engineering.tools.lsp.ls_types import UnifiedSymbolInformation
+from opendev.core.context_engineering.tools.lsp.ls_utils import FileUtils, PathUtils, TextUtils
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler import lsp_types as LSPTypes
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_constants import LSPConstants
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types import (
     Definition,
     DefinitionParams,
     DocumentSymbol,
@@ -36,13 +36,13 @@ from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.lsp_types im
     RenameParams,
     SymbolInformation,
 )
-from swecli.core.context_engineering.tools.lsp.lsp_protocol_handler.server import (
+from opendev.core.context_engineering.tools.lsp.lsp_protocol_handler.server import (
     LSPError,
     ProcessLaunchInfo,
     StringDict,
 )
-from swecli.core.context_engineering.tools.lsp.settings import SolidLSPSettings
-from swecli.core.context_engineering.tools.lsp.util.cache import load_cache, save_cache
+from opendev.core.context_engineering.tools.lsp.settings import SolidLSPSettings
+from opendev.core.context_engineering.tools.lsp.util.cache import load_cache, save_cache
 
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
 log = logging.getLogger(__name__)

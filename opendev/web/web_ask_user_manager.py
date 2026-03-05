@@ -7,8 +7,8 @@ import threading
 import uuid
 from typing import Any, Dict, List, Optional
 
-from swecli.web.state import get_state
-from swecli.web.logging_config import logger
+from opendev.web.state import get_state
+from opendev.web.logging_config import logger
 
 
 class WebAskUserManager:

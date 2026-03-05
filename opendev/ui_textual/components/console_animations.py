@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 
-from swecli.ui_textual import style_tokens
+from opendev.ui_textual import style_tokens
 
 
 class Spinner:

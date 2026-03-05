@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from textual.app import App
 from textual.containers import Container, Vertical
 from textual.widgets import Header, Footer, Static, Button
-from swecli.ui_textual.chat_app import ConversationLog, ChatTextArea
+from opendev.ui_textual.chat_app import ConversationLog, ChatTextArea
 
 class TestApp(App):
     """Simple test app to verify UI rendering."""

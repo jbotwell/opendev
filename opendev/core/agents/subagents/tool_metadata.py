@@ -72,7 +72,7 @@ def get_available_tools(
         List of ToolInfo objects with tool metadata.
     """
     if tool_schemas is None:
-        from swecli.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
+        from opendev.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
         tool_schemas = _BUILTIN_TOOL_SCHEMAS
 
     tools: List[ToolInfo] = []

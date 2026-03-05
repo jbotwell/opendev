@@ -7,7 +7,7 @@ from itertools import zip_longest
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from swecli.core.runtime import OperationMode
+from opendev.core.runtime import OperationMode
 
 from .box_styles import BoxStyles
 

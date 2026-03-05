@@ -13,7 +13,7 @@ TODO: Implement when ready to deploy to WhatsApp
 
 from typing import Any, Optional
 
-from swecli.core.channels.base import ChannelAdapter, InboundMessage, OutboundMessage
+from opendev.core.channels.base import ChannelAdapter, InboundMessage, OutboundMessage
 
 
 class WhatsAppAdapter(ChannelAdapter):

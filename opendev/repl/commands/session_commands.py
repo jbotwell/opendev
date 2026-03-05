@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 
-from swecli.repl.commands.base import CommandHandler, CommandResult
+from opendev.repl.commands.base import CommandHandler, CommandResult
 
 if TYPE_CHECKING:
-    from swecli.core.runtime import ConfigManager
-    from swecli.core.context_engineering.history import SessionManager
+    from opendev.core.runtime import ConfigManager
+    from opendev.core.context_engineering.history import SessionManager
 
 
 class SessionCommands(CommandHandler):
@@ -47,8 +47,8 @@ class SessionCommands(CommandHandler):
             self.console.print()
             return CommandResult(success=False, message="Not enough messages")
 
-        from swecli.core.context_engineering.compaction import ContextCompactor
-        from swecli.core.agents.components.api.configuration import create_http_client
+        from opendev.core.context_engineering.compaction import ContextCompactor
+        from opendev.core.agents.components.api.configuration import create_http_client
 
         config = self.config_manager.get_config()
         http_client = create_http_client(config)

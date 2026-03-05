@@ -1,10 +1,10 @@
 include README.md
 include LICENSE
 include pyproject.toml
-recursive-include swecli/config *.json
-recursive-include swecli/prompts *.txt *.md
-recursive-include swecli/commands *.txt
-recursive-include swecli/web/static *
+recursive-include opendev/config *.json
+recursive-include opendev/prompts *.txt *.md
+recursive-include opendev/commands *.txt
+recursive-include opendev/web/static *
 global-exclude *.pyc
 global-exclude __pycache__
 global-exclude .git*

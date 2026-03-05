@@ -4,9 +4,9 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from swecli.web.state import get_state, broadcast_to_all_clients
-from swecli.core.context_engineering.mcp.config import get_config_path, get_project_config_path
-from swecli.core.context_engineering.mcp.models import MCPServerConfig
+from opendev.web.state import get_state, broadcast_to_all_clients
+from opendev.core.context_engineering.mcp.config import get_config_path, get_project_config_path
+from opendev.core.context_engineering.mcp.models import MCPServerConfig
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
@@ -314,7 +314,7 @@ async def create_server(server: MCPServerCreate) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail=f"Server '{server.name}' already exists")
 
         # Create server config
-        from swecli.core.context_engineering.mcp.config import save_server_config
+        from opendev.core.context_engineering.mcp.config import save_server_config
 
         config = MCPServerConfig(
             command=server.command,
@@ -390,7 +390,7 @@ async def update_server(name: str, update: MCPServerUpdate) -> Dict[str, Any]:
             config.auto_start = update.auto_start
 
         # Save updated config
-        from swecli.core.context_engineering.mcp.config import save_server_config, get_project_config_path
+        from opendev.core.context_engineering.mcp.config import save_server_config, get_project_config_path
 
         # Determine if it's a project config
         project_config_path = get_project_config_path(state.mcp_manager.working_dir)
@@ -450,7 +450,7 @@ async def delete_server(name: str) -> Dict[str, Any]:
             state.mcp_manager.disconnect_sync(name)
 
         # Remove from config
-        from swecli.core.context_engineering.mcp.config import remove_server_config, get_project_config_path
+        from opendev.core.context_engineering.mcp.config import remove_server_config, get_project_config_path
 
         # Determine if it's a project config
         project_config_path = get_project_config_path(state.mcp_manager.working_dir)

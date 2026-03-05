@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from swecli.core.context_engineering.tools.implementations.batch_tool import BatchTool
+from opendev.core.context_engineering.tools.implementations.batch_tool import BatchTool
 
 
 class BatchToolHandler:

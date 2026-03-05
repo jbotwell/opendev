@@ -10,13 +10,13 @@ import importlib
 
 def test_base_tool_abstract():
     """Verify BaseTool cannot be instantiated directly."""
-    from swecli.core.base.abstract.base_tool import BaseTool
+    from opendev.core.base.abstract.base_tool import BaseTool
     with pytest.raises(TypeError):
         BaseTool()
 
 def test_base_tool_implementation():
     """Verify a concrete implementation of BaseTool works."""
-    from swecli.core.base.abstract.base_tool import BaseTool
+    from opendev.core.base.abstract.base_tool import BaseTool
 
     class ConcreteTool(BaseTool):
         name = "test_tool"
@@ -51,8 +51,8 @@ def test_tool_dependencies_dataclass():
     # But the module *does* import ToolRegistry.
 
     # Let's mock it to be safe.
-    with patch.dict(sys.modules, {'swecli.core.context_engineering.tools': MagicMock()}):
-         from swecli.core.base.factories.tool_factory import ToolDependencies
+    with patch.dict(sys.modules, {'opendev.core.context_engineering.tools': MagicMock()}):
+         from opendev.core.base.factories.tool_factory import ToolDependencies
          deps = ToolDependencies(
             file_ops="file_ops",
             write_tool="write_tool",
@@ -65,19 +65,19 @@ def test_tool_dependencies_dataclass():
 def test_tool_factory_create_registry():
     """Verify ToolFactory creates a registry with correct dependencies."""
 
-    # We need to patch the module 'swecli.core.context_engineering.tools' BEFORE importing ToolFactory
+    # We need to patch the module 'opendev.core.context_engineering.tools' BEFORE importing ToolFactory
     mock_tools_module = MagicMock()
     MockToolRegistry = MagicMock()
     mock_tools_module.ToolRegistry = MockToolRegistry
     MockToolRegistry.return_value = "mock_registry_instance"
 
     # Ensure ToolFactory is not already in sys.modules, or reload it
-    if 'swecli.core.base.factories.tool_factory' in sys.modules:
-        del sys.modules['swecli.core.base.factories.tool_factory']
+    if 'opendev.core.base.factories.tool_factory' in sys.modules:
+        del sys.modules['opendev.core.base.factories.tool_factory']
 
     # Use patch.dict to safely modify sys.modules temporarily
-    with patch.dict(sys.modules, {'swecli.core.context_engineering.tools': mock_tools_module}):
-        from swecli.core.base.factories.tool_factory import ToolFactory, ToolDependencies
+    with patch.dict(sys.modules, {'opendev.core.context_engineering.tools': mock_tools_module}):
+        from opendev.core.base.factories.tool_factory import ToolFactory, ToolDependencies
 
         # Setup dependencies
         deps = ToolDependencies(

@@ -2,13 +2,13 @@
 
 import pytest
 
-from swecli.core.channels.base import (
+from opendev.core.channels.base import (
     AttachmentType,
     InboundMessage,
     MessageAttachment,
     OutboundMessage,
 )
-from swecli.core.channels.mock import MockChannelAdapter
+from opendev.core.channels.mock import MockChannelAdapter
 
 
 class TestMessageModels:

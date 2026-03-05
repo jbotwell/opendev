@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from swecli.models.config import AppConfig
+    from opendev.models.config import AppConfig
 
 
 @dataclass
@@ -351,7 +351,7 @@ class FileContentInjector:
         # Include absolute path so model knows exactly where file is
         abs_path = str(path)
 
-        from swecli.core.agents.prompts.reminders import get_reminder
+        from opendev.core.agents.prompts.reminders import get_reminder
 
         warning = get_reminder("file_exists_warning")
         return (
@@ -391,7 +391,7 @@ class FileContentInjector:
         head_content = "\n".join(head)
         tail_content = "\n".join(tail)
 
-        from swecli.core.agents.prompts.reminders import get_reminder
+        from opendev.core.agents.prompts.reminders import get_reminder
 
         warning = get_reminder("file_exists_warning")
         return (
@@ -417,7 +417,7 @@ class FileContentInjector:
         """
         # Import GitIgnoreParser for filtering
         try:
-            from swecli.ui_textual.autocomplete_internal.gitignore import GitIgnoreParser
+            from opendev.ui_textual.autocomplete_internal.gitignore import GitIgnoreParser
             gitignore = GitIgnoreParser(self.working_dir)
         except ImportError:
             gitignore = None
@@ -428,7 +428,7 @@ class FileContentInjector:
                 return True
             # Also check always-ignore directories
             if item_path.is_dir():
-                from swecli.ui_textual.autocomplete_internal.gitignore import GitIgnoreParser
+                from opendev.ui_textual.autocomplete_internal.gitignore import GitIgnoreParser
                 if item_path.name in GitIgnoreParser.ALWAYS_IGNORE_DIRS:
                     return True
             return False
@@ -487,7 +487,7 @@ class FileContentInjector:
             XML-tagged PDF content
         """
         try:
-            from swecli.core.context_engineering.tools.implementations.pdf_tool import PDFTool
+            from opendev.core.context_engineering.tools.implementations.pdf_tool import PDFTool
             pdf_tool = PDFTool(self.working_dir)
             result = pdf_tool.extract_text(str(path))
 
@@ -522,7 +522,7 @@ class FileContentInjector:
             Tuple of (text_tag, image_block_or_none)
         """
         try:
-            from swecli.core.context_engineering.tools.implementations.vlm_tool import VLMTool
+            from opendev.core.context_engineering.tools.implementations.vlm_tool import VLMTool
 
             vlm = VLMTool(self.config, self.working_dir)
 

@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 from rich.panel import Panel
 from rich.tree import Tree
 
-from swecli.ui_textual.style_tokens import ERROR, SUBTLE, GREEN_BRIGHT, STATUS_ICONS
+from opendev.ui_textual.style_tokens import ERROR, SUBTLE, GREEN_BRIGHT, STATUS_ICONS
 
 from .formatter_base import BaseFormatter
 

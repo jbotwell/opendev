@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import BLUE_BG_ACTIVE, BLUE_LIGHT, GREY
+from opendev.ui_textual.style_tokens import BLUE_BG_ACTIVE, BLUE_LIGHT, GREY
 
 
 def create_scope_selection_panel(selected_index: int, working_dir: str = "") -> RenderableType:

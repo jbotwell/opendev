@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from swecli.core.paths import (
+from opendev.core.paths import (
     Paths,
     encode_project_path,
     PROJECTS_DIR_NAME,

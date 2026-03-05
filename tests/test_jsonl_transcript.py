@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from swecli.core.context_engineering.history.session_manager import SessionManager
-from swecli.models.message import ChatMessage, Role
+from opendev.core.context_engineering.history.session_manager import SessionManager
+from opendev.models.message import ChatMessage, Role
 
 
 # Module-level function for multiprocessing (must be picklable)

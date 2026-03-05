@@ -4,9 +4,9 @@ import json
 import pytest
 from unittest.mock import MagicMock, PropertyMock, patch
 
-from swecli.core.agents.components.api.http_client import AgentHttpClient
-from swecli.core.agents.components.api.openai_responses_adapter import OpenAIResponsesAdapter
-from swecli.core.agents.main_agent import MainAgent
+from opendev.core.agents.components.api.http_client import AgentHttpClient
+from opendev.core.agents.components.api.openai_responses_adapter import OpenAIResponsesAdapter
+from opendev.core.agents.main_agent import MainAgent
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ class TestResolveVlmModelAndClient:
         )
         # Patch create_http_client_for_provider to raise ValueError
         with patch(
-            "swecli.core.agents.main_agent.create_http_client_for_provider",
+            "opendev.core.agents.main_agent.create_http_client_for_provider",
             side_effect=ValueError("No API key"),
         ):
             msgs = [_make_image_message()]

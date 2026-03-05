@@ -4,13 +4,13 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from swecli.core.channels.reset_policies import (
+from opendev.core.channels.reset_policies import (
     CHANNEL_RESET_POLICIES,
     format_policy_description,
     get_policy_for_channel,
     should_reset_session,
 )
-from swecli.models.session import Session
+from opendev.models.session import Session
 
 
 class TestIdleTimeoutPolicy:

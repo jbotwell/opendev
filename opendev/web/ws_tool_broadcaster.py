@@ -9,9 +9,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from swecli.web.logging_config import logger
-from swecli.core.utils.tool_result_summarizer import summarize_tool_result
-from swecli.ui_textual.utils.tool_display import summarize_tool_arguments
+from opendev.web.logging_config import logger
+from opendev.core.utils.tool_result_summarizer import summarize_tool_result
+from opendev.ui_textual.utils.tool_display import summarize_tool_arguments
 
 _PATH_KEYS = {
     "file_path",

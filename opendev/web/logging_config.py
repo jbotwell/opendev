@@ -4,7 +4,7 @@ import logging
 import sys
 
 # Create a custom logger for OpenDev web
-logger = logging.getLogger("swecli.web")
+logger = logging.getLogger("opendev.web")
 logger.setLevel(logging.DEBUG)
 
 # Create console handler

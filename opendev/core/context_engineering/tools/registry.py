@@ -4,37 +4,37 @@ from __future__ import annotations
 
 from typing import Any, Union, TYPE_CHECKING
 
-from swecli.core.context_engineering.tools.context import ToolExecutionContext
+from opendev.core.context_engineering.tools.context import ToolExecutionContext
 import logging
 
 if TYPE_CHECKING:
-    from swecli.core.hooks.manager import HookManager
+    from opendev.core.hooks.manager import HookManager
 
-from swecli.core.context_engineering.tools.handlers.file_handlers import FileToolHandler
-from swecli.core.context_engineering.mcp.handler import McpToolHandler
-from swecli.core.context_engineering.tools.handlers.process_handlers import ProcessToolHandler
-from swecli.core.context_engineering.tools.handlers.web_handlers import WebToolHandler
-from swecli.core.context_engineering.tools.handlers.web_search_handler import WebSearchHandler
-from swecli.core.context_engineering.tools.handlers.notebook_edit_handler import NotebookEditHandler
-from swecli.core.context_engineering.tools.handlers.ask_user_handler import AskUserHandler
-from swecli.core.context_engineering.tools.handlers.screenshot_handler import ScreenshotToolHandler
-from swecli.core.context_engineering.tools.handlers.todo_handler import TodoHandler
-from swecli.core.context_engineering.tools.handlers.thinking_handler import ThinkingHandler
-from swecli.core.context_engineering.tools.handlers.search_tools_handler import SearchToolsHandler
-from swecli.core.context_engineering.tools.handlers.batch_handler import BatchToolHandler
+from opendev.core.context_engineering.tools.handlers.file_handlers import FileToolHandler
+from opendev.core.context_engineering.mcp.handler import McpToolHandler
+from opendev.core.context_engineering.tools.handlers.process_handlers import ProcessToolHandler
+from opendev.core.context_engineering.tools.handlers.web_handlers import WebToolHandler
+from opendev.core.context_engineering.tools.handlers.web_search_handler import WebSearchHandler
+from opendev.core.context_engineering.tools.handlers.notebook_edit_handler import NotebookEditHandler
+from opendev.core.context_engineering.tools.handlers.ask_user_handler import AskUserHandler
+from opendev.core.context_engineering.tools.handlers.screenshot_handler import ScreenshotToolHandler
+from opendev.core.context_engineering.tools.handlers.todo_handler import TodoHandler
+from opendev.core.context_engineering.tools.handlers.thinking_handler import ThinkingHandler
+from opendev.core.context_engineering.tools.handlers.search_tools_handler import SearchToolsHandler
+from opendev.core.context_engineering.tools.handlers.batch_handler import BatchToolHandler
 
 if TYPE_CHECKING:
-    from swecli.core.skills import SkillLoader
+    from opendev.core.skills import SkillLoader
 
 logger = logging.getLogger(__name__)
-from swecli.core.context_engineering.tools.implementations.pdf_tool import PDFTool
-from swecli.core.context_engineering.tools.implementations.task_complete_tool import (
+from opendev.core.context_engineering.tools.implementations.pdf_tool import PDFTool
+from opendev.core.context_engineering.tools.implementations.task_complete_tool import (
     TaskCompleteTool,
 )
-from swecli.core.context_engineering.tools.implementations.present_plan_tool import (
+from opendev.core.context_engineering.tools.implementations.present_plan_tool import (
     PresentPlanTool,
 )
-from swecli.core.context_engineering.tools.symbol_tools import (
+from opendev.core.context_engineering.tools.symbol_tools import (
     handle_find_symbol,
     handle_find_referencing_symbols,
     handle_insert_before_symbol,
@@ -91,7 +91,7 @@ class ToolRegistry:
         self._skill_loader: Union["SkillLoader", None] = None
 
         # FileTime stale-read detection (shared across the session)
-        from swecli.core.context_engineering.tools.file_time import FileTimeTracker
+        from opendev.core.context_engineering.tools.file_time import FileTimeTracker
         self._file_time_tracker = FileTimeTracker()
         self._invoked_skills: set[str] = set()  # Track skills already loaded in this session
 
@@ -268,7 +268,7 @@ class ToolRegistry:
             }
 
         # Create deps from context
-        from swecli.core.agents.subagents.manager import SubAgentDeps
+        from opendev.core.agents.subagents.manager import SubAgentDeps
 
         deps = SubAgentDeps(
             mode_manager=context.mode_manager if context else None,
@@ -398,7 +398,7 @@ class ToolRegistry:
 
         # --- PreToolUse hook ---
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             if self._hook_manager.has_hooks_for(HookEvent.PRE_TOOL_USE):
                 outcome = self._hook_manager.run_hooks(
@@ -453,7 +453,7 @@ class ToolRegistry:
 
         # --- PostToolUse / PostToolUseFailure hook ---
         if self._hook_manager:
-            from swecli.core.hooks.models import HookEvent
+            from opendev.core.hooks.models import HookEvent
 
             is_success = result.get("success", False)
             post_event = HookEvent.POST_TOOL_USE if is_success else HookEvent.POST_TOOL_USE_FAILURE
@@ -679,7 +679,7 @@ class ToolRegistry:
             plan_content: Raw plan text.
             result: The present_plan result dict to augment with todo count.
         """
-        from swecli.core.agents.components.response.plan_parser import parse_plan
+        from opendev.core.agents.components.response.plan_parser import parse_plan
 
         parsed = parse_plan(plan_content)
         if parsed and parsed.steps:

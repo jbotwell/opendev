@@ -8,7 +8,7 @@ from typing import Any
 from textual.events import MouseDown, MouseMove, MouseScrollDown, MouseScrollUp, MouseUp
 from textual.geometry import Size
 
-from swecli.ui_textual.widgets.conversation.protocols import RichLogInterface
+from opendev.ui_textual.widgets.conversation.protocols import RichLogInterface
 
 class DefaultScrollController:
     """Handles scrolling, auto-scroll logic, and input events for ConversationLog."""

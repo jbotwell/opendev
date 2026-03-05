@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from swecli.core.runtime.task_monitor import TaskMonitor
+    from opendev.core.runtime.task_monitor import TaskMonitor
 
 
 class McpToolHandler:

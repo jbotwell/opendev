@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional
 
 from rich.text import Text
 
-from swecli.ui_textual.services.display_data import ToolResultData
-from swecli.ui_textual.style_tokens import GREY
+from opendev.ui_textual.services.display_data import ToolResultData
+from opendev.ui_textual.style_tokens import GREY
 
 
 class LiveModeAdapter:

@@ -4,9 +4,9 @@ This subagent explores the codebase, analyzes patterns, and writes
 a detailed implementation plan to a designated plan file.
 """
 
-from swecli.core.agents.prompts.loader import load_prompt
-from swecli.core.agents.subagents.specs import SubAgentSpec
-from swecli.core.agents.components import PLANNING_TOOLS
+from opendev.core.agents.prompts.loader import load_prompt
+from opendev.core.agents.subagents.specs import SubAgentSpec
+from opendev.core.agents.components import PLANNING_TOOLS
 
 PLANNER_SUBAGENT = SubAgentSpec(
     name="Planner",

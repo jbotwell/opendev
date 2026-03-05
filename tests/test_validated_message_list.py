@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from swecli.core.context_engineering.validated_message_list import (
+from opendev.core.context_engineering.validated_message_list import (
     SYNTHETIC_TOOL_RESULT,
     ValidatedMessageList,
 )

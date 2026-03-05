@@ -13,8 +13,8 @@ from rich.text import Text
 from textual.strip import Strip
 from textual.timer import Timer
 
-from swecli.ui_textual.constants import TOOL_ERROR_SENTINEL
-from swecli.ui_textual.style_tokens import (
+from opendev.ui_textual.constants import TOOL_ERROR_SENTINEL
+from opendev.ui_textual.style_tokens import (
     BLUE_PATH,
     CYAN,
     ERROR,
@@ -26,14 +26,14 @@ from swecli.ui_textual.style_tokens import (
     SUBTLE,
     SUCCESS,
 )
-from swecli.ui_textual.widgets.terminal_box_renderer import (
+from opendev.ui_textual.widgets.terminal_box_renderer import (
     TerminalBoxConfig,
     TerminalBoxRenderer,
 )
-from swecli.ui_textual.widgets.conversation.protocols import RichLogInterface
-from swecli.ui_textual.widgets.conversation.spacing_manager import SpacingManager
-from swecli.ui_textual.models.collapsible_output import CollapsibleOutput
-from swecli.ui_textual.utils.output_summarizer import summarize_output, get_expansion_hint
+from opendev.ui_textual.widgets.conversation.protocols import RichLogInterface
+from opendev.ui_textual.widgets.conversation.spacing_manager import SpacingManager
+from opendev.ui_textual.models.collapsible_output import CollapsibleOutput
+from opendev.ui_textual.utils.output_summarizer import summarize_output, get_expansion_hint
 
 # Tree connector characters
 TREE_BRANCH = "├─"
@@ -2158,7 +2158,7 @@ class DefaultToolRenderer:
             depth: Nesting depth for indentation
             is_last_parent: If True, no vertical continuation line (parent is last tool)
         """
-        from swecli.ui_textual.formatters_internal.utils import DiffParser
+        from opendev.ui_textual.formatters_internal.utils import DiffParser
 
         diff_entries = DiffParser.parse_unified_diff(diff_text)
         if not diff_entries:

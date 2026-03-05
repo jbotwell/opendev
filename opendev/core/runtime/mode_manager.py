@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Optional
 
-from swecli.models.operation import OperationType
+from opendev.models.operation import OperationType
 
 
 class OperationMode(str, Enum):
@@ -81,7 +81,7 @@ class ModeManager:
             True if approval is required
         """
         # Import here to avoid circular dependency
-        from swecli.models.operation import Operation
+        from opendev.models.operation import Operation
         import re
 
         if isinstance(operation, Operation):

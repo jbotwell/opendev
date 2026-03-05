@@ -5,7 +5,7 @@ from typing import Optional
 
 from rich.console import Console
 
-from swecli.ui_textual.style_tokens import (
+from opendev.ui_textual.style_tokens import (
     ACCENT,
     ERROR,
     SUCCESS,

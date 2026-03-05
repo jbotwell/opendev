@@ -9,7 +9,7 @@ from rich.console import RenderableType
 from rich.table import Table
 from rich.text import Text
 
-from swecli.ui_textual.style_tokens import SUBTLE, ACCENT, TEXT_MUTED
+from opendev.ui_textual.style_tokens import SUBTLE, ACCENT, TEXT_MUTED
 
 
 def render_markdown_text_segment(

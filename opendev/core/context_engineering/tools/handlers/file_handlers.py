@@ -7,9 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Union, Any
 
-from swecli.core.context_engineering.tools.context import ToolExecutionContext
-from swecli.core.context_engineering.tools.path_utils import sanitize_path
-from swecli.models.operation import Operation, OperationType
+from opendev.core.context_engineering.tools.context import ToolExecutionContext
+from opendev.core.context_engineering.tools.path_utils import sanitize_path
+from opendev.models.operation import Operation, OperationType
 
 
 class FileToolHandler:
@@ -61,7 +61,7 @@ class FileToolHandler:
 
             # Track file change in session
             if context.session_manager:
-                from swecli.models.file_change import FileChange, FileChangeType
+                from opendev.models.file_change import FileChange, FileChangeType
                 from pathlib import Path
 
                 session = context.session_manager.get_current_session()
@@ -149,7 +149,7 @@ class FileToolHandler:
 
             # Track file change in session
             if context.session_manager:
-                from swecli.models.file_change import FileChange, FileChangeType
+                from opendev.models.file_change import FileChange, FileChangeType
                 from pathlib import Path
 
                 session = context.session_manager.get_current_session()
@@ -325,7 +325,7 @@ class FileToolHandler:
         if no LSP server is available or no errors are found.
         """
         try:
-            from swecli.core.context_engineering.tools.lsp import get_lsp_wrapper
+            from opendev.core.context_engineering.tools.lsp import get_lsp_wrapper
 
             wrapper = get_lsp_wrapper()
             diagnostics = wrapper.get_diagnostics(file_path, severity_filter=1)

@@ -89,18 +89,18 @@ Repository = "https://github.com/swe-cli/swe-cli"
 Changelog = "https://github.com/swe-cli/swe-cli/releases"
 
 [project.scripts]
-opendev = "swecli.cli:main"
+opendev = "opendev.cli:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["swecli*"]
+include = ["opendev*"]
 exclude = ["tests*", "docs*", "_archived_tests*"]
 
 [tool.setuptools.package-data]
-swecli = [
+opendev = [
     "config/**/*.json",
     "prompts/**/*.txt",
     "prompts/**/*.md",

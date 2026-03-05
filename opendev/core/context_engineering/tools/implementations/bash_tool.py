@@ -9,9 +9,9 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from swecli.models.config import AppConfig
-from swecli.models.operation import BashResult, Operation
-from swecli.core.context_engineering.tools.implementations.base import BaseTool
+from opendev.models.config import AppConfig
+from opendev.models.operation import BashResult, Operation
+from opendev.core.context_engineering.tools.implementations.base import BaseTool
 
 
 # Safe commands that are generally allowed
