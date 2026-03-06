@@ -111,7 +111,7 @@ class TestGetReminder:
         )
         assert "3 incomplete todo(s)" in result
         assert "task A" in result
-        assert "Please complete" in result
+        assert "MUST NOT finish" in result
 
     # --- File fallback (standalone .txt files) ---
 

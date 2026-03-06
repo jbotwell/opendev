@@ -99,7 +99,7 @@ class ReactExecutor(ThinkingMixin, ToolProcessingMixin, SessionPersistenceMixin,
 
     READ_OPERATIONS = {"read_file", "list_files", "search"}
     MAX_NUDGE_ATTEMPTS = 3
-    MAX_TODO_NUDGES = 2  # After this many nudges, allow completion anyway
+    MAX_TODO_NUDGES = 4  # After this many nudges, allow completion anyway
     DOOM_LOOP_THRESHOLD = 3  # Same tool+args N times -> doom loop
 
     # Tools safe for silent parallel execution (read-only, no approval needed)

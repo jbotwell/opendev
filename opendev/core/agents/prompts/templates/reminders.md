@@ -58,10 +58,10 @@ Please provide a summary of what you've found and what needs to be done.
 For complex tasks, briefly explain your reasoning in 1-2 sentences. For simple tasks, act directly.
 
 --- incomplete_todos_nudge ---
-You have {count} incomplete todo(s):
+STOP — you have {count} incomplete todo(s):
 {todo_list}
 
-Please complete these tasks or mark them done before finishing.
+You MUST NOT finish. Continue working on the next incomplete todo immediately. Only call task_complete after ALL todos are done.
 
 --- file_read_nudge ---
 You have made {consecutive_reads} consecutive read-only operations without taking action.

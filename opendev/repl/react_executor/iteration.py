@@ -445,6 +445,28 @@ class IterationMixin:
         ctx.consecutive_no_tool_calls += 1
 
         if ctx.consecutive_no_tool_calls >= self.MAX_NUDGE_ATTEMPTS:
+            # Still check todos before accepting failure completion
+            todo_handler = getattr(ctx.tool_registry, "todo_handler", None)
+            if (
+                todo_handler
+                and todo_handler.has_incomplete_todos()
+                and ctx.todo_nudge_count < self.MAX_TODO_NUDGES
+            ):
+                ctx.todo_nudge_count += 1
+                incomplete = todo_handler.get_incomplete_todos()
+                titles = [t.title for t in incomplete[:3]]
+                nudge = get_reminder(
+                    "incomplete_todos_nudge",
+                    count=str(len(incomplete)),
+                    todo_list="\n".join(f"  - {t}" for t in titles),
+                )
+                if content:
+                    ctx.messages.append({"role": "assistant", "content": raw_content or content})
+                    self._display_message(content, ctx.ui_callback)
+                ctx.messages.append({"role": "user", "content": nudge})
+                ctx.consecutive_no_tool_calls = 0
+                return LoopAction.CONTINUE
+
             if not content:
                 content = "Warning: could not complete after multiple attempts."
 

@@ -217,7 +217,7 @@ class RunLoopMixin:
         consecutive_no_tool_calls = 0
         MAX_NUDGE_ATTEMPTS = 3  # After this many nudges, treat as implicit completion
         todo_nudge_count = 0
-        MAX_TODO_NUDGES = 2  # After this many todo nudges, allow completion anyway
+        MAX_TODO_NUDGES = 4  # After this many todo nudges, allow completion anyway
         completion_nudge_sent = False
         interrupted = False
 
