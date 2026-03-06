@@ -38,11 +38,43 @@ You can explore and analyze the codebase using:
 
 ## Output Format
 
-Structure your plan as:
-1. **Goal**: What we're trying to achieve
-2. **Analysis**: What you learned from exploring the codebase
-3. **Implementation Steps**: Numbered steps with specific file changes
-4. **Considerations**: Edge cases, testing needs, potential issues
+Your plan file MUST use this exact structure with delimiters:
+
+```
+---BEGIN PLAN---
+
+## Goal
+What we're trying to achieve
+
+## Context
+What you learned from exploring the codebase
+
+## Files to Modify
+- path/to/file1.py
+- path/to/file2.py
+
+## New Files to Create
+- path/to/new_file.py
+
+## Implementation Steps
+1. First concrete step
+2. Second concrete step
+3. ...
+
+## Verification
+- Unit test description
+- Integration test description
+- End-to-end test description
+
+## Risks & Considerations
+- Risk or edge case 1
+- Risk or edge case 2
+
+---END PLAN---
+```
+
+The `---BEGIN PLAN---` and `---END PLAN---` delimiters are REQUIRED.
+The `## Implementation Steps` section with numbered items is REQUIRED (todos are created from it).
 
 ## Testing in Your Plan
 

@@ -1,4 +1,4 @@
-"""Tests for PresentPlanTool minimum-content validation."""
+"""Tests for PresentPlanTool validation."""
 
 import tempfile
 from pathlib import Path
@@ -31,20 +31,70 @@ def test_rejects_empty_plan():
     assert "empty" in result["error"]
 
 
-def test_accepts_real_plan():
-    """A plan with substantial content (200+ chars) should pass validation."""
+def test_rejects_missing_delimiters():
+    """Plan without ---BEGIN PLAN--- delimiter should be rejected."""
     tool = PresentPlanTool()
-    real_plan = (
+    plan_no_delimiters = (
         "# Goal\n\n"
         "Refactor the authentication module to support OAuth2.\n\n"
-        "## Steps\n\n"
+        "## Implementation Steps\n\n"
         "1. Add OAuth2 provider configuration\n"
         "2. Implement token exchange flow\n"
         "3. Update session management to handle OAuth tokens\n"
         "4. Add unit tests for the new OAuth2 flow\n"
         "5. Update documentation\n"
     )
-    assert len(real_plan.strip()) >= 100
+    assert len(plan_no_delimiters.strip()) >= 100
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write(plan_no_delimiters)
+        f.flush()
+        result = tool.execute(plan_file_path=f.name)
+
+    assert result["success"] is False
+    assert "---BEGIN PLAN---" in result["error"]
+
+
+def test_rejects_delimiters_but_no_steps():
+    """Plan with delimiters but no Implementation Steps should be rejected."""
+    tool = PresentPlanTool()
+    plan_no_steps = (
+        "---BEGIN PLAN---\n\n"
+        "## Goal\n"
+        "Refactor the authentication module to support OAuth2.\n\n"
+        "## Context\n"
+        "The current auth module uses session-based auth only.\n\n"
+        "---END PLAN---\n"
+    )
+    assert len(plan_no_steps.strip()) >= 100
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write(plan_no_steps)
+        f.flush()
+        result = tool.execute(plan_file_path=f.name)
+
+    assert result["success"] is False
+    assert "no parseable implementation steps" in result["error"].lower()
+
+
+def test_accepts_well_structured_plan():
+    """A plan with delimiters and numbered steps should pass validation."""
+    tool = PresentPlanTool()
+    real_plan = (
+        "---BEGIN PLAN---\n\n"
+        "## Goal\n"
+        "Refactor the authentication module to support OAuth2.\n\n"
+        "## Implementation Steps\n"
+        "1. Add OAuth2 provider configuration\n"
+        "2. Implement token exchange flow\n"
+        "3. Update session management to handle OAuth tokens\n"
+        "4. Add unit tests for the new OAuth2 flow\n"
+        "5. Update documentation\n\n"
+        "## Verification\n"
+        "- Unit tests pass\n"
+        "- OAuth2 login works end-to-end\n\n"
+        "---END PLAN---\n"
+    )
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write(real_plan)
