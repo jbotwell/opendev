@@ -264,7 +264,17 @@ export function LandingPage() {
 
             {/* Center-right: Workspace badge */}
             <div className="flex items-center gap-2">
-              {workspaces.length > 0 && (
+              {workspaces.length === 0 ? (
+                <button
+                  onClick={() => setIsNewSessionOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-text-300 hover:text-text-100 bg-bg-200 hover:bg-bg-300 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  Select workspace...
+                </button>
+              ) : (
                 <div className="relative" ref={workspaceMenuRef}>
                   <button
                     onClick={() => setShowWorkspacePicker(!showWorkspacePicker)}
