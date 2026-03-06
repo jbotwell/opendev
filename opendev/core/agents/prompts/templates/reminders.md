@@ -1,6 +1,14 @@
 --- thinking_analysis_prompt ---
 Analyze the context and provide your reasoning for the next step.
 
+--- thinking_analysis_prompt_with_todos ---
+Analyze the context and provide your reasoning for the next step.
+
+Current todos ({done_count}/{total_count} done):
+{todo_status}
+
+You MUST continue working on the next incomplete todo. Do not summarize or finish until all todos are done.
+
 --- thinking_trace_reminder ---
 <thinking_trace>
 {thinking_trace}

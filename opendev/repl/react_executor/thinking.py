@@ -35,6 +35,7 @@ class ThinkingMixin:
         messages: list,
         agent,
         ui_callback=None,
+        tool_registry=None,
     ) -> Optional[str]:
         """Make a SEPARATE LLM call to get thinking trace.
 
@@ -61,11 +62,30 @@ class ThinkingMixin:
                 messages, thinking_system_prompt
             )
 
+            # Build analysis prompt — todo-aware when todos exist
+            todo_handler = getattr(tool_registry, "todo_handler", None) if tool_registry else None
+            if todo_handler and todo_handler.has_todos():
+                todos = list(todo_handler._todos.values())
+                done = sum(1 for t in todos if t.status == "done")
+                total = len(todos)
+                status_lines = []
+                for t in todos:
+                    symbol = {"done": "done", "doing": "doing"}.get(t.status, "todo")
+                    status_lines.append(f"  [{symbol}] {t.title}")
+                analysis_content = get_reminder(
+                    "thinking_analysis_prompt_with_todos",
+                    done_count=str(done),
+                    total_count=str(total),
+                    todo_status="\n".join(status_lines),
+                )
+            else:
+                analysis_content = get_reminder("thinking_analysis_prompt")
+
             # Append analysis prompt as final user message
             thinking_messages.append(
                 {
                     "role": "user",
-                    "content": get_reminder("thinking_analysis_prompt"),
+                    "content": analysis_content,
                 },
             )
 

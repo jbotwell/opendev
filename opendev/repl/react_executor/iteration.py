@@ -127,7 +127,9 @@ class IterationMixin:
         # THINKING PHASE: Get thinking trace BEFORE action (when thinking mode is ON)
         # Skip thinking phase after subagent completion - main agent decides directly
         if thinking_visible and not subagent_just_completed:
-            thinking_trace = self._get_thinking_trace(ctx.messages, ctx.agent, ctx.ui_callback)
+            thinking_trace = self._get_thinking_trace(
+                ctx.messages, ctx.agent, ctx.ui_callback, tool_registry=ctx.tool_registry
+            )
 
             # Check for interrupt from thinking phase (reuse existing _handle_llm_error)
             if self._last_thinking_error is not None:
