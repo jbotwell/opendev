@@ -284,6 +284,9 @@ class SWECLIChatApp(App):
 
     def on_resize(self, event) -> None:
         """Manage welcome panel visibility on terminal resize."""
+        # Force full screen repaint to clear compositor cache and prevent artifacts
+        self.screen.refresh(repaint=True)
+
         if not self._welcome_visible or self._welcome_panel is None:
             return
         terminal_height = self.size.height

@@ -311,7 +311,7 @@ class ConversationLog(RichLog):
             if hasattr(self, "app") and hasattr(self.app, "spinner_service"):
                 self.app.spinner_service.resume_after_resize()
 
-        self.refresh()
+        self.refresh(repaint=True)
 
     def _recalculate_virtual_size(self) -> None:
         """Recompute virtual_size after direct edits to self.lines."""
@@ -740,14 +740,19 @@ class ConversationLog(RichLog):
         """
         self._tool_renderer.on_single_agent_start(agent_type, description, tool_call_id)
 
-    def on_single_agent_complete(self, tool_call_id: str, success: bool = True) -> None:
+    def on_single_agent_complete(
+        self, tool_call_id: str, success: bool = True, failure_reason: str = ""
+    ) -> None:
         """Called when a single agent completes.
 
         Args:
             tool_call_id: Unique ID of the agent that completed
             success: Whether the agent succeeded
+            failure_reason: Why the agent failed (API error, etc.)
         """
-        self._tool_renderer.on_single_agent_complete(tool_call_id, success)
+        self._tool_renderer.on_single_agent_complete(
+            tool_call_id, success, failure_reason=failure_reason
+        )
 
     def interrupt_cleanup(self) -> None:
         """Collapse subagent display for clean interrupt feedback."""
