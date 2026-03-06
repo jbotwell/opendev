@@ -2,13 +2,18 @@
 
 from typing import Dict, List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from opendev.web.state import get_state
 from opendev.models.message import ChatMessage, Role
+from opendev.web.dependencies.auth import require_authenticated_user
 
-router = APIRouter(prefix="/api/chat", tags=["chat"])
+router = APIRouter(
+    prefix="/api/chat",
+    tags=["chat"],
+    dependencies=[Depends(require_authenticated_user)],
+)
 
 
 class QueryRequest(BaseModel):

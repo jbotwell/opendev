@@ -13,9 +13,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 
-from opendev.web.routes import chat_router, sessions_router, config_router, commands_router, mcp_router
+from opendev.web.routes import (
+    chat_router,
+    sessions_router,
+    config_router,
+    commands_router,
+    mcp_router,
+    auth_router,
+)
 from opendev.web.websocket import websocket_endpoint
-from opendev.web.state import init_state
+from opendev.web.state import init_state, get_state
 from opendev.core.runtime import ConfigManager, ModeManager
 from opendev.core.context_engineering.history import SessionManager, UndoManager
 from opendev.core.runtime.approval import ApprovalManager
@@ -46,6 +53,7 @@ def create_app() -> FastAPI:
     )
 
     # Register API routes
+    app.include_router(auth_router)
     app.include_router(chat_router)
     app.include_router(sessions_router)
     app.include_router(config_router)
@@ -223,6 +231,7 @@ def start_server(
     mode_manager: ModeManager,
     approval_manager: ApprovalManager,
     undo_manager: UndoManager,
+    user_store,
     mcp_manager: Optional["MCPManager"] = None,
     host: str = "127.0.0.1",
     port: int = 8080,
@@ -237,6 +246,7 @@ def start_server(
         mode_manager: Mode manager
         approval_manager: Approval manager
         undo_manager: Undo manager
+        user_store: User storage backend
         mcp_manager: MCP manager (optional)
         host: Host to bind to
         port: Port to listen on
@@ -253,6 +263,7 @@ def start_server(
         mode_manager,
         approval_manager,
         undo_manager,
+        user_store,
         mcp_manager,
     )
 

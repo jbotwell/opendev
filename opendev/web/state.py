@@ -10,6 +10,8 @@ from threading import Lock
 from opendev.core.runtime import ConfigManager, ModeManager
 from opendev.core.context_engineering.history import SessionManager, UndoManager
 from opendev.core.runtime.approval import ApprovalManager
+from opendev.core.auth.user_store import UserStore
+from opendev.models.user import User
 from opendev.models.message import ChatMessage
 
 
@@ -38,17 +40,19 @@ class WebState:
         mode_manager: ModeManager,
         approval_manager: ApprovalManager,
         undo_manager: UndoManager,
+        user_store: UserStore,
         mcp_manager: Optional["MCPManager"] = None,
-    ):
+    ) -> None:
+        """Initialize state with required managers."""
+
         self.config_manager = config_manager
         self.session_manager = session_manager
         self.mode_manager = mode_manager
         self.approval_manager = approval_manager
         self.undo_manager = undo_manager
+        self.user_store = user_store
         self.mcp_manager = mcp_manager
-
-        # Thread safety
-        self._lock = Lock()
+        self._current_users: Dict[str, User] = {}
 
         # Connected WebSocket clients
         self._ws_clients: List[Any] = []
@@ -110,34 +114,36 @@ class WebState:
         session = self.session_manager.get_current_session()
         return session.id if session else None
 
-    def list_sessions(self) -> List[Dict[str, Any]]:
-        """List all available sessions across all projects."""
-        return [
-            {
-                "id": s.id,
-                "working_dir": s.working_directory or "",
-                "created_at": s.created_at.isoformat(),
-                "updated_at": s.updated_at.isoformat(),
-                "message_count": s.message_count,
-                "total_tokens": s.total_tokens,
-                "title": s.title,
-            }
-            for s in self.session_manager.list_all_sessions()
-        ]
-
-    def resume_session(self, session_id: str) -> bool:
-        """Resume a specific session, applying session-model overlay if present."""
+    def resume_session(self, session_id: str, owner_id: str) -> bool:
+        """Resume the given session if owned by the user."""
         try:
-            self.session_manager.load_session(session_id)
-            session = self.session_manager.get_current_session()
-            if session:
-                overlay = session.metadata.get("session_model")
-                if overlay:
-                    from opendev.core.runtime.session_model import (
-                        validate_session_model,
-                        clear_session_model,
-                        SessionModelManager,
-                    )
+            session = self.session_manager.load_session(session_id, owner_id=owner_id)
+        except FileNotFoundError:
+            return False
+        if session.owner_id != owner_id:
+            return False
+        return True
+
+    def list_sessions(self, owner_id: str) -> List[Dict[str, Any]]:
+        """List all sessions owned by the specified user."""
+        sessions = []
+        for session_meta in self.session_manager.list_sessions(owner_id=owner_id):
+            sessions.append(
+                {
+                    "id": session_meta.id,
+                    "working_dir": session_meta.working_directory or "",
+                    "created_at": session_meta.created_at.isoformat(),
+                    "updated_at": session_meta.updated_at.isoformat(),
+                    "message_count": session_meta.message_count,
+                    "total_tokens": session_meta.total_tokens,
+                    "title": session_meta.title,
+                    "has_session_model": session_meta.has_session_model,
+                    "channel": session_meta.channel,
+                    "channel_user_id": session_meta.channel_user_id,
+                    "thread_id": session_meta.thread_id,
+                }
+            )
+        return sessions
 
                     config = self.config_manager.get_config()
                     valid_overlay, warnings = validate_session_model(overlay)
@@ -386,6 +392,7 @@ def init_state(
     mode_manager: ModeManager,
     approval_manager: ApprovalManager,
     undo_manager: UndoManager,
+    user_store: UserStore,
     mcp_manager: Optional["MCPManager"] = None,
 ) -> WebState:
     """Initialize the global state instance."""
@@ -396,6 +403,7 @@ def init_state(
         mode_manager,
         approval_manager,
         undo_manager,
+        user_store,
         mcp_manager,
     )
     return _state
@@ -422,6 +430,7 @@ def get_state() -> WebState:
         mode_manager = ModeManager()
         approval_manager = ApprovalManager(console)
         undo_manager = UndoManager(50)
+        user_store = UserStore(paths.data_dir)
 
         # Initialize MCP manager
         mcp_manager = MCPManager(working_dir)
@@ -434,6 +443,7 @@ def get_state() -> WebState:
             mode_manager,
             approval_manager,
             undo_manager,
+            user_store,
             mcp_manager,
         )
     return _state

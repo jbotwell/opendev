@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect, status
 
 from opendev.web.state import get_state
 from opendev.web.logging_config import logger
 from opendev.models.message import ChatMessage, Role
+from opendev.web.routes.auth import TOKEN_COOKIE, verify_token
+from opendev.web.routes.auth import TOKEN_COOKIE, verify_token
 
 
 class WebSocketManager:
@@ -310,17 +312,33 @@ ws_manager = WebSocketManager()
 
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint handler."""
+    token = websocket.cookies.get(TOKEN_COOKIE)
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        user_id = verify_token(token)
+    except Exception:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    state = get_state()
+    user = state.user_store.get_by_id(user_id)
+    if not user:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
+
+    websocket.scope["user"] = user
+
     logger.info("New WebSocket connection established")
     await ws_manager.connect(websocket)
 
     try:
         while True:
-            # Receive message from client
             data = await websocket.receive_json()
             if data.get("type") != "ping":
                 logger.debug(f"Raw message received: {data}")
-
-            # Handle the message
             await ws_manager.handle_message(websocket, data)
 
     except WebSocketDisconnect:

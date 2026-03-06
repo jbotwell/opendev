@@ -114,6 +114,31 @@ class APIClient {
     return response.json();
   }
 
+  // Session model endpoints
+  async getSessionModel(sessionId: string): Promise<Record<string, string>> {
+    const response = await fetch(`${API_BASE}/sessions/${sessionId}/model`);
+    if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+    return response.json();
+  }
+
+  async updateSessionModel(sessionId: string, overlay: Record<string, string | null>): Promise<{ status: string; message: string }> {
+    const response = await fetch(`${API_BASE}/sessions/${sessionId}/model`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(overlay),
+    });
+    if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+    return response.json();
+  }
+
+  async clearSessionModel(sessionId: string): Promise<{ status: string; message: string }> {
+    const response = await fetch(`${API_BASE}/sessions/${sessionId}/model`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+    return response.json();
+  }
+
   // Config endpoints
   async getConfig(): Promise<any> {
     const response = await fetch(`${API_BASE}/config`);

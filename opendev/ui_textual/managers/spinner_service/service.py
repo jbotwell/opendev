@@ -1,27 +1,22 @@
-"""Centralized spinner service for all UI animations.
-
-This module provides a unified SpinnerService that:
-1. Provides facade API (start/update/stop) for ui_callback compatibility
-2. Provides callback API (register) for widgets that manage their own spinners
-3. Owns all timer lifecycle (Textual timer + threading.Timer fallback)
-4. Invokes widget callbacks with SpinnerFrame data for rendering
-
-The dual-timer pattern ensures animations work even when Textual's event loop
-is blocked during synchronous LLM calls.
-"""
+"""SpinnerService class — centralized spinner management for all UI animations."""
 
 from __future__ import annotations
 
 import threading
-import time
 import uuid
-from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from rich.text import Text
 
-from opendev.ui_textual.style_tokens import GREY, PRIMARY, GREEN_BRIGHT, BLUE_BRIGHT, ERROR, WARNING
+from opendev.ui_textual.style_tokens import GREY, PRIMARY, GREEN_BRIGHT, ERROR
+from opendev.ui_textual.managers.spinner_service.models import (
+    SpinnerInstance,
+    SpinnerType,
+    SpinnerFrame,
+    SPINNER_CONFIGS,
+)
+from opendev.ui_textual.managers.spinner_service.animation import AnimationMixin
+from opendev.ui_textual.managers.spinner_service.resize import ResizeMixin
 
 if TYPE_CHECKING:
     from textual.app import App
@@ -30,95 +25,7 @@ if TYPE_CHECKING:
     from opendev.ui_textual.components import TipsManager
 
 
-class SpinnerType(Enum):
-    """Types of spinners with different rendering behaviors."""
-
-    TOOL = auto()  # Main tool spinner - braille dots, 120ms
-    THINKING = auto()  # Thinking spinner - braille dots, 120ms, 300ms min visibility
-    TODO = auto()  # Todo panel - rotating arrows, 150ms
-    NESTED = auto()  # Nested/subagent tool - flashing bullet, 300ms
-
-
-@dataclass(frozen=True)
-class SpinnerConfig:
-    """Immutable configuration for a spinner animation type."""
-
-    chars: tuple[str, ...]
-    interval_ms: int
-    style: str
-    min_visible_ms: int = 0
-
-
-SPINNER_CONFIGS: Dict[SpinnerType, SpinnerConfig] = {
-    SpinnerType.TOOL: SpinnerConfig(
-        chars=("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"),
-        interval_ms=120,
-        style=BLUE_BRIGHT,
-    ),
-    SpinnerType.THINKING: SpinnerConfig(
-        chars=("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"),
-        interval_ms=120,
-        style=BLUE_BRIGHT,
-        min_visible_ms=300,
-    ),
-    SpinnerType.NESTED: SpinnerConfig(
-        chars=("⏺", "○"),
-        interval_ms=300,
-        style=GREEN_BRIGHT,  # Flashing animation uses green (not cyan like spinners)
-    ),
-    SpinnerType.TODO: SpinnerConfig(
-        chars=("←", "↖", "↑", "↗", "→", "↘", "↓", "↙"),
-        interval_ms=150,
-        style=WARNING,
-    ),
-}
-
-
-def get_spinner_config(spinner_type: SpinnerType) -> SpinnerConfig:
-    """Get the configuration for a spinner type."""
-    return SPINNER_CONFIGS.get(spinner_type, SPINNER_CONFIGS[SpinnerType.TOOL])
-
-
-@dataclass
-class SpinnerInstance:
-    """State for a single active spinner."""
-
-    spinner_id: str
-    spinner_type: SpinnerType
-    config: SpinnerConfig
-
-    # Animation state
-    frame_index: int = 0
-    started_at: float = field(default_factory=time.monotonic)
-    last_frame_at: float = field(default_factory=time.monotonic)
-
-    # Content
-    message: Text = field(default_factory=lambda: Text(""))
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    # Callback for rendering updates
-    render_callback: Optional[Callable[["SpinnerFrame"], None]] = None
-
-    # Stop handling
-    stop_requested: bool = False
-    stop_requested_at: float = 0.0
-
-
-@dataclass
-class SpinnerFrame:
-    """Data passed to widget render callbacks each animation frame."""
-
-    spinner_id: str
-    spinner_type: SpinnerType
-    char: str  # Current animation character
-    frame_index: int  # Current frame number
-    elapsed_seconds: int  # Seconds since spinner started
-    message: Text  # Current message text
-    style: str  # Style for the spinner character
-    metadata: Dict[str, Any]  # Widget-specific data
-
-
-class SpinnerService:
+class SpinnerService(AnimationMixin, ResizeMixin):
     """Centralized spinner management for all UI animations.
 
     This service provides TWO APIs:
@@ -143,9 +50,6 @@ class SpinnerService:
     - Each spinner tracks when its next frame is due
     - Dual-timer pattern: Textual timer (when loop is free) + threading.Timer (fallback)
     """
-
-    # Tick interval - GCD of all spinner intervals for smooth animation
-    _TICK_INTERVAL_MS = 60  # ~16fps base rate, divides evenly into 120, 300, 150
 
     def __init__(self, app: "App") -> None:
         """Initialize the SpinnerService.
@@ -194,57 +98,6 @@ class SpinnerService:
             tips_manager: TipsManager instance for rotating tips
         """
         self._tips_manager = tips_manager
-
-    # =========================================================================
-    # RESIZE COORDINATION METHODS
-    # =========================================================================
-
-    def pause_for_resize(self) -> None:
-        """Stop animation timers for resize."""
-        with self._lock:
-            self._stop_animation_loop()
-
-    def adjust_indices(self, delta: int, first_affected: int) -> None:
-        """Adjust all tracked line indices by delta.
-
-        Args:
-            delta: Number of lines added (positive) or removed (negative)
-            first_affected: First line index affected by the change
-        """
-        with self._lock:
-            # Adjust spinner lines
-            for spinner_id in list(self._spinner_lines.keys()):
-                line = self._spinner_lines[spinner_id]
-                if line >= first_affected:
-                    self._spinner_lines[spinner_id] = line + delta
-
-            # Adjust result lines
-            for spinner_id in list(self._result_lines.keys()):
-                line = self._result_lines[spinner_id]
-                if line is not None and line >= first_affected:
-                    self._result_lines[spinner_id] = line + delta
-
-            # Adjust spacing lines
-            for spinner_id in list(self._spacing_lines.keys()):
-                line = self._spacing_lines[spinner_id]
-                if line is not None and line >= first_affected:
-                    self._spacing_lines[spinner_id] = line + delta
-
-            # Adjust tip lines
-            for spinner_id in list(self._spinner_tip_lines.keys()):
-                line = self._spinner_tip_lines[spinner_id]
-                if line >= first_affected:
-                    self._spinner_tip_lines[spinner_id] = line + delta
-
-
-    def resume_after_resize(self) -> None:
-        """Restart animation loop after resize."""
-        with self._lock:
-            if self._spinners and not self._running:
-                self._running = True
-        # Start animation loop outside lock to avoid deadlock
-        if self._spinners:
-            self._schedule_tick()
 
     # =========================================================================
     # FACADE API (for ui_callback compatibility)
@@ -472,12 +325,16 @@ class SpinnerService:
                 conversation.stop_tool_execution(success)
 
             # Convert Text to Strip helper
-            def text_to_strip(text: Text) -> "Strip":
+            def text_to_strip(text: Text):
                 from rich.console import Console
                 from textual.strip import Strip
 
                 # Use actual conversation width instead of hardcoded 1000
-                width = conversation.virtual_size.width if hasattr(conversation, 'virtual_size') else 1000
+                width = (
+                    conversation.virtual_size.width
+                    if hasattr(conversation, "virtual_size")
+                    else 1000
+                )
                 console = Console(width=width, force_terminal=True, no_color=False)
                 segments = list(text.render(console))
                 return Strip(segments)
@@ -700,286 +557,3 @@ class SpinnerService:
     def _run_non_blocking(self, func, *args, **kwargs) -> None:
         """Run a function on the UI thread without blocking."""
         self.app.call_from_thread_nonblocking(func, *args, **kwargs)
-
-    # =========================================================================
-    # ANIMATION LOOP
-    # =========================================================================
-
-    def _start_animation_loop(self) -> None:
-        """Start the animation loop (called WITHOUT lock held to avoid deadlock)."""
-        with self._lock:
-            if self._running:
-                return
-            self._running = True
-
-        # Schedule tick OUTSIDE lock to avoid deadlock
-        # (_on_tick also acquires the lock)
-        self._schedule_tick()
-
-    def _stop_animation_loop(self) -> None:
-        """Stop the animation loop (called with lock held)."""
-        self._running = False
-
-        if self._textual_timer is not None:
-            self._textual_timer.stop()
-            self._textual_timer = None
-
-        if self._thread_timer is not None:
-            self._thread_timer.cancel()
-            self._thread_timer = None
-
-    def _schedule_tick(self) -> None:
-        """Schedule next animation tick using dual-timer pattern."""
-        if not self._running:
-            return
-
-        interval_sec = self._TICK_INTERVAL_MS / 1000
-
-        # Cancel existing timers (thread-safe operations)
-        if self._textual_timer is not None:
-            try:
-                self._textual_timer.stop()
-            except Exception:
-                pass
-        if self._thread_timer is not None:
-            self._thread_timer.cancel()
-            self._thread_timer = None
-
-        # Schedule Textual timer - MUST be done on UI thread
-        def _setup_textual_timer():
-            try:
-                self._textual_timer = self.app.set_timer(interval_sec, self._on_tick)
-            except Exception:
-                pass  # App may be shutting down
-
-        # Dispatch to UI thread (non-blocking)
-        self._run_non_blocking(_setup_textual_timer)
-
-        # Schedule threading.Timer fallback (bypasses blocked event loop)
-        self._thread_timer = threading.Timer(interval_sec, self._on_thread_tick)
-        self._thread_timer.daemon = True
-        self._thread_timer.start()
-
-    def _on_thread_tick(self) -> None:
-        """Fallback tick via threading.Timer when event loop is blocked."""
-        if not self._running:
-            return
-
-        # Use call_from_thread to safely run on UI thread
-        try:
-            self.app.call_from_thread(self._on_tick)
-        except Exception:
-            pass  # App may be shutting down
-
-    def _on_tick(self) -> None:
-        """Animation tick - advance frames and render as needed."""
-        # Cancel thread timer if this tick came from Textual timer
-        if self._thread_timer is not None:
-            self._thread_timer.cancel()
-            self._thread_timer = None
-
-        now = time.monotonic()
-
-        with self._lock:
-            if not self._running:
-                return
-
-            # Process each active spinner
-            to_remove: list[str] = []
-            to_render: list[SpinnerInstance] = []
-
-            for spinner_id, instance in self._spinners.items():
-                # Check for delayed stop
-                if instance.stop_requested:
-                    elapsed_ms = (now - instance.started_at) * 1000
-                    if elapsed_ms >= instance.config.min_visible_ms:
-                        to_remove.append(spinner_id)
-                        continue
-
-                # Check if this spinner is due for a frame update
-                elapsed_since_frame = (now - instance.last_frame_at) * 1000
-                if elapsed_since_frame >= instance.config.interval_ms:
-                    # Advance frame
-                    instance.frame_index = (instance.frame_index + 1) % len(instance.config.chars)
-                    instance.last_frame_at = now
-
-                    # Mark for rendering (outside lock)
-                    to_render.append(instance)
-
-            # Remove stopped spinners
-            for spinner_id in to_remove:
-                del self._spinners[spinner_id]
-
-            # Stop loop if no spinners left
-            if not self._spinners:
-                self._stop_animation_loop()
-                return
-
-        # Render frames (outside lock to avoid deadlock)
-        for instance in to_render:
-            self._render_frame(instance)
-
-        # Schedule next tick
-        self._schedule_tick()
-
-    def _render_frame(self, instance: SpinnerInstance) -> None:
-        """Invoke the render callback for a spinner."""
-        # Race condition prevention: don't render if stop was requested
-        # This guards against callbacks firing after stop() but before the instance
-        # is fully cleaned up from the to_render list in _on_tick()
-        if instance.stop_requested:
-            return
-
-        if instance.render_callback is None:
-            return
-
-        frame = SpinnerFrame(
-            spinner_id=instance.spinner_id,
-            spinner_type=instance.spinner_type,
-            char=instance.config.chars[instance.frame_index],
-            frame_index=instance.frame_index,
-            elapsed_seconds=int(time.monotonic() - instance.started_at),
-            message=instance.message.copy(),
-            style=instance.config.style,
-            metadata=instance.metadata.copy(),
-        )
-
-        try:
-            instance.render_callback(frame)
-        except Exception:
-            pass  # Don't let callback errors crash the loop
-
-    def _render_initial_frame_blocking(self, spinner_id: str, display_text: Text) -> None:
-        """Render the initial spinner frame with blocking call.
-
-        This ensures the first frame is visible immediately before start() returns.
-        Uses the first animation character (⠋) with elapsed time of 0.
-
-        Args:
-            spinner_id: The spinner ID
-            display_text: The display text for the spinner
-        """
-        line_num = self._spinner_lines.get(spinner_id)
-        if line_num is None:
-            return
-
-        conversation = self._conversation
-        if conversation is None:
-            return
-
-        config = SPINNER_CONFIGS[SpinnerType.TOOL]
-
-        def _update_on_ui():
-            try:
-                if line_num >= len(conversation.lines):
-                    return
-
-                # Build initial animated line: "⠋ Tool description (0s)"
-                formatted = Text()
-                formatted.append(f"{config.chars[0]} ", style=config.style)
-                formatted.append_text(display_text)
-                formatted.append(" (0s)", style=GREY)
-
-                # Convert to Strip
-                from rich.console import Console
-                from textual.strip import Strip
-
-                # Use actual conversation width
-                width = conversation.virtual_size.width if hasattr(conversation, 'virtual_size') else 1000
-                console = Console(width=width, force_terminal=True, no_color=False)
-                segments = list(formatted.render(console))
-                strip = Strip(segments)
-
-                # STRATEGY: Delete & Insert to force update
-                if line_num < len(conversation.lines):
-                    del conversation.lines[line_num]
-                    conversation.lines.insert(line_num, strip)
-
-                # Invalidate cache and refresh - BOTH refreshes are needed
-                if hasattr(conversation, "refresh_line"):
-                    conversation.refresh_line(line_num)
-                else:
-                    conversation.refresh()
-
-                # Also refresh the app (like DefaultSpinnerManager does)
-                if hasattr(self.app, "refresh"):
-                    self.app.refresh()
-            except Exception:
-                pass  # Silently ignore errors
-
-        # BLOCKING call to ensure initial frame is visible before returning
-        self._run_blocking(_update_on_ui)
-
-    def _render_facade_spinner(self, spinner_id: str, frame: SpinnerFrame) -> None:
-        """Render a facade-API spinner by updating its specific line.
-
-        This method updates the spinner line in-place, allowing parallel spinners
-        to animate independently without overwriting each other.
-
-        Args:
-            spinner_id: The spinner ID to render
-            frame: The current animation frame data
-        """
-        line_num = self._spinner_lines.get(spinner_id)
-        display_text = self._spinner_displays.get(spinner_id)
-
-        if line_num is None or display_text is None:
-            return
-
-        conversation = self._conversation
-        if conversation is None:
-            return
-
-        def _update_on_ui():
-            try:
-                if line_num >= len(conversation.lines):
-                    return
-
-                # Build animated line: "⠋ Tool description (5s)"
-                elapsed = frame.elapsed_seconds
-                formatted = Text()
-                formatted.append(f"{frame.char} ", style=frame.style)
-                formatted.append_text(display_text)
-                formatted.append(f" ({elapsed}s)", style=GREY)
-
-                # Convert to Strip
-                from rich.console import Console
-                from textual.strip import Strip
-
-                # Use actual conversation width
-                width = conversation.virtual_size.width if hasattr(conversation, 'virtual_size') else 1000
-                console = Console(width=width, force_terminal=True, no_color=False)
-                segments = list(formatted.render(console))
-                strip = Strip(segments)
-
-                # STRATEGY: Delete & Insert to force RichLog/Textual to recognize update
-                # (same approach as DefaultSpinnerManager)
-                if line_num < len(conversation.lines):
-                    del conversation.lines[line_num]
-                    conversation.lines.insert(line_num, strip)
-
-                # Invalidate cache and refresh - BOTH refreshes are needed
-                if hasattr(conversation, "refresh_line"):
-                    conversation.refresh_line(line_num)
-                else:
-                    conversation.refresh()
-
-                # Also refresh the app (like DefaultSpinnerManager does)
-                if hasattr(self.app, "refresh"):
-                    self.app.refresh()
-            except Exception:
-                pass  # Silently ignore errors in animation update
-
-        # Run on UI thread (handles both UI thread and background thread cases)
-        self._run_non_blocking(_update_on_ui)
-
-
-__all__ = [
-    "SpinnerService",
-    "SpinnerType",
-    "SpinnerConfig",
-    "SpinnerFrame",
-    "SpinnerInstance",
-    "SPINNER_CONFIGS",
-    "get_spinner_config",
-]

@@ -1,255 +1,22 @@
-"""MCP Manager for managing MCP server connections and tool execution."""
+"""Connection management for MCP servers."""
 
 import asyncio
 import concurrent.futures
-import os
 import threading
 import time
-from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from fastmcp import Client
-from fastmcp.client.transports import (
-    NpxStdioTransport,
-    NodeStdioTransport,
-    PythonStdioTransport,
-    UvxStdioTransport,
-    StdioTransport,
-    StreamableHttpTransport,
-    SSETransport,
-)
-
-from opendev.core.context_engineering.mcp.config import (
-    load_config,
-    save_config,
-    get_project_config_path,
-    merge_configs,
-    prepare_server_config,
-)
-from opendev.core.context_engineering.mcp.models import MCPConfig, MCPServerConfig
 
 
-class _SuppressStderr:
-    """Context manager to temporarily suppress stderr output at the file descriptor level."""
-
-    def __enter__(self):
-        # Save the original stderr file descriptor
-        self.old_stderr_fd = os.dup(2)
-        # Open /dev/null
-        self.devnull_fd = os.open(os.devnull, os.O_WRONLY)
-        # Redirect stderr (fd 2) to /dev/null
-        os.dup2(self.devnull_fd, 2)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        # Restore stderr
-        os.dup2(self.old_stderr_fd, 2)
-        # Close file descriptors
-        os.close(self.old_stderr_fd)
-        os.close(self.devnull_fd)
-        return False
-
-
-class MCPManager:
-    """Manages MCP server connections and tool execution."""
-
-    def __init__(self, working_dir: Optional[Path] = None):
-        """Initialize MCP manager.
-
-        Args:
-            working_dir: Working directory for project-level config
-        """
-        self.working_dir = working_dir or Path.cwd()
-        self.clients: Dict[str, Client] = {}  # server_name -> Client instance
-        self.server_tools: Dict[str, List[Dict]] = {}  # server_name -> list of tool schemas
-        self._config: Optional[MCPConfig] = None
-        self._event_loop = None  # Shared event loop for all MCP operations
-        self._loop_thread = None  # Background thread running the event loop
-        self._loop_started = threading.Event()  # Signal when loop is ready
-        self._loop_lock = threading.Lock()  # Lock for event loop initialization
-        self._server_locks: Dict[str, threading.Lock] = {}  # Per-server locks
-        self._server_locks_lock = threading.Lock()  # Lock for creating server locks
-
-    def _create_transport_from_config(self, server_config: MCPServerConfig):
-        """Create appropriate transport based on server configuration.
-
-        Args:
-            server_config: Server configuration with transport type, url, headers, command, args, env
-
-        Returns:
-            Transport object for fastmcp Client
-        """
-        transport_type = server_config.transport.lower()
-
-        # HTTP transport for remote servers
-        if transport_type == "http":
-            if not server_config.url:
-                raise ValueError("HTTP transport requires a URL")
-            return StreamableHttpTransport(
-                url=server_config.url,
-                headers=server_config.headers or None,
-            )
-
-        # SSE transport for server-sent events
-        elif transport_type == "sse":
-            if not server_config.url:
-                raise ValueError("SSE transport requires a URL")
-            return SSETransport(
-                url=server_config.url,
-                headers=server_config.headers or None,
-            )
-
-        # Stdio transport (default)
-        else:
-            return self._create_stdio_transport(
-                server_config.command,
-                server_config.args,
-                server_config.env,
-            )
-
-    def _create_stdio_transport(self, command: str, args: List[str], env: Optional[Dict[str, str]]):
-        """Create appropriate stdio transport based on command type.
-
-        Args:
-            command: Command to run (npx, node, python, uv, uvx, etc.)
-            args: Command arguments
-            env: Environment variables
-
-        Returns:
-            Transport object for fastmcp Client
-        """
-        # Map command types to transport classes
-        if command == "npx":
-            # For npx, first arg should be package name
-            if args:
-                package = args[0]
-                remaining_args = args[1:]
-                return NpxStdioTransport(package=package, args=remaining_args)
-            else:
-                raise ValueError("npx command requires at least one argument (package name)")
-
-        elif command == "node":
-            # For node, first arg should be script path
-            if args:
-                script = args[0]
-                remaining_args = args[1:]
-                return NodeStdioTransport(script_path=script, args=remaining_args)
-            else:
-                raise ValueError("node command requires at least one argument (script path)")
-
-        elif command in ["python", "python3"]:
-            # For python, first arg should be script path
-            if args:
-                script = args[0]
-                remaining_args = args[1:]
-                return PythonStdioTransport(script_path=script, args=remaining_args)
-            else:
-                raise ValueError("python command requires at least one argument (script path)")
-
-        elif command == "uv":
-            # Use generic StdioTransport for uv since our config format
-            # stores full args (e.g., ["run", "mcp-server-X", ...]) which
-            # conflicts with UvStdioTransport's own "uv run" prefix.
-            if not args:
-                raise ValueError("uv command requires arguments")
-            return StdioTransport(command="uv", args=args, env=env)
-
-        elif command == "uvx":
-            # For uvx, first arg should be package name
-            if args:
-                package = args[0]
-                remaining_args = args[1:]
-                # UvxStdioTransport might not support env
-                return UvxStdioTransport(tool_name=package, tool_args=remaining_args)
-            else:
-                raise ValueError("uvx command requires at least one argument (package name)")
-
-        elif command == "docker":
-            # Docker runs as a generic command with all args
-            return StdioTransport(command=command, args=args, env=env)
-
-        else:
-            # Generic stdio transport for other commands - this one supports env
-            return StdioTransport(command=command, args=args, env=env)
-
-    def _run_event_loop(self):
-        """Run event loop in background thread."""
-        self._event_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._event_loop)
-        # Schedule signal AFTER loop starts - ensures run_forever() is active
-        self._event_loop.call_soon(self._loop_started.set)
-        try:
-            self._event_loop.run_forever()
-        finally:
-            self._event_loop.close()
-
-    def _ensure_event_loop(self):
-        """Ensure background event loop is running (thread-safe)."""
-        with self._loop_lock:
-            if self._event_loop is None or not self._event_loop.is_running():
-                # Reset the event before creating new loop
-                self._loop_started = threading.Event()
-                self._loop_thread = threading.Thread(target=self._run_event_loop, daemon=True)
-                self._loop_thread.start()
-                self._loop_started.wait()  # Wait for loop to be ready
-
-    def _run_coroutine_threadsafe(self, coro, timeout=30):
-        """Run a coroutine in the shared event loop and wait for result.
-
-        Args:
-            coro: Coroutine to run
-            timeout: Timeout in seconds
-
-        Returns:
-            Result of the coroutine
-        """
-        self._ensure_event_loop()
-        future = asyncio.run_coroutine_threadsafe(coro, self._event_loop)
-        return future.result(timeout=timeout)
-
-    def _get_server_lock(self, server_name: str) -> threading.Lock:
-        """Get or create a lock for a specific server (thread-safe).
-
-        Args:
-            server_name: Name of the server
-
-        Returns:
-            Lock for the server
-        """
-        with self._server_locks_lock:
-            if server_name not in self._server_locks:
-                self._server_locks[server_name] = threading.Lock()
-            return self._server_locks[server_name]
-
-    def load_configuration(self) -> MCPConfig:
-        """Load MCP configuration from global and project files.
-
-        Returns:
-            Merged MCP configuration
-        """
-        # Load global config
-        global_config = load_config()
-
-        # Load project config if exists
-        project_config_path = get_project_config_path(self.working_dir)
-        project_config = load_config(project_config_path) if project_config_path else None
-
-        # Merge configs
-        self._config = merge_configs(global_config, project_config)
-        return self._config
-
-    def get_config(self) -> MCPConfig:
-        """Get loaded configuration.
-
-        Returns:
-            MCP configuration
-        """
-        if self._config is None:
-            self._config = self.load_configuration()
-        return self._config
+class ConnectionMixin:
+    """Mixin for MCP server connection lifecycle."""
 
     async def _connect_internal(self, server_name: str) -> bool:
         """Internal coroutine that performs MCP server connection."""
+        from opendev.core.context_engineering.mcp.config import prepare_server_config
+        from opendev.core.context_engineering.mcp.manager.manager import _SuppressStderr
+
         config = self.get_config()
 
         if server_name not in config.mcp_servers:
@@ -312,6 +79,8 @@ class MCPManager:
 
     async def _disconnect_internal(self, server_name: str) -> None:
         """Internal coroutine that disconnects an MCP server."""
+        from opendev.core.context_engineering.mcp.manager.manager import _SuppressStderr
+
         if server_name in self.clients:
             client = self.clients[server_name]
             try:
@@ -568,7 +337,9 @@ class MCPManager:
                 return {
                     "success": False,
                     "error": (
-                        f"Tool returned error: {error_text}" if error_text else "Tool returned error"
+                        f"Tool returned error: {error_text}"
+                        if error_text
+                        else "Tool returned error"
                     ),
                     "output": error_text,
                 }
@@ -647,121 +418,6 @@ class MCPManager:
             tool_name,
             arguments,
         )
-
-    def add_server(
-        self,
-        name: str,
-        command: str = "",
-        args: Optional[List[str]] = None,
-        env: Optional[Dict[str, str]] = None,
-        transport: str = "stdio",
-        url: Optional[str] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> None:
-        """Add a new MCP server to configuration.
-
-        Args:
-            name: Server name
-            command: Command to start the server (for stdio transport)
-            args: Command arguments (for stdio transport)
-            env: Environment variables (for stdio transport)
-            transport: Transport type (stdio, http, sse)
-            url: URL for HTTP/SSE transport
-            headers: HTTP headers for HTTP/SSE transport
-        """
-        config = self.get_config()
-
-        server_config = MCPServerConfig(
-            command=command,
-            args=args or [],
-            env=env or {},
-            transport=transport,
-            url=url,
-            headers=headers or {},
-            enabled=True,
-            auto_start=True,
-        )
-
-        config.mcp_servers[name] = server_config
-        save_config(config)
-
-        # Reload config
-        self._config = None
-
-    def remove_server(self, name: str) -> bool:
-        """Remove an MCP server from configuration.
-
-        Args:
-            name: Server name
-
-        Returns:
-            True if server was removed, False if not found
-        """
-        config = self.get_config()
-
-        if name not in config.mcp_servers:
-            return False
-
-        del config.mcp_servers[name]
-        save_config(config)
-
-        # Reload config
-        self._config = None
-
-        return True
-
-    def enable_server(self, name: str) -> bool:
-        """Enable an MCP server.
-
-        Args:
-            name: Server name
-
-        Returns:
-            True if server was enabled, False if not found
-        """
-        config = self.get_config()
-
-        if name not in config.mcp_servers:
-            return False
-
-        config.mcp_servers[name].enabled = True
-        save_config(config)
-
-        # Reload config
-        self._config = None
-
-        return True
-
-    def disable_server(self, name: str) -> bool:
-        """Disable an MCP server.
-
-        Args:
-            name: Server name
-
-        Returns:
-            True if server was disabled, False if not found
-        """
-        config = self.get_config()
-
-        if name not in config.mcp_servers:
-            return False
-
-        config.mcp_servers[name].enabled = False
-        save_config(config)
-
-        # Reload config
-        self._config = None
-
-        return True
-
-    def list_servers(self) -> Dict[str, MCPServerConfig]:
-        """List all configured MCP servers.
-
-        Returns:
-            Dict mapping server names to their configurations
-        """
-        config = self.get_config()
-        return dict(config.mcp_servers)
 
     def is_connected(self, server_name: str) -> bool:
         """Check if a server is connected.

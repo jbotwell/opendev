@@ -4,18 +4,18 @@ import { useChatStore } from '../../stores/chat';
 import { apiClient } from '../../api/client';
 
 const MODE_STYLES = {
-  normal: 'bg-bg-400/40 text-text-200 border-beige-300 hover:bg-bg-400/60',
+  normal: 'bg-bg-400/40 text-text-200 border-gray-300 hover:bg-bg-400/60',
   plan: 'bg-accent-secondary-900 text-accent-secondary-100 border-accent-secondary-900/50 hover:bg-accent-secondary-900/80',
 } as const;
 
 const AUTONOMY_STYLES = {
-  'Manual': 'bg-bg-400/40 text-text-200 border-beige-300 hover:bg-bg-400/60',
+  'Manual': 'bg-bg-400/40 text-text-200 border-gray-300 hover:bg-bg-400/60',
   'Semi-Auto': 'bg-accent-secondary-900 text-accent-secondary-100 border-accent-secondary-900/50 hover:bg-accent-secondary-900/80',
   'Auto': 'bg-success-100/10 text-success-100 border-success-100/20 hover:bg-success-100/15',
 } as const;
 
 const THINKING_STYLES: Record<string, string> = {
-  'Off':           'bg-bg-200 text-text-500 border-beige-300 hover:bg-bg-300',
+  'Off':           'bg-bg-200 text-text-500 border-gray-300 hover:bg-bg-300',
   'Low':           'bg-cyan-500/10 text-cyan-600 border-cyan-500/20 hover:bg-cyan-500/15',
   'Medium':        'bg-success-100/10 text-success-100 border-success-100/20 hover:bg-success-100/15',
   'High':          'bg-yellow-500/10 text-yellow-600 border-yellow-500/20 hover:bg-yellow-500/15',
@@ -83,15 +83,15 @@ export function TopBar() {
   const pillBase = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium cursor-pointer transition-colors select-none';
 
   return (
-    <header className="h-12 flex-shrink-0 sticky top-0 z-40 flex items-center gap-3 px-4 bg-bg-000 border-b border-beige-200">
+    <header className="h-12 flex-shrink-0 sticky top-0 z-40 flex items-center gap-3 px-4 bg-bg-000 border-b border-gray-200">
       {/* ── Left: Sidebar toggle + Brand ── */}
       <div className="flex items-center gap-3 flex-shrink-0">
         <button
           onClick={toggleSidebar}
-          className="w-8 h-8 rounded-md flex items-center justify-center hover:bg-beige-200/50 transition-colors"
+          className="w-8 h-8 rounded-md flex items-center justify-center hover:bg-gray-200/50 transition-colors"
           title={sidebarCollapsed ? 'Expand sidebar (Ctrl/Cmd+B)' : 'Collapse sidebar (Ctrl/Cmd+B)'}
         >
-          <PanelLeft className="w-5 h-5 text-beige-600" />
+          <PanelLeft className="w-5 h-5 text-gray-600" />
         </button>
 
         {/* Logo */}
@@ -103,7 +103,7 @@ export function TopBar() {
 
         <div className="flex items-baseline gap-1.5">
           <span className="text-sm font-bold tracking-tight text-gray-900">OPENDEV</span>
-          <span className="text-[10px] uppercase tracking-wider text-beige-500 hidden sm:inline">AI Assistant</span>
+          <span className="text-[10px] uppercase tracking-wider text-gray-500 hidden sm:inline">AI Assistant</span>
         </div>
       </div>
 
@@ -172,7 +172,7 @@ export function TopBar() {
           )}
 
           {status.working_dir && status.model && (
-            <span className="text-beige-300">|</span>
+            <span className="text-gray-300">|</span>
           )}
 
           {status.model && (

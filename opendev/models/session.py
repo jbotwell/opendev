@@ -26,6 +26,8 @@ class SessionMetadata(BaseModel):
     summary: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     working_directory: Optional[str] = None
+    has_session_model: bool = False
+    owner_id: Optional[str] = None
 
     # Multi-channel fields
     channel: str = "cli"  # "telegram", "whatsapp", "web", "cli"
@@ -63,6 +65,7 @@ class Session(BaseModel):
     delivery_context: dict[str, Any] = Field(default_factory=dict)  # Where to send responses
     last_activity: Optional[datetime] = None  # Last message timestamp (for reset policies)
     workspace_confirmed: bool = False  # Has user selected workspace for this channel session?
+    owner_id: Optional[str] = None
 
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 

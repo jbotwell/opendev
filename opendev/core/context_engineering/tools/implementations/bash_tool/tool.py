@@ -1,4 +1,4 @@
-"""Tool for executing bash commands safely."""
+"""Main BashTool class with execute() method."""
 
 import os
 import platform
@@ -12,6 +12,8 @@ from typing import Any, Optional
 from opendev.models.config import AppConfig
 from opendev.models.operation import BashResult, Operation
 from opendev.core.context_engineering.tools.implementations.base import BaseTool
+from opendev.core.context_engineering.tools.implementations.bash_tool.security import SecurityMixin
+from opendev.core.context_engineering.tools.implementations.bash_tool.process import ProcessMixin
 
 
 # Safe commands that are generally allowed
@@ -77,7 +79,7 @@ def truncate_output(text: str, max_chars: int = MAX_OUTPUT_CHARS) -> str:
     )
 
 
-class BashTool(BaseTool):
+class BashTool(SecurityMixin, ProcessMixin, BaseTool):
     """Tool for executing bash commands with safety checks."""
 
     @property
@@ -103,20 +105,6 @@ class BashTool(BaseTool):
         self._task_manager = task_manager
         # Track background processes: {pid: {process, command, start_time, stdout_lines, stderr_lines}}
         self._background_processes = {}
-
-    def _needs_auto_confirm(self, command: str) -> bool:
-        """Check if command likely requires interactive confirmation.
-
-        Args:
-            command: The command string to check
-
-        Returns:
-            True if command matches known interactive patterns
-        """
-        for pattern in INTERACTIVE_COMMANDS:
-            if re.search(pattern, command, re.IGNORECASE):
-                return True
-        return False
 
     # Server command patterns - these should run in background mode with PTY
     _SERVER_PATTERNS = (
@@ -715,182 +703,3 @@ class BashTool(BaseTool):
                 error=error,
                 operation_id=operation.id if operation else None,
             )
-
-    def _is_command_allowed(self, command: str) -> bool:
-        """Check if command is in the allowed list.
-
-        Args:
-            command: Command to check
-
-        Returns:
-            True if command is allowed
-        """
-        # Get the base command (first word)
-        base_command = command.strip().split()[0] if command.strip() else ""
-
-        # Check if it's in safe commands
-        if base_command in SAFE_COMMANDS:
-            return True
-
-        # Check against permission patterns
-        return self.config.permissions.bash.is_allowed(command)
-
-    def _is_dangerous(self, command: str) -> bool:
-        """Check if command matches dangerous patterns.
-
-        Args:
-            command: Command to check
-
-        Returns:
-            True if command is dangerous
-        """
-        for pattern in DANGEROUS_PATTERNS:
-            if re.search(pattern, command, re.IGNORECASE):
-                return True
-
-        # Check config deny patterns
-        for pattern in self.config.permissions.bash.compiled_patterns:
-            if pattern.match(command):
-                return True
-
-        return False
-
-    def preview_command(self, command: str, working_dir: Optional[str] = None) -> str:
-        """Generate a preview of the command execution.
-
-        Args:
-            command: Command to preview
-            working_dir: Working directory
-
-        Returns:
-            Formatted preview string
-        """
-        work_dir = working_dir or str(self.working_dir)
-
-        preview = f"Command: {command}\n"
-        preview += f"Working Directory: {work_dir}\n"
-        preview += f"Timeout: {self.config.bash_timeout}s\n"
-
-        # Safety checks
-        if not self._is_command_allowed(command):
-            preview += "\n⚠️  WARNING: Command not in allowed list\n"
-
-        if self._is_dangerous(command):
-            preview += "\n❌ DANGER: Command matches dangerous pattern\n"
-
-        return preview
-
-    def list_processes(self) -> list[dict]:
-        """List all tracked background processes.
-
-        Returns:
-            List of process info dicts with pid, command, status, runtime
-        """
-        processes = []
-        for pid, info in list(self._background_processes.items()):
-            process = info["process"]
-            status = "running" if process.poll() is None else "finished"
-            runtime = time.time() - info["start_time"]
-
-            processes.append({
-                "pid": pid,
-                "command": info["command"],
-                "status": status,
-                "runtime": runtime,
-                "exit_code": process.returncode if status == "finished" else None,
-            })
-
-        return processes
-
-    def get_process_output(self, pid: int) -> dict:
-        """Get output from a background process.
-
-        Args:
-            pid: Process ID
-
-        Returns:
-            Dict with stdout, stderr, status, exit_code
-        """
-        if pid not in self._background_processes:
-            return {
-                "success": False,
-                "error": f"Process {pid} not found",
-            }
-
-        info = self._background_processes[pid]
-        process = info["process"]
-
-        # Just return what's already captured - don't try to read more
-        # (readline() blocks on pipes for long-running servers)
-        # Output was already captured at process start
-
-        # Check if process finished
-        return_code = process.poll()
-        status = "running" if return_code is None else "finished"
-
-        return {
-            "success": True,
-            "pid": pid,
-            "command": info["command"],
-            "status": status,
-            "exit_code": return_code,
-            "stdout": "".join(info["stdout_lines"]),  # Return all captured output
-            "stderr": "".join(info["stderr_lines"]),
-            "total_stdout": "".join(info["stdout_lines"]),
-            "total_stderr": "".join(info["stderr_lines"]),
-            "runtime": time.time() - info["start_time"],
-        }
-
-    def kill_process(self, pid: int, signal: int = 15) -> dict:
-        """Kill a background process.
-
-        Args:
-            pid: Process ID
-            signal: Signal to send (default: 15/SIGTERM)
-
-        Returns:
-            Dict with success status
-        """
-        if pid not in self._background_processes:
-            return {
-                "success": False,
-                "error": f"Process {pid} not found",
-            }
-
-        info = self._background_processes[pid]
-        process = info["process"]
-
-        try:
-            if signal == 9:
-                process.kill()  # SIGKILL
-            else:
-                process.terminate()  # SIGTERM
-
-            # Wait for process to finish
-            process.wait(timeout=5)
-
-            # Clean up
-            del self._background_processes[pid]
-
-            return {
-                "success": True,
-                "pid": pid,
-                "message": f"Process {pid} terminated",
-            }
-
-        except subprocess.TimeoutExpired:
-            # Force kill if terminate didn't work
-            process.kill()
-            del self._background_processes[pid]
-
-            return {
-                "success": True,
-                "pid": pid,
-                "message": f"Process {pid} force killed",
-            }
-
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Failed to kill process {pid}: {str(e)}",
-            }

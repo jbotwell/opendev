@@ -47,7 +47,7 @@ class TestMainAgentTaskComplete:
             "usage": {"total_tokens": 100}
         }
 
-        with patch.object(agent, '_MainAgent__http_client') as mock_client:
+        with patch.object(agent, '_priv_http_client') as mock_client:
             mock_client.post_json.return_value = mock_response
 
             deps = MagicMock()
@@ -97,7 +97,7 @@ class TestMainAgentTaskComplete:
             "usage": {"total_tokens": 100}
         }
 
-        with patch.object(agent, '_MainAgent__http_client') as mock_client:
+        with patch.object(agent, '_priv_http_client') as mock_client:
             mock_client.post_json.return_value = mock_response
 
             deps = MagicMock()
@@ -168,7 +168,7 @@ class TestMainAgentTaskComplete:
             ),
         ]
 
-        with patch.object(agent, '_MainAgent__http_client') as mock_client, \
+        with patch.object(agent, '_priv_http_client') as mock_client, \
              patch.object(agent, '_check_todo_completion', return_value=(True, "")):
             mock_client.post_json.side_effect = responses
 
@@ -281,7 +281,7 @@ class TestMainAgentTaskComplete:
             ),
         ]
 
-        with patch.object(agent, '_MainAgent__http_client') as mock_client, \
+        with patch.object(agent, '_priv_http_client') as mock_client, \
              patch.object(agent, '_check_todo_completion', return_value=(True, "")):
             mock_client.post_json.side_effect = responses
 

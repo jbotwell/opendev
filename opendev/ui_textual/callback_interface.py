@@ -114,7 +114,9 @@ class UICallbackProtocol(Protocol):
         """Called when a single subagent starts executing."""
         ...
 
-    def on_single_agent_complete(self, tool_call_id: str, success: bool) -> None:
+    def on_single_agent_complete(
+        self, tool_call_id: str, success: bool, failure_reason: str = ""
+    ) -> None:
         """Called when a single subagent completes."""
         ...
 
@@ -238,7 +240,9 @@ class BaseUICallback:
         """Called when a single subagent starts executing."""
         pass
 
-    def on_single_agent_complete(self, tool_call_id: str, success: bool) -> None:
+    def on_single_agent_complete(
+        self, tool_call_id: str, success: bool, failure_reason: str = ""
+    ) -> None:
         """Called when a single subagent completes."""
         pass
 
@@ -374,8 +378,12 @@ class ForwardingUICallback(BaseUICallback):
     ) -> None:
         self._forward('on_single_agent_start', agent_type, description, tool_call_id)
 
-    def on_single_agent_complete(self, tool_call_id: str, success: bool) -> None:
-        self._forward('on_single_agent_complete', tool_call_id, success)
+    def on_single_agent_complete(
+        self, tool_call_id: str, success: bool, failure_reason: str = ""
+    ) -> None:
+        self._forward(
+            'on_single_agent_complete', tool_call_id, success, failure_reason=failure_reason
+        )
 
     def on_parallel_agents_start(self, agent_infos: list) -> None:
         self._forward('on_parallel_agents_start', agent_infos)

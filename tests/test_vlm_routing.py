@@ -182,7 +182,7 @@ class TestResolveVlmModelAndClient:
             model_vlm_provider="google",
         )
         # Inject a pre-built VLM client
-        agent._MainAgent__vlm_http_client = mock_vlm_client
+        agent._priv_vlm_http_client = mock_vlm_client
         msgs = [_make_image_message()]
         _, client = agent._resolve_vlm_model_and_client(msgs)
         assert client is mock_vlm_client
@@ -197,7 +197,7 @@ class TestResolveVlmModelAndClient:
         )
         # Patch create_http_client_for_provider to raise ValueError
         with patch(
-            "opendev.core.agents.main_agent.create_http_client_for_provider",
+            "opendev.core.agents.main_agent.http_clients.create_http_client_for_provider",
             side_effect=ValueError("No API key"),
         ):
             msgs = [_make_image_message()]
@@ -243,7 +243,7 @@ class TestCallLlmVlmRouting:
         result_obj.response = self._make_success_response()
         result_obj.interrupted = False
         mock_client.post_json.return_value = result_obj
-        agent._MainAgent__http_client = mock_client
+        agent._priv_http_client = mock_client
 
         msgs = [
             {"role": "system", "content": "sys"},
@@ -270,7 +270,7 @@ class TestCallLlmVlmRouting:
         result_obj.response = self._make_success_response()
         result_obj.interrupted = False
         mock_client.post_json.return_value = result_obj
-        agent._MainAgent__http_client = mock_client
+        agent._priv_http_client = mock_client
 
         msgs = [
             {"role": "system", "content": "sys"},
@@ -318,7 +318,7 @@ class TestRunSyncVlmRouting:
         result_obj.response = resp
         result_obj.interrupted = False
         mock_client.post_json.return_value = result_obj
-        agent._MainAgent__http_client = mock_client
+        agent._priv_http_client = mock_client
 
         # Stub _maybe_compact to passthrough
         agent._compactor = MagicMock()

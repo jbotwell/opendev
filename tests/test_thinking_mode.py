@@ -585,10 +585,10 @@ class TestThinkingModelSelection:
                 "choices": [{"message": {"content": "test response", "reasoning_content": "my reasoning"}}]
             }
 
-            with patch.object(agent, "_MainAgent__http_client") as mock_client:
+            with patch.object(agent, "_priv_http_client") as mock_client:
                 mock_client.post_json.return_value = mock_result
                 # Use the normal http client by patching _thinking_http_client to None
-                agent._MainAgent__thinking_http_client = None
+                agent._priv_thinking_http_client = None
 
                 response = agent.call_llm([{"role": "user", "content": "test"}], thinking_visible=True)
 
@@ -628,7 +628,7 @@ class TestThinkingModelSelection:
                 "choices": [{"message": {"content": "test response"}}]
             }
 
-            with patch.object(agent, "_MainAgent__http_client") as mock_client:
+            with patch.object(agent, "_priv_http_client") as mock_client:
                 mock_client.post_json.return_value = mock_result
 
                 response = agent.call_llm([{"role": "user", "content": "test"}], thinking_visible=False)
@@ -667,7 +667,7 @@ class TestThinkingModelSelection:
                 "choices": [{"message": {"content": "test response"}}]
             }
 
-            with patch.object(agent, "_MainAgent__http_client") as mock_client:
+            with patch.object(agent, "_priv_http_client") as mock_client:
                 mock_client.post_json.return_value = mock_result
 
                 response = agent.call_llm([{"role": "user", "content": "test"}], thinking_visible=True)
@@ -715,7 +715,7 @@ class TestReasoningContentExtraction:
                 }]
             }
 
-            with patch.object(agent, "_MainAgent__http_client") as mock_client:
+            with patch.object(agent, "_priv_http_client") as mock_client:
                 mock_client.post_json.return_value = mock_result
 
                 response = agent.call_llm([{"role": "user", "content": "test"}])
@@ -753,7 +753,7 @@ class TestReasoningContentExtraction:
                 "choices": [{"message": {"content": "Just content, no reasoning"}}]
             }
 
-            with patch.object(agent, "_MainAgent__http_client") as mock_client:
+            with patch.object(agent, "_priv_http_client") as mock_client:
                 mock_client.post_json.return_value = mock_result
 
                 response = agent.call_llm([{"role": "user", "content": "test"}])
@@ -956,9 +956,9 @@ class TestToolChoiceBehavior:
                 "choices": [{"message": {"content": "Hello!"}}]
             }
 
-            with patch.object(agent, "_MainAgent__http_client") as mock_client:
+            with patch.object(agent, "_priv_http_client") as mock_client:
                 mock_client.post_json.return_value = mock_result
-                agent._MainAgent__thinking_http_client = None
+                agent._priv_thinking_http_client = None
 
                 # Call without force_think (parameter removed)
                 agent.call_llm(

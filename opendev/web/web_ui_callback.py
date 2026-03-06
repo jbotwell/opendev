@@ -147,7 +147,9 @@ class WebUICallback(BaseUICallback):
             },
         })
 
-    def on_single_agent_complete(self, tool_call_id: str, success: bool) -> None:
+    def on_single_agent_complete(
+        self, tool_call_id: str, success: bool, failure_reason: str = ""
+    ) -> None:
         """Broadcast when a single subagent finishes."""
         logger.info(f"Subagent complete: {tool_call_id} success={success}")
         self._broadcast({
@@ -155,6 +157,7 @@ class WebUICallback(BaseUICallback):
             "data": {
                 "tool_call_id": tool_call_id,
                 "success": success,
+                "failure_reason": failure_reason,
                 "session_id": self.session_id,
             },
         })
