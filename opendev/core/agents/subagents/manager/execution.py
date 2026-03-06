@@ -172,12 +172,18 @@ class ExecutionMixin:
                     agent.system_prompt = docker_preamble + "\n\n" + base_prompt
                 else:
                     agent.system_prompt = base_prompt
+                # Clear stale prompt cache from constructor's build_system_prompt()
+                agent._system_stable = None
+                agent._system_dynamic = ""
         else:
             agent = compiled["agent"]
             allowed_tools = compiled["tool_names"]
             # Apply the subagent's specialized system prompt
             if hasattr(agent, "_subagent_system_prompt") and agent._subagent_system_prompt:
                 agent.system_prompt = agent._subagent_system_prompt
+                # Clear stale prompt cache so run_sync uses subagent prompt
+                agent._system_stable = None
+                agent._system_dynamic = ""
 
         # Create nested callback wrapper if parent callback provided
         # If ui_callback is already a NestedUICallback, use it directly (avoids double-wrapping)
