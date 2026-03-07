@@ -18,6 +18,7 @@ import httpx
 from opendev.core.agents.components.api.base_adapter import ProviderAdapter
 from opendev.core.agents.components.api.http_client import (
     MAX_RETRIES,
+    RETRYABLE_NETWORK_EXCEPTIONS,
     RETRYABLE_STATUS_CODES,
     RETRY_DELAYS,
 )
@@ -354,6 +355,25 @@ class OpenAIResponsesAdapter(ProviderAdapter):
 
                 return HttpResult(success=True, response=mock_response)
 
+            except RETRYABLE_NETWORK_EXCEPTIONS as exc:
+                last_result = HttpResult(success=False, error=str(exc))
+                if attempt < MAX_RETRIES:
+                    delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
+                    logger.warning(
+                        "OpenAI Responses network error: %s — retrying in %.1fs (attempt %d/%d)",
+                        exc,
+                        delay,
+                        attempt + 1,
+                        MAX_RETRIES,
+                    )
+                    if self._client.is_closed:
+                        self._client = httpx.Client(
+                            headers=self.headers,
+                            timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0),
+                        )
+                    time.sleep(delay)
+                    continue
+                return last_result
             except Exception as exc:
                 return HttpResult(success=False, error=str(exc))
 

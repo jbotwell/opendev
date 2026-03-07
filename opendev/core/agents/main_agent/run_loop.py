@@ -310,7 +310,17 @@ class RunLoopMixin:
                         if api_attempt < MAX_API_RETRIES - 1:
                             import time as _time_mod
 
-                            _time_mod.sleep(api_retry_delays[api_attempt])
+                            deadline = _time_mod.monotonic() + api_retry_delays[api_attempt]
+                            while _time_mod.monotonic() < deadline:
+                                if monitor is not None and monitor.should_interrupt():
+                                    interrupted = True
+                                    return {
+                                        "content": "Task interrupted by user",
+                                        "messages": messages,
+                                        "success": False,
+                                        "interrupted": True,
+                                    }
+                                _time_mod.sleep(0.1)
                             continue
                         return {
                             "content": last_api_error,
@@ -326,7 +336,17 @@ class RunLoopMixin:
                         if api_attempt < MAX_API_RETRIES - 1:
                             import time as _time_mod
 
-                            _time_mod.sleep(api_retry_delays[api_attempt])
+                            deadline = _time_mod.monotonic() + api_retry_delays[api_attempt]
+                            while _time_mod.monotonic() < deadline:
+                                if monitor is not None and monitor.should_interrupt():
+                                    interrupted = True
+                                    return {
+                                        "content": "Task interrupted by user",
+                                        "messages": messages,
+                                        "success": False,
+                                        "interrupted": True,
+                                    }
+                                _time_mod.sleep(0.1)
                             continue
                         return {
                             "content": last_api_error,
@@ -344,6 +364,14 @@ class RunLoopMixin:
                 response_data = response.json()
                 choice = response_data["choices"][0]
                 message_data = choice["message"]
+
+                # Cost tracking: record usage from this API call
+                api_usage = response_data.get("usage")
+                if api_usage and hasattr(self, "_cost_tracker") and self._cost_tracker:
+                    model_info = self.config.get_model_info()
+                    self._cost_tracker.record_usage(api_usage, model_info)
+                    if ui_callback and hasattr(ui_callback, "on_cost_update"):
+                        ui_callback.on_cost_update(self._cost_tracker.total_cost_usd)
 
                 raw_content = message_data.get("content")
                 cleaned_content = self._response_cleaner.clean(raw_content) if raw_content else None

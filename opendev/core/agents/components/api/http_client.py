@@ -18,6 +18,16 @@ MAX_RETRIES = 3
 RETRY_DELAYS = [1.0, 2.0, 4.0]  # Exponential backoff in seconds
 RETRYABLE_STATUS_CODES = {429, 503}
 
+# Network exceptions that are transient and worth retrying
+RETRYABLE_NETWORK_EXCEPTIONS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpx.PoolTimeout,
+    httpx.RemoteProtocolError,
+)
+
 
 @dataclass
 class HttpResult:
@@ -27,6 +37,7 @@ class HttpResult:
     response: Union[httpx.Response, None] = None
     error: Union[str, None] = None
     interrupted: bool = False
+    retryable: bool = False
 
 
 # Import ProviderAdapter lazily to avoid circular import at module level.
@@ -159,9 +170,44 @@ class AgentHttpClient:
 
             result = self._execute_request(payload, task_monitor=task_monitor)
 
-            # On network/exception failure, don't retry — return immediately
+            # On failure, check if it's retryable
             if not result.success:
-                return result
+                if result.interrupted or not result.retryable:
+                    return result
+                # Retryable network error — use same backoff logic as 429/503
+                last_result = result
+                if attempt < MAX_RETRIES:
+                    delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
+                    logger.warning(
+                        "Network error: %s — retrying in %.1fs (attempt %d/%d)",
+                        result.error,
+                        delay,
+                        attempt + 1,
+                        MAX_RETRIES,
+                    )
+                    # Recreate client if it was closed (e.g. by interrupt callback)
+                    if self._client.is_closed:
+                        self._client = httpx.Client(
+                            headers=self._headers, timeout=self.TIMEOUT
+                        )
+                    # Sleep in small increments to stay responsive to interrupts
+                    deadline = time.monotonic() + delay
+                    while time.monotonic() < deadline:
+                        if self._should_interrupt(task_monitor):
+                            return HttpResult(
+                                success=False,
+                                error="Interrupted by user",
+                                interrupted=True,
+                            )
+                        time.sleep(min(0.1, deadline - time.monotonic()))
+                    continue
+                # Exhausted retries
+                logger.warning(
+                    "Network error: %s — exhausted %d retries",
+                    result.error,
+                    MAX_RETRIES,
+                )
+                return last_result
 
             # Check for retryable HTTP status codes
             response = result.response
@@ -212,6 +258,8 @@ class AgentHttpClient:
             try:
                 response = self._client.post(self._api_url, json=payload)
                 return HttpResult(success=True, response=response)
+            except RETRYABLE_NETWORK_EXCEPTIONS as exc:
+                return HttpResult(success=False, error=str(exc), retryable=True)
             except Exception as exc:  # pragma: no cover - propagation handled by caller
                 return HttpResult(success=False, error=str(exc))
 
@@ -263,7 +311,9 @@ class AgentHttpClient:
                 token.set_http_cancel_callback(None)
 
         if response_container["error"]:
-            return HttpResult(success=False, error=str(response_container["error"]))
+            exc = response_container["error"]
+            retryable = isinstance(exc, RETRYABLE_NETWORK_EXCEPTIONS)
+            return HttpResult(success=False, error=str(exc), retryable=retryable)
 
         return HttpResult(success=True, response=response_container["response"])
 
