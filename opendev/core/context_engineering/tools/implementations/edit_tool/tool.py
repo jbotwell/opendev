@@ -2,6 +2,7 @@
 
 import logging
 import shutil
+import threading
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
@@ -22,6 +23,24 @@ _LOG = logging.getLogger(__name__)
 
 class EditTool(BaseTool):
     """Tool for editing existing files with diff preview."""
+
+    _file_locks: dict[str, threading.Lock] = {}
+    _lock_registry_lock = threading.Lock()
+
+    @classmethod
+    def _get_file_lock(cls, file_path: str) -> threading.Lock:
+        """Get or create a lock for the given file path.
+
+        Args:
+            file_path: Absolute path to the file.
+
+        Returns:
+            A threading.Lock dedicated to that file path.
+        """
+        with cls._lock_registry_lock:
+            if file_path not in cls._file_locks:
+                cls._file_locks[file_path] = threading.Lock()
+            return cls._file_locks[file_path]
 
     @property
     def name(self) -> str:
@@ -155,108 +174,110 @@ class EditTool(BaseTool):
             )
 
         try:
-            # Read original content
-            with open(path, "r", encoding="utf-8") as f:
-                original = f.read()
+            # Serialize concurrent edits to the same file
+            with self._get_file_lock(str(path)):
+                # Read original content
+                with open(path, "r", encoding="utf-8") as f:
+                    original = f.read()
 
-            # Find old_content with fuzzy matching fallback
-            found, actual_old_content = self._find_content(original, old_content)
-            if not found:
-                error = f"Content not found in file: {old_content[:50]}..."
+                # Find old_content with fuzzy matching fallback
+                found, actual_old_content = self._find_content(original, old_content)
+                if not found:
+                    error = f"Content not found in file: {old_content[:50]}..."
+                    if operation:
+                        operation.mark_failed(error)
+                    return EditResult(
+                        success=False,
+                        file_path=str(path),
+                        lines_added=0,
+                        lines_removed=0,
+                        error=error,
+                        operation_id=operation.id if operation else None,
+                    )
+
+                # Use the actual content found in file for subsequent operations
+                old_content = actual_old_content
+
+                # Check if old_content is unique (if not match_all)
+                count = original.count(old_content)
+                if not match_all and count > 1:
+                    # Find line numbers of each occurrence to help LLM provide more context
+                    occurrences = []
+                    search_pos = 0
+                    for _ in range(count):
+                        pos = original.find(old_content, search_pos)
+                        if pos == -1:
+                            break
+                        line_num = original[:pos].count("\n") + 1
+                        occurrences.append(line_num)
+                        search_pos = pos + 1
+
+                    locations = ", ".join(f"line {n}" for n in occurrences)
+                    error = (
+                        f"Content appears {count} times at {locations}. "
+                        "Provide more surrounding context in old_content to uniquely "
+                        "identify which occurrence to edit."
+                    )
+                    if operation:
+                        operation.mark_failed(error)
+                    return EditResult(
+                        success=False,
+                        file_path=str(path),
+                        lines_added=0,
+                        lines_removed=0,
+                        error=error,
+                        operation_id=operation.id if operation else None,
+                    )
+
+                # Perform replacement
+                if match_all:
+                    modified = original.replace(old_content, new_content)
+                else:
+                    modified = original.replace(old_content, new_content, 1)
+
+                # Calculate diff statistics and textual diff
+                diff = Diff(str(path), original, modified)
+                stats = diff.get_stats()
+                diff_text = diff.generate_unified_diff(context_lines=3)
+
+                # Dry run - don't actually write
+                if dry_run:
+                    return EditResult(
+                        success=True,
+                        file_path=str(path),
+                        lines_added=stats["lines_added"],
+                        lines_removed=stats["lines_removed"],
+                        diff=diff_text,
+                        operation_id=operation.id if operation else None,
+                    )
+
+                # Mark operation as executing
                 if operation:
-                    operation.mark_failed(error)
-                return EditResult(
-                    success=False,
-                    file_path=str(path),
-                    lines_added=0,
-                    lines_removed=0,
-                    error=error,
-                    operation_id=operation.id if operation else None,
-                )
+                    operation.mark_executing()
 
-            # Use the actual content found in file for subsequent operations
-            old_content = actual_old_content
+                # Create backup if requested
+                backup_path = None
+                if backup and self.config.operation.backup_before_edit:
+                    backup_path = str(path) + ".bak"
+                    shutil.copy2(path, backup_path)
 
-            # Check if old_content is unique (if not match_all)
-            count = original.count(old_content)
-            if not match_all and count > 1:
-                # Find line numbers of each occurrence to help LLM provide more context
-                occurrences = []
-                search_pos = 0
-                for _ in range(count):
-                    pos = original.find(old_content, search_pos)
-                    if pos == -1:
-                        break
-                    line_num = original[:pos].count("\n") + 1
-                    occurrences.append(line_num)
-                    search_pos = pos + 1
+                # Write modified content
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(modified)
 
-                locations = ", ".join(f"line {n}" for n in occurrences)
-                error = (
-                    f"Content appears {count} times at {locations}. "
-                    "Provide more surrounding context in old_content to uniquely "
-                    "identify which occurrence to edit."
-                )
+                # Mark operation as successful
                 if operation:
-                    operation.mark_failed(error)
-                return EditResult(
-                    success=False,
-                    file_path=str(path),
-                    lines_added=0,
-                    lines_removed=0,
-                    error=error,
-                    operation_id=operation.id if operation else None,
-                )
+                    operation.mark_success()
 
-            # Perform replacement
-            if match_all:
-                modified = original.replace(old_content, new_content)
-            else:
-                modified = original.replace(old_content, new_content, 1)
-
-            # Calculate diff statistics and textual diff
-            diff = Diff(str(path), original, modified)
-            stats = diff.get_stats()
-            diff_text = diff.generate_unified_diff(context_lines=3)
-
-            # Dry run - don't actually write
-            if dry_run:
                 return EditResult(
                     success=True,
                     file_path=str(path),
                     lines_added=stats["lines_added"],
                     lines_removed=stats["lines_removed"],
+                    backup_path=backup_path,
                     diff=diff_text,
                     operation_id=operation.id if operation else None,
                 )
-
-            # Mark operation as executing
-            if operation:
-                operation.mark_executing()
-
-            # Create backup if requested
-            backup_path = None
-            if backup and self.config.operation.backup_before_edit:
-                backup_path = str(path) + ".bak"
-                shutil.copy2(path, backup_path)
-
-            # Write modified content
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(modified)
-
-            # Mark operation as successful
-            if operation:
-                operation.mark_success()
-
-            return EditResult(
-                success=True,
-                file_path=str(path),
-                lines_added=stats["lines_added"],
-                lines_removed=stats["lines_removed"],
-                backup_path=backup_path,
-                diff=diff_text,
-                operation_id=operation.id if operation else None,
-            )
 
         except Exception as e:
             error = f"Failed to edit file: {str(e)}"
@@ -414,7 +435,7 @@ class EditTool(BaseTool):
         Returns:
             Resolved Path object
         """
-        p = Path(path)
+        p = Path(path).expanduser()
         if p.is_absolute():
             return p
         return (self.working_dir / p).resolve()
