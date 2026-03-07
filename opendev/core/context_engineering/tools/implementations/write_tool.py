@@ -177,7 +177,7 @@ class WriteTool(BaseTool):
         Returns:
             Resolved Path object
         """
-        p = Path(path)
+        p = Path(path).expanduser()
         if p.is_absolute():
             return p
         return (self.working_dir / p).resolve()

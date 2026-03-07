@@ -100,7 +100,7 @@ class LlmCallsMixin:
             http_client = self._http_client
 
         # Load critique system prompt
-        critique_system_prompt = load_prompt("system/critique_system_prompt")
+        critique_system_prompt = load_prompt("system/critique")
 
         # Build messages for critique
         critique_messages = [

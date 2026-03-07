@@ -80,6 +80,29 @@ class PresentPlanTool:
                 f"to {plan_file_path}.",
             }
 
+        # Validate plan has required structure for todo creation
+        if "---BEGIN PLAN---" not in plan_content:
+            return {
+                "success": False,
+                "error": "Plan is missing the required ---BEGIN PLAN--- delimiter.",
+                "output": "Plan file does not follow the required format. "
+                "Re-spawn the Planner subagent and ensure it writes "
+                "the plan with ---BEGIN PLAN--- / ---END PLAN--- delimiters "
+                f"to {plan_file_path}.",
+            }
+
+        from opendev.core.agents.components.response.plan_parser import parse_plan
+
+        parsed = parse_plan(plan_content)
+        if not parsed or not parsed.steps:
+            return {
+                "success": False,
+                "error": "Plan has no parseable implementation steps.",
+                "output": "Plan file has the delimiters but no '## Implementation Steps' "
+                "with numbered items. Re-spawn the Planner subagent to write "
+                f"a properly structured plan to {plan_file_path}.",
+            }
+
         # Store plan_file_path in session metadata
         if session_manager:
             try:

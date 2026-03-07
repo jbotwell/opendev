@@ -147,6 +147,14 @@ class RunLoopMixin:
                 }
             return results_by_id
 
+        # Fire on_tool_call for ALL tools upfront (before any execution starts)
+        # This lets the UI show all tools simultaneously with spinners
+        if ui_callback and hasattr(ui_callback, "on_tool_call"):
+            for tc in tool_calls:
+                t_name = tc["function"]["name"]
+                t_args = json.loads(tc["function"]["arguments"])
+                ui_callback.on_tool_call(t_name, t_args, tool_call_id=tc["id"])
+
         def _run_one(tc: dict) -> tuple[str, dict]:
             name = tc["function"]["name"]
             try:
@@ -176,6 +184,14 @@ class RunLoopMixin:
                     call_id = tc["id"]
                     result = {"success": False, "error": str(e)}
                 results_by_id[call_id] = result
+
+                # Fire on_tool_result as each tool completes (real-time)
+                if ui_callback and hasattr(ui_callback, "on_tool_result"):
+                    t_name = tc["function"]["name"]
+                    t_args = json.loads(tc["function"]["arguments"])
+                    ui_callback.on_tool_result(
+                        t_name, t_args, result, tool_call_id=tc["id"]
+                    )
 
         return results_by_id
 
@@ -451,20 +467,15 @@ class RunLoopMixin:
 
                 if all_parallelizable:
                     # Parallel path for read-only tools
+                    # UI callbacks fire in real-time inside _execute_tools_parallel
                     results_by_id = self._execute_tools_parallel(
                         tool_calls, deps, task_monitor, ui_callback, is_subagent
                     )
 
-                    # Check for interrupts and append results in original order
+                    # Append results to messages in original order
                     for tc in tool_calls:
                         result = results_by_id[tc["id"]]
                         t_name = tc["function"]["name"]
-                        t_args = json.loads(tc["function"]["arguments"])
-
-                        if ui_callback and hasattr(ui_callback, "on_tool_call"):
-                            ui_callback.on_tool_call(t_name, t_args)
-                        if ui_callback and hasattr(ui_callback, "on_tool_result"):
-                            ui_callback.on_tool_result(t_name, t_args, result)
 
                         if result.get("interrupted"):
                             interrupted = True
@@ -524,7 +535,9 @@ class RunLoopMixin:
 
                     # Notify UI callback before tool execution
                     if ui_callback and hasattr(ui_callback, "on_tool_call"):
-                        ui_callback.on_tool_call(tool_name, tool_args)
+                        ui_callback.on_tool_call(
+                            tool_name, tool_args, tool_call_id=tool_call["id"]
+                        )
 
                     # Log tool registry type for debugging Docker execution
                     _logger = logging.getLogger(__name__)
@@ -544,7 +557,9 @@ class RunLoopMixin:
 
                     # Notify UI callback after tool execution
                     if ui_callback and hasattr(ui_callback, "on_tool_result"):
-                        ui_callback.on_tool_result(tool_name, tool_args, result)
+                        ui_callback.on_tool_result(
+                            tool_name, tool_args, result, tool_call_id=tool_call["id"]
+                        )
 
                     # Check if tool execution was interrupted
                     if result.get("interrupted"):

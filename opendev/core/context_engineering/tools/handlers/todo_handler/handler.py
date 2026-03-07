@@ -171,3 +171,13 @@ class TodoHandler(CrudMixin, QueryMixin):
             "failed_count": failed_count,
             "todo_ids": created_ids,
         }
+
+    def clear_todos(self) -> dict:
+        """Clear all todos, removing the entire todo list."""
+        count = len(self._todos)
+        self._todos.clear()
+        self._next_id = 1
+        return {
+            "success": True,
+            "output": f"Cleared {count} todo(s). Todo list removed.",
+        }

@@ -262,7 +262,7 @@ Please provide refined reasoning that addresses these concerns. Keep it concise 
                     if refined and refined.strip():
                         # Display refined thinking in UI
                         if ui_callback and hasattr(ui_callback, "on_thinking"):
-                            ui_callback.on_thinking(f"[Refined]\n{refined}")
+                            ui_callback.on_thinking(refined)
                         return refined
             finally:
                 self._current_task_monitor = None

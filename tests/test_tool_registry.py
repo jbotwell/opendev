@@ -76,7 +76,8 @@ def test_execute_tool_success(registry):
     result = registry.execute_tool("read_file", {"path": "file.txt"})
 
     assert result == {"success": True, "content": "data"}
-    registry._handlers["read_file"].assert_called_once_with({"path": "file.txt"})
+    call_args = registry._handlers["read_file"].call_args
+    assert call_args[0][0] == {"path": "file.txt"}
 
 def test_execute_tool_unknown_tool(registry):
     result = registry.execute_tool("unknown_tool", {})

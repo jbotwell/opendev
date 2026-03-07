@@ -30,6 +30,7 @@ _TOOL_DISPLAY_PARTS: dict[str, tuple[str, str]] = {
     "update_todo": ("Update_Todos", "todo"),
     "complete_todo": ("Complete_Todos", "todo"),
     "list_todos": ("List_Todos", "todos"),
+    "clear_todos": ("Clear_Todos", "todos"),
     "spawn_subagent": ("Spawn", "subagent"),
     "docker_start": ("Starting", "Docker container"),
     "docker_stop": ("Stopping", "Docker container"),

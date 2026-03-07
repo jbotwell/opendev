@@ -15,7 +15,7 @@ Tool schemas are provided separately. Key categories:
 **User Interaction**: ask_user (ask clarifying questions when implementing technical tasks with unclear requirements. Do NOT use for greetings, social messages, or simple conversations)
 **Web**: fetch_url (use `deep_crawl=true` for crawling), capture_web_screenshot, capture_screenshot, analyze_image, open_browser
 **MCP**: search_tools (keyword query) → discover MCP tools, then call them with data queries
-**Todos**: write_todos, update_todo, complete_todo, list_todos
+**Todos**: write_todos, update_todo, complete_todo, list_todos, clear_todos
 **Subagents**: spawn_subagent (for complex tasks, user questions, deep research, multi-file work)
 
 **MCP Workflow**: `search_tools("github repository")` finds tools like `mcp__github__search_repositories`. Then call the discovered tool with your data query (e.g., `language:java stars:>=500`).

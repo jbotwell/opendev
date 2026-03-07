@@ -535,6 +535,18 @@ _BUILTIN_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "clear_todos",
+            "description": load_tool_description("clear_todos"),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "open_browser",
             "description": load_tool_description("open_browser"),
             "parameters": {

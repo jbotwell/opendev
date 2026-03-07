@@ -69,9 +69,15 @@ class TestCheckUsage:
 
     def test_mask_at_80_pct(self) -> None:
         compactor = _make_compactor(max_context_tokens=100)
-        compactor.update_from_api_usage(85, 5)
+        compactor.update_from_api_usage(82, 5)
         level = compactor.check_usage([], "")
         assert level == OptimizationLevel.MASK
+
+    def test_prune_at_85_pct(self) -> None:
+        compactor = _make_compactor(max_context_tokens=100)
+        compactor.update_from_api_usage(87, 5)
+        level = compactor.check_usage([], "")
+        assert level == OptimizationLevel.PRUNE
 
     def test_aggressive_at_90_pct(self) -> None:
         compactor = _make_compactor(max_context_tokens=100)
@@ -101,7 +107,7 @@ class TestObservationMasking:
             msgs.append({
                 "role": "assistant",
                 "content": "",
-                "tool_calls": [{"id": f"call_{i}", "function": {"name": "read_file", "arguments": "{}"}}],
+                "tool_calls": [{"id": f"call_{i}", "function": {"name": "bash", "arguments": "{}"}}],
             })
             msgs.append({
                 "role": "tool",

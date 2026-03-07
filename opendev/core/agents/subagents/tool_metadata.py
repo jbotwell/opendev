@@ -38,6 +38,7 @@ _TOOL_DISPLAY_NAMES = {
     "update_todo": "Update Todo",
     "complete_todo": "Complete Todo",
     "list_todos": "List Todos",
+    "clear_todos": "Clear Todos",
     "open_browser": "Open Browser",
     "capture_screenshot": "Capture Screenshot",
     "analyze_image": "Analyze Image",

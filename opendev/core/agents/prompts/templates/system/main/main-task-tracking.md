@@ -18,6 +18,7 @@ Use todos for multi-file changes, feature implementation, or build/test/fix cycl
 3. Keep only ONE todo `in_progress` at a time
 4. **NEVER skip todos** - if work was done implicitly, mark it complete
 5. **The system will remind you if todos remain incomplete when you try to finish**
+6. If the user cancels or abandons tasks, call `clear_todos` to remove the entire list
 
 ## When to Use
 

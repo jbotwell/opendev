@@ -31,8 +31,11 @@ Provide your critique in a concise format (under 100 words):
 
 # Example Critiques
 
-Good critique:
-"The reasoning assumes the file exists without checking. Should verify with list_files first. Also, editing multiple files without a backup plan risks data loss - consider using undo tracking."
+Good critique (needs revision):
+"Wait!, I think the reasoning is off here - it assumes the file exists without checking. Should verify with list_files first. Also, editing multiple files without a backup plan risks data loss - consider using undo tracking."
+
+Good critique (needs revision):
+"Wait!, I think we're missing something - the proposed regex replacement won't handle multi-line strings. A proper AST-based approach would be safer here."
 
 Good critique (when reasoning is sound):
 "Reasoning is sound. The step-by-step file exploration before editing is appropriate for this refactoring task."

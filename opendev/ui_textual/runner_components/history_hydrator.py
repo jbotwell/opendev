@@ -221,6 +221,10 @@ class HistoryHydrator:
         """
         content = (message.content or "").strip()
 
+        # Skip messages marked as hidden (e.g., system-reminder injections)
+        if message.metadata.get("display_hidden"):
+            return
+
         if message.role == Role.USER:
             if not content:
                 return

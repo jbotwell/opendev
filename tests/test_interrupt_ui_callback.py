@@ -10,6 +10,7 @@ def test_on_interrupt_removes_blank_line_and_shows_message():
     # Create mock conversation widget with lines array
     mock_conversation = Mock()
     mock_app = Mock()
+    mock_app._interrupt_message_written = False
 
     # Mock lines array with a blank line (simulating what add_user_message adds)
     mock_conversation.lines = [
@@ -25,10 +26,14 @@ def test_on_interrupt_removes_blank_line_and_shows_message():
     mock_conversation.write = track_write
     mock_conversation.stop_spinner = Mock()
 
-    # Track calls to _truncate_from
+    # Track calls to _truncate_from — must actually modify lines to avoid infinite loop
+    # in strip_trailing_blanks (which loops until no trailing blank lines remain)
     truncate_calls = []
+    lines_ref = mock_conversation.lines
+
     def track_truncate(index):
         truncate_calls.append(index)
+        del lines_ref[index:]
 
     mock_conversation._truncate_from = track_truncate
 
@@ -84,6 +89,7 @@ def test_on_interrupt_without_blank_line():
     # Create mock conversation widget with no blank line
     mock_conversation = Mock()
     mock_app = Mock()
+    mock_app._interrupt_message_written = False
 
     # Mock lines array WITHOUT a blank line at the end
     mock_conversation.lines = [

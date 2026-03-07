@@ -472,10 +472,11 @@ class QueryProcessor:
 
         # Inject plan mode request if user toggled Shift+Tab
         if plan_requested:
+            plan_path = self.mode_manager.get_plan_file_path() or "~/.opendev/plans/plan.md"
             messages.append(
                 {
                     "role": "user",
-                    "content": f"<system-reminder>{get_reminder('plan_subagent_request')}</system-reminder>",
+                    "content": f"<system-reminder>{get_reminder('plan_subagent_request', plan_file_path=plan_path)}</system-reminder>",
                 }
             )
 
@@ -540,10 +541,11 @@ class QueryProcessor:
 
         # Inject plan mode request if user toggled Shift+Tab
         if plan_requested:
+            plan_path = self.mode_manager.get_plan_file_path() or "~/.opendev/plans/plan.md"
             messages.append(
                 {
                     "role": "user",
-                    "content": f"<system-reminder>{get_reminder('plan_subagent_request')}</system-reminder>",
+                    "content": f"<system-reminder>{get_reminder('plan_subagent_request', plan_file_path=plan_path)}</system-reminder>",
                 }
             )
 

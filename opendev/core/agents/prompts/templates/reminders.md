@@ -14,7 +14,7 @@ You MUST continue working on the next incomplete todo. Do not summarize or finis
 {thinking_trace}
 </thinking_trace>
 
-Based on this analysis, proceed with the appropriate action.
+You MUST follow the action plan in your thinking trace above. Execute exactly the next step it describes — do not skip ahead or choose a different approach.
 
 --- subagent_complete_signal ---
 <subagent_complete>
@@ -110,8 +110,8 @@ COMMAND FAILED with exit code {exit_code}. Review the error output above and fix
 
 --- plan_subagent_request ---
 User requested planning. Spawn a Planner subagent to plan this task. Include
-the task description and a plan file path (~/.opendev/plans/<descriptive-name>.md)
-in the prompt. After the Planner returns, call present_plan with the plan file path.
+the task description and this exact plan file path in the prompt: {plan_file_path}
+After the Planner returns, call present_plan(plan_file_path="{plan_file_path}").
 
 --- tool_denied_nudge ---
 The tool call was denied. Do NOT re-attempt the exact same call. Consider why it was denied and adjust your approach. If unclear, use ask_user to ask the user why the tool call was denied.
