@@ -207,5 +207,5 @@ class MainAgent(HttpClientMixin, LlmCallsMixin, RunLoopMixin, BaseAgent):
             self._compactor = ContextCompactor(self.config, self._http_client)
 
         if self._compactor.should_compact(messages, self.system_prompt):
-            return self._compactor.compact(messages, self.system_prompt)
+            return self._compactor.compact_with_retry(messages, self.system_prompt)
         return messages

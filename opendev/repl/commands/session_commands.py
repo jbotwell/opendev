@@ -61,7 +61,7 @@ class SessionCommands(CommandHandler):
         system_prompt = ""
 
         before_count = len(messages)
-        compacted = compactor.compact(messages, system_prompt)
+        compacted = compactor.compact_with_retry(messages, system_prompt, trigger="manual")
         after_count = len(compacted)
 
         # Store compaction point in session metadata for prepare_messages to use

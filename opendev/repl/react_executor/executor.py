@@ -605,7 +605,7 @@ class ReactExecutor(ThinkingMixin, ToolProcessingMixin, SessionPersistenceMixin,
         if should:
             self._force_compact_next = False
             before_count = len(ctx.messages)
-            compacted = self._compactor.compact(ctx.messages, system_prompt)
+            compacted = self._compactor.compact_with_retry(ctx.messages, system_prompt)
             ctx.messages[:] = compacted  # Mutate in-place
             after_count = len(ctx.messages)
             logger.info("Compacted %d messages -> %d", before_count, after_count)

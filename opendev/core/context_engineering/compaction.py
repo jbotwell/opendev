@@ -35,6 +35,9 @@ STAGE_COMPACT = 0.99
 # Token budget to protect from pruning (recent tool outputs)
 PRUNE_PROTECTED_TOKENS = 40_000
 
+# Tool types whose outputs survive compaction pruning
+PROTECTED_TOOL_TYPES = {"skill", "present_plan", "read_file"}
+
 
 class OptimizationLevel:
     """Optimization level returned by check_usage."""
@@ -224,6 +227,33 @@ class ContextCompactor:
         return self._last_token_count > int(self._max_context * STAGE_COMPACT)
 
     # ------------------------------------------------------------------
+    # Internal: tool call ID → tool name mapping
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _build_tool_call_map(messages: list[dict[str, Any]]) -> dict[str, str]:
+        """Build a mapping from tool_call_id to tool function name.
+
+        Scans assistant messages for tool_calls and extracts the id → name mapping
+        so callers can determine whether a tool result belongs to a protected tool.
+
+        Args:
+            messages: API-format message list.
+
+        Returns:
+            Dict mapping tool_call_id to function name.
+        """
+        tc_map: dict[str, str] = {}
+        for msg in messages:
+            if msg.get("role") != "assistant":
+                continue
+            for tc in msg.get("tool_calls", []):
+                tc_id = tc.get("id", "")
+                func_name = tc.get("function", {}).get("name", "")
+                if tc_id and func_name:
+                    tc_map[tc_id] = func_name
+        return tc_map
+
+    # ------------------------------------------------------------------
     # Public: observation masking
     # ------------------------------------------------------------------
     def mask_old_observations(
@@ -262,6 +292,9 @@ class ContextCompactor:
         if len(tool_indices) <= recent_threshold:
             return messages
 
+        # Build tool_call_id → tool name map for protected-tool detection
+        tc_map = self._build_tool_call_map(messages)
+
         # Mask old tool results (all except the last `recent_threshold`)
         old_indices = set(tool_indices[: -recent_threshold])
         masked_count = 0
@@ -271,8 +304,12 @@ class ContextCompactor:
             # Skip already-masked messages
             if content.startswith("[ref:"):
                 continue
-            # Replace with compact reference
+            # Skip protected tool types (skills, plans, read_file)
             tool_call_id = msg.get("tool_call_id", "?")
+            tool_name = tc_map.get(tool_call_id, "")
+            if tool_name in PROTECTED_TOOL_TYPES:
+                continue
+            # Replace with compact reference
             msg["content"] = f"[ref: tool result {tool_call_id} — see history]"
             masked_count += 1
 
@@ -317,6 +354,9 @@ class ContextCompactor:
         if not tool_indices:
             return messages
 
+        # Build tool_call_id → tool name map for protected-tool detection
+        tc_map = self._build_tool_call_map(messages)
+
         # Walk backwards, protecting recent tokens up to the budget
         protected_tokens = 0
         protected_indices: set[int] = set()
@@ -324,6 +364,12 @@ class ContextCompactor:
             content = messages[idx].get("content", "")
             # Skip already-pruned/masked messages
             if content.startswith("[ref:") or content == "[pruned]":
+                continue
+            # Always protect outputs from protected tool types
+            tool_call_id = messages[idx].get("tool_call_id", "")
+            tool_name = tc_map.get(tool_call_id, "")
+            if tool_name in PROTECTED_TOOL_TYPES:
+                protected_indices.add(idx)
                 continue
             # Rough token estimate: ~4 chars per token
             token_estimate = len(content) // 4
@@ -530,6 +576,86 @@ class ContextCompactor:
         self._warned_90 = False
 
         return compacted
+
+    # ------------------------------------------------------------------
+    # Public: compact with retry (replay from last user message)
+    # ------------------------------------------------------------------
+    def compact_with_retry(
+        self,
+        messages: list[dict[str, Any]],
+        system_prompt: str,
+        *,
+        trigger: str = "auto",
+        max_retries: int = 2,
+    ) -> list[dict[str, Any]]:
+        """Compact with retry logic — if still over limit after first pass,
+        replay from last user message.
+
+        Args:
+            messages: Current conversation messages.
+            system_prompt: System prompt string.
+            trigger: What triggered compaction.
+            max_retries: Maximum compaction attempts.
+        """
+        result = self.compact(messages, system_prompt, trigger=trigger)
+
+        for attempt in range(max_retries):
+            # Re-check usage after compaction
+            self._update_token_count(result, system_prompt)
+            pct = self.usage_pct / 100.0
+
+            if pct < STAGE_COMPACT:
+                break  # Under the limit, we're good
+
+            logger.warning(
+                "Post-compaction still at %.1f%% (attempt %d/%d), "
+                "replaying from last user message",
+                pct * 100,
+                attempt + 1,
+                max_retries,
+            )
+
+            # Find the last user message (skip conversation summaries)
+            last_user_idx = None
+            for i in range(len(result) - 1, -1, -1):
+                if result[i].get("role") == "user" and not result[i].get(
+                    "content", ""
+                ).startswith("[CONVERSATION SUMMARY]"):
+                    last_user_idx = i
+                    break
+
+            if last_user_idx is None or last_user_idx <= 1:
+                break  # Nothing more we can do
+
+            # Keep: head[0] + compact summary + last user message + any responses after
+            head = result[:1]  # System/first message
+
+            # Summarize everything between head and last user message
+            middle = result[1:last_user_idx]
+            if middle:
+                summary_text = self._fallback_summary(middle)
+                artifact_summary = self.artifact_index.as_summary()
+                if artifact_summary:
+                    summary_text = f"{summary_text}\n\n{artifact_summary}"
+
+                summary_msg: dict[str, Any] = {
+                    "role": "user",
+                    "content": (
+                        f"[CONVERSATION SUMMARY — compact replay]\n{summary_text}"
+                    ),
+                }
+                tail = result[last_user_idx:]
+                result = head + [summary_msg] + tail
+            else:
+                break  # Already minimal
+
+            logger.info(
+                "Replay compaction: %d messages remaining (attempt %d)",
+                len(result),
+                attempt + 1,
+            )
+
+        return result
 
     # ------------------------------------------------------------------
     # Internal
