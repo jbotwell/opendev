@@ -53,6 +53,7 @@ class WebState:
         self.user_store = user_store
         self.mcp_manager = mcp_manager
         self._current_users: Dict[str, User] = {}
+        self._lock = Lock()
 
         # Connected WebSocket clients
         self._ws_clients: List[Any] = []
@@ -144,20 +145,6 @@ class WebState:
                 }
             )
         return sessions
-
-                    config = self.config_manager.get_config()
-                    valid_overlay, warnings = validate_session_model(overlay)
-                    if valid_overlay:
-                        mgr = SessionModelManager(config)
-                        mgr.apply(valid_overlay)
-                        # Store manager for later cleanup
-                        self._session_model_manager = mgr
-                    else:
-                        clear_session_model(session)
-                        self.session_manager.save_session()
-            return True
-        except Exception:
-            return False
 
     def add_pending_approval(
         self,
@@ -430,7 +417,7 @@ def get_state() -> WebState:
         mode_manager = ModeManager()
         approval_manager = ApprovalManager(console)
         undo_manager = UndoManager(50)
-        user_store = UserStore(paths.data_dir)
+        user_store = UserStore(paths.global_dir)
 
         # Initialize MCP manager
         mcp_manager = MCPManager(working_dir)
