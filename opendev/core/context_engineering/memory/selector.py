@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from .embeddings import EmbeddingCache, cosine_similarity, generate_embeddings
+from .embeddings import EmbeddingCache, cosine_similarity
 from .playbook import Bullet
 
 
@@ -49,9 +49,9 @@ class BulletSelector:
             cache_file: Optional path to cache file for persistence
         """
         self.weights = weights or {
-            "effectiveness": 0.5,
-            "recency": 0.3,
-            "semantic": 0.2,
+            "effectiveness": 0.6,
+            "recency": 0.4,
+            "semantic": 0.0,
         }
         self.embedding_model = embedding_model
         self.cache_file = cache_file
@@ -112,45 +112,10 @@ class BulletSelector:
     def _batch_generate_embeddings(self, query: str, bullets: List[Bullet]) -> None:
         """Pre-generate embeddings for query and bullets in batch.
 
-        This optimization reduces API calls from N+1 to 1 by generating all
-        embeddings in a single API call.
-
-        Args:
-            query: User query
-            bullets: List of bullets to generate embeddings for
+        Skipped when semantic weight is 0 (no embedding provider configured).
         """
-        # Collect texts that need embeddings (not in cache)
-        texts_to_generate = []
-        text_indices = {}  # Map text to original index
-
-        # Check if query needs embedding
-        if self.embedding_cache.get(query) is None:
-            texts_to_generate.append(query)
-            text_indices[query] = len(texts_to_generate) - 1
-
-        # Check which bullets need embeddings
-        for bullet in bullets:
-            if self.embedding_cache.get(bullet.content) is None:
-                texts_to_generate.append(bullet.content)
-                text_indices[bullet.content] = len(texts_to_generate) - 1
-
-        # If all embeddings are cached, nothing to do
-        if not texts_to_generate:
+        if self.weights.get("semantic", 0) <= 0:
             return
-
-        # Batch generate embeddings
-        try:
-            embeddings = self.embedding_cache.batch_get_or_generate(
-                texts=texts_to_generate,
-                generator=generate_embeddings,
-            )
-
-            # Note: batch_get_or_generate automatically caches the results
-            # So we don't need to manually cache them here
-        except Exception:
-            # If batch generation fails, fallback to individual generation
-            # This will happen naturally when _semantic_score is called
-            pass
 
     def _score_bullet(self, bullet: Bullet, query: Optional[str] = None) -> ScoredBullet:
         """Calculate relevance score for a single bullet.
@@ -254,39 +219,22 @@ class BulletSelector:
     def _semantic_score(self, query: str, bullet: Bullet) -> float:
         """Calculate semantic similarity between query and bullet content.
 
-        Args:
-            query: User query text
-            bullet: Bullet to compare against
-
-        Returns:
-            Score between 0.0 and 1.0
-            - 1.0: Highly similar (same semantic meaning)
-            - 0.5: Neutral (orthogonal topics)
-            - 0.0: Opposite or unrelated
+        Returns 0.0 when semantic weight is 0 (no embedding provider configured).
         """
+        if self.weights.get("semantic", 0) <= 0:
+            return 0.0
+
         try:
-            # Get or generate embeddings using cache
-            query_embedding = self.embedding_cache.get_or_generate(
-                text=query,
-                generator=generate_embeddings,
-            )
-            bullet_embedding = self.embedding_cache.get_or_generate(
-                text=bullet.content,
-                generator=generate_embeddings,
-            )
+            query_embedding = self.embedding_cache.get(query)
+            bullet_embedding = self.embedding_cache.get(bullet.content)
 
-            # Calculate cosine similarity
+            if query_embedding is None or bullet_embedding is None:
+                return 0.5
+
             similarity = cosine_similarity(query_embedding, bullet_embedding)
-
-            # Normalize from [-1, 1] to [0, 1] range
-            # -1 (opposite) → 0.0, 0 (orthogonal) → 0.5, 1 (identical) → 1.0
-            normalized_score = (similarity + 1.0) / 2.0
-
-            return normalized_score
+            return (similarity + 1.0) / 2.0
 
         except Exception:
-            # If embedding generation fails, return neutral score
-            # This allows the selector to continue using effectiveness + recency
             return 0.5
 
     def get_selection_stats(self, bullets: List[Bullet], selected: List[Bullet]) -> Dict[str, any]:

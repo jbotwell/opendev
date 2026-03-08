@@ -15,9 +15,9 @@ class TestBulletSelector:
         """Test selector initializes with default weights."""
         selector = BulletSelector()
 
-        assert selector.weights["effectiveness"] == 0.5
-        assert selector.weights["recency"] == 0.3
-        assert selector.weights["semantic"] == 0.2
+        assert selector.weights["effectiveness"] == 0.6
+        assert selector.weights["recency"] == 0.4
+        assert selector.weights["semantic"] == 0.0
         assert selector.embedding_model == "text-embedding-3-small"
 
     def test_selector_custom_weights(self):
@@ -199,10 +199,10 @@ class TestBulletSelector:
         scored = selector._score_bullet(bullet)
 
         # effectiveness = 1.0, recency = 1.0, semantic = 0.0
-        # final = 0.5 * 1.0 + 0.3 * 1.0 + 0.2 * 0.0 = 0.8
+        # final = 0.6 * 1.0 + 0.4 * 1.0 + 0.0 * 0.0 = 1.0
         assert isinstance(scored, ScoredBullet)
         assert scored.bullet == bullet
-        assert pytest.approx(scored.score, 0.01) == 0.8
+        assert pytest.approx(scored.score, 0.01) == 1.0
         assert "effectiveness" in scored.score_breakdown
         assert "recency" in scored.score_breakdown
         assert "semantic" in scored.score_breakdown
@@ -390,7 +390,7 @@ class TestSemanticSimilarity:
 
     def test_semantic_score_calculation(self):
         """Test semantic similarity scoring with mock embeddings."""
-        selector = BulletSelector()
+        selector = BulletSelector(weights={"effectiveness": 0.0, "recency": 0.0, "semantic": 1.0})
         now = datetime.now(timezone.utc)
 
         # Mock embeddings for query and bullet
@@ -418,7 +418,7 @@ class TestSemanticSimilarity:
 
     def test_semantic_score_dissimilar(self):
         """Test semantic score for dissimilar content."""
-        selector = BulletSelector()
+        selector = BulletSelector(weights={"effectiveness": 0.0, "recency": 0.0, "semantic": 1.0})
         now = datetime.now(timezone.utc)
 
         query = "Fix authentication error"
@@ -443,7 +443,7 @@ class TestSemanticSimilarity:
 
     def test_semantic_score_opposite(self):
         """Test semantic score for opposite/contradictory content."""
-        selector = BulletSelector()
+        selector = BulletSelector(weights={"effectiveness": 0.0, "recency": 0.0, "semantic": 1.0})
         now = datetime.now(timezone.utc)
 
         query = "Enable feature X"
@@ -468,7 +468,7 @@ class TestSemanticSimilarity:
 
     def test_semantic_score_with_cache(self):
         """Test that semantic scoring uses embedding cache."""
-        selector = BulletSelector()
+        selector = BulletSelector(weights={"effectiveness": 0.0, "recency": 0.0, "semantic": 1.0})
         now = datetime.now(timezone.utc)
 
         query = "Test query"
@@ -494,24 +494,22 @@ class TestSemanticSimilarity:
         # Verify cache was used (size should still be 2)
         assert selector.embedding_cache.size() == 2
 
-    def test_semantic_score_fallback_on_error(self):
-        """Test semantic score works with fallback random embeddings."""
-        selector = BulletSelector()
+    def test_semantic_score_returns_zero_when_disabled(self):
+        """Test semantic score returns 0.0 when semantic weight is 0."""
+        selector = BulletSelector()  # Default: semantic=0.0
         bullet = Bullet(
             id="b1",
             section="Test",
             content="Test",
         )
 
-        # Don't pre-populate cache - will use generate_embeddings
-        # which has a fallback to random embeddings when API fails
         score = selector._semantic_score("query", bullet)
 
-        # Should return a valid score (0.0 to 1.0) even with fallback embeddings
-        assert 0.0 <= score <= 1.0
+        # Should return 0.0 when semantic weight is disabled
+        assert score == 0.0
 
-        # Verify embeddings were cached for future use
-        assert selector.embedding_cache.size() == 2  # query + bullet
+        # No embeddings should be generated
+        assert selector.embedding_cache.size() == 0
 
     def test_select_with_semantic_similarity(self):
         """Test selection prioritizes semantically relevant bullets."""
@@ -599,7 +597,7 @@ class TestSemanticSimilarity:
             assert "effectiveness" in sb.score_breakdown
             assert "recency" in sb.score_breakdown
             assert "semantic" in sb.score_breakdown
-            assert sb.score_breakdown["semantic"] > 0  # Semantic should be calculated
+            assert sb.score_breakdown["semantic"] > 0  # Semantic should be calculated (weight > 0)
 
     def test_semantic_scoring_disabled_without_query(self):
         """Test semantic scoring is disabled when no query provided."""
