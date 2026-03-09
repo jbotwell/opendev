@@ -121,6 +121,28 @@ class WebSocketManager:
             })
             return
 
+        # Bridge mode: route to TUI's message processor instead of AgentExecutor
+        if state.is_bridge_mode:
+            # Broadcast user message to all WS clients
+            await self.broadcast({
+                "type": "user_message",
+                "data": {
+                    "role": "user",
+                    "content": message,
+                    "session_id": session_id,
+                },
+            })
+            # Inject into TUI's message processor
+            try:
+                state.tui_message_injector(message, session_id)
+            except Exception as e:
+                logger.error(f"Bridge mode injection failed: {e}")
+                await self.send_message(websocket, {
+                    "type": "error",
+                    "data": {"message": f"Failed to inject message: {e}"},
+                })
+            return
+
         # If session is already running, inject message into the agent loop
         if state.is_session_running(session_id):
             injection_queue = state.get_injection_queue(session_id)
@@ -329,6 +351,14 @@ async def websocket_endpoint(websocket: WebSocket):
             pass  # Fall through to unauthenticated connection
 
     logger.info("New WebSocket connection established")
+
+    # Store ws_manager and event loop on state for bridge mode access
+    state = get_state()
+    if state.ws_manager is None:
+        state.ws_manager = ws_manager
+    if state._event_loop is None:
+        state._event_loop = asyncio.get_event_loop()
+
     await ws_manager.connect(websocket)
 
     try:

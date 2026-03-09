@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import queue as queue_mod
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from threading import Lock
 
 from opendev.core.runtime import ConfigManager, ModeManager
@@ -81,6 +82,13 @@ class WebState:
 
         # Live message injection queues: session_id -> Queue
         self._injection_queues: Dict[str, queue_mod.Queue[str]] = {}
+
+        # Bridge mode: TUI injects messages via this callable
+        self.tui_message_injector: Optional[Callable[[str, str], None]] = None
+
+        # WebSocket manager and event loop (set by websocket/server startup)
+        self.ws_manager: Optional[Any] = None
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
     def add_ws_client(self, client: Any) -> None:
         """Add a WebSocket client."""
@@ -263,6 +271,17 @@ class WebState:
         """Remove the injection queue for a session."""
         with self._lock:
             self._injection_queues.pop(session_id, None)
+
+    # --- Bridge mode ---
+
+    @property
+    def is_bridge_mode(self) -> bool:
+        """True when TUI is the execution authority and Web UI mirrors it."""
+        return self.tui_message_injector is not None
+
+    def get_event_loop(self) -> Optional[asyncio.AbstractEventLoop]:
+        """Get the event loop used by the web server."""
+        return self._event_loop
 
     # --- Ask-user state ---
 

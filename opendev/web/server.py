@@ -63,6 +63,20 @@ def create_app() -> FastAPI:
     # WebSocket endpoint
     app.add_websocket_route("/ws", websocket_endpoint)
 
+    # Capture event loop and ws_manager on startup for bridge mode
+    @app.on_event("startup")
+    async def _capture_event_loop():
+        import asyncio
+
+        state = get_state()
+        if state._event_loop is None:
+            state._event_loop = asyncio.get_event_loop()
+        # Also store the global ws_manager so bridge can access it before any WS connects
+        from opendev.web.websocket import ws_manager as _global_ws_manager
+
+        if state.ws_manager is None:
+            state.ws_manager = _global_ws_manager
+
     # Health check
     @app.get("/api/health")
     async def health_check():

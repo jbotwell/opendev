@@ -405,6 +405,45 @@ class TextualRunner:
             "is_resumed_session": self._is_resumed_session,
         }
 
+        # Start embedded web server for TUI<->Web bridge (unless opted out)
+        self._web_server_thread = None
+        self._web_port = None
+        if not os.environ.get("OPENDEV_NO_WEB_BRIDGE"):
+            try:
+                from opendev.web.server import start_server
+                from opendev.web.port_utils import find_available_port
+                from opendev.web.state import get_state
+
+                port = find_available_port("127.0.0.1", 8080)
+                if port is not None:
+                    # UserStore needed by web routes; create one if REPL doesn't have it
+                    user_store = getattr(self.repl, "user_store", None)
+                    if user_store is None:
+                        from opendev.core.auth.user_store import UserStore
+                        from opendev.core.paths import get_paths
+
+                        user_store = UserStore(get_paths(self.working_dir).global_dir)
+
+                    self._web_server_thread = start_server(
+                        config_manager=self.config_manager,
+                        session_manager=self.session_manager,
+                        mode_manager=self.repl.mode_manager,
+                        approval_manager=self.repl.approval_manager,
+                        undo_manager=self.repl.undo_manager,
+                        user_store=user_store,
+                        mcp_manager=getattr(self.repl, "mcp_manager", None),
+                        port=port,
+                        open_browser=False,
+                    )
+                    self._web_port = port
+
+                    # Mark bridge mode so WebSocket handler routes queries to TUI
+                    state = get_state()
+                    state.tui_message_injector = self._inject_web_message
+                    logger.info("Embedded web server started on port %d (bridge mode)", port)
+            except Exception as e:
+                logger.warning("Failed to start embedded web server: %s", e)
+
         if self._auto_connect_mcp:
             downstream_on_ready = lambda: self.mcp_controller.start_autoconnect_thread(self._loop)
         else:
@@ -568,6 +607,28 @@ class TextualRunner:
         if hasattr(self, "message_processor"):
             self.message_processor.enqueue_message(text, needs_display)
 
+    def _inject_web_message(self, message: str, session_id: str) -> None:
+        """Route a Web UI message into the TUI's message processor."""
+        self.enqueue_message(message, needs_display=True)
+
+    def _web_broadcast_sync(self, payload: dict) -> None:
+        """Broadcast a message to WebSocket clients from a non-async context."""
+        try:
+            from opendev.web.state import get_state
+
+            state = get_state()
+            ws_mgr = state.ws_manager
+            loop = state.get_event_loop()
+            if ws_mgr and loop:
+                import asyncio
+
+                future = asyncio.run_coroutine_threadsafe(
+                    ws_mgr.broadcast(payload), loop
+                )
+                future.result(timeout=3)
+        except Exception:
+            pass  # Don't let web broadcast failures affect TUI
+
     def _run_query(self, message: str) -> list[ChatMessage]:
         """Execute a user query via the REPL and return new session messages."""
         import traceback
@@ -634,6 +695,33 @@ class TextualRunner:
                 # Wire plan approval callback to this per-query ui_callback
                 if hasattr(self, "_plan_approval_callback"):
                     ui_callback.set_plan_approval_callback(self._plan_approval_callback)
+
+                # If web server is running, wrap with bridge callback for dual display
+                if (
+                    getattr(self, "_web_server_thread", None)
+                    and self._web_server_thread.is_alive()
+                ):
+                    try:
+                        from opendev.ui_textual.bridge_callback import BridgeUICallback
+                        from opendev.web.web_ui_callback import WebUICallback
+                        from opendev.web.state import get_state
+
+                        state = get_state()
+                        session = self.session_manager.get_current_session()
+                        bridge_session_id = session.id if session else "unknown"
+                        web_loop = state.get_event_loop()
+                        web_ws_manager = state.ws_manager
+
+                        if web_loop and web_ws_manager:
+                            web_callback = WebUICallback(
+                                ws_manager=web_ws_manager,
+                                loop=web_loop,
+                                session_id=bridge_session_id,
+                                state=state,
+                            )
+                            ui_callback = BridgeUICallback(ui_callback, web_callback)
+                    except Exception as bridge_err:
+                        logger.warning("Failed to create bridge callback: %s", bridge_err)
             else:
                 # Create a mock callback for when app is not mounted (e.g., during testing)
                 # BaseUICallback provides no-op implementations for all methods
@@ -689,6 +777,66 @@ class TextualRunner:
                 react_executor.set_on_message_consumed(_on_consumed)
                 react_executor.set_on_orphan_message(_on_orphan)
 
+            # Check if we should broadcast web framing events
+            _web_bridge_active = (
+                getattr(self, "_web_server_thread", None)
+                and self._web_server_thread.is_alive()
+            )
+
+            # Broadcast message_start and session_activity if web bridge is active
+            if _web_bridge_active:
+                self._web_broadcast_sync({
+                    "type": "session_activity",
+                    "data": {
+                        "session_id": (
+                            self.session_manager.get_current_session().id
+                            if self.session_manager.get_current_session()
+                            else "unknown"
+                        ),
+                        "status": "running",
+                    },
+                })
+                import time as _time
+
+                self._web_broadcast_sync({
+                    "type": "message_start",
+                    "data": {
+                        "messageId": str(_time.time()),
+                        "session_id": (
+                            self.session_manager.get_current_session().id
+                            if self.session_manager.get_current_session()
+                            else "unknown"
+                        ),
+                    },
+                })
+
+            # Wrap tool registry with WebSocket broadcaster for bridge mode
+            _original_tool_executor = None
+            if _web_bridge_active and react_executor is not None:
+                try:
+                    from opendev.web.ws_tool_broadcaster import WebSocketToolBroadcaster
+                    from opendev.web.state import get_state as _get_bridge_state
+
+                    _bstate = _get_bridge_state()
+                    _bloop = _bstate.get_event_loop()
+                    _bws = _bstate.ws_manager
+                    _bsession = self.session_manager.get_current_session()
+                    _bsid = _bsession.id if _bsession else "unknown"
+
+                    if _bloop and _bws:
+                        _original_tool_executor = react_executor._tool_executor
+                        wrapped_registry = WebSocketToolBroadcaster(
+                            _original_tool_executor,
+                            _bws,
+                            _bloop,
+                            working_dir=self.working_dir,
+                            session_id=_bsid,
+                        )
+                        react_executor._tool_executor = wrapped_registry
+                except Exception as wrap_err:
+                    logger.warning("Failed to wrap tool registry for bridge: %s", wrap_err)
+                    _original_tool_executor = None
+
             try:
                 # Process query with UI callback for real-time display
                 if hasattr(self.repl, "_process_query_with_callback"):
@@ -697,6 +845,10 @@ class TextualRunner:
                     # Fallback to normal processing if callback method doesn't exist
                     self.repl._process_query(message)
             finally:
+                # Restore original tool executor if we wrapped it
+                if _original_tool_executor is not None and react_executor is not None:
+                    react_executor._tool_executor = _original_tool_executor
+
                 # Clear injection target so subsequent messages queue normally
                 self.message_processor.set_injection_target(None)
                 if react_executor is not None:
@@ -712,6 +864,21 @@ class TextualRunner:
                             break
                 # Restore bridge
                 self.console_bridge.install()
+
+                # Broadcast message_complete and session idle
+                if _web_bridge_active:
+                    import time as _time
+
+                    cur_session = self.session_manager.get_current_session()
+                    _sid = cur_session.id if cur_session else "unknown"
+                    self._web_broadcast_sync({
+                        "type": "message_complete",
+                        "data": {"messageId": str(_time.time()), "session_id": _sid},
+                    })
+                    self._web_broadcast_sync({
+                        "type": "session_activity",
+                        "data": {"session_id": _sid, "status": "idle"},
+                    })
 
             session = self.session_manager.get_current_session()
             if not session:
