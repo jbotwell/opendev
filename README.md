@@ -12,6 +12,10 @@
 </p>
 
 <p align="center">
+  🌐 <b>Website & Docs are coming soon — stay tuned!</b> 🚀
+</p>
+
+<p align="center">
   <img src="figures/introduction.png" alt="OpenDev Introduction" width="800"/>
 </p>
 
@@ -26,6 +30,31 @@ Work is organized into concurrent sessions composed of specialized sub-agents. E
 <p align="center">
   <img src="figures/top.png" alt="OpenDev Compound AI Architecture" width="700"/>
 </p>
+
+---
+
+### Why OpenDev?
+
+We designed OpenDev with a bold vision: **what if your coding agent didn't stop working just because you did?**
+
+#### 🤖 Proactive Coding Agent
+
+OpenDev isn't just a reactive assistant that waits for your next prompt. It is designed to be a **proactive coding agent** that can plan, execute, and iterate on tasks — whether you're actively pairing with it or fast asleep. Kick off a complex refactoring, go grab dinner, and come back to a pull request waiting for your review.
+
+#### 🔀 True Multi-Provider, Multi-Model Flexibility
+
+Most AI coding tools lock you into a single provider. OpenDev breaks that wall down. You can assign a **different model from a different provider to every session**, and they all run **in parallel**. Want Claude for planning, GPT for execution, and Gemini for code review — all in the same project, at the same time? Done. Your models, your rules.
+
+#### 💻 TUI + Web UI — Code From Anywhere
+
+OpenDev ships with both a **terminal UI (TUI)** for the terminal purists and a **Web UI** for when you want something a little more visual. Here's where it gets fun: the Web UI can be configured as a **remote session**.
+
+That means you can fire up a coding task from your phone, tuck yourself into bed, and let OpenDev keep shipping code while you drift off to dreamland. 🛏️📱💤
+
+> *"I deployed to production from under my blanket at 2 AM and woke up to passing tests. Is this what peak engineering looks like?"*
+> — You, probably, after using OpenDev
+
+---
 
 ### Installation
 
