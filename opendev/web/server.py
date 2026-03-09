@@ -98,6 +98,11 @@ def create_app() -> FastAPI:
 
             @app.get("/{full_path:path}")
             async def serve_spa(full_path: str):
+                # Serve static files (images, fonts) if they exist on disk
+                file_path = static_dir / full_path
+                if full_path and file_path.is_file() and not full_path.endswith(".html"):
+                    from fastapi.responses import FileResponse
+                    return FileResponse(str(file_path))
                 return HTMLResponse(spa_html)
     else:
         # Development: Return placeholder HTML
