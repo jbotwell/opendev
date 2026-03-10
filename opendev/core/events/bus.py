@@ -1,4 +1,9 @@
-"""Typed pub/sub event bus for decoupled communication."""
+"""Typed pub/sub event bus for decoupled communication.
+
+NOTE: This module is currently not wired into either UI (TUI or Web).
+It is reserved for future unified event handling. The Web UI uses direct
+WebSocket broadcasts and the TUI uses Textual's event system.
+"""
 
 from __future__ import annotations
 
@@ -83,9 +88,7 @@ class EventBus:
             try:
                 handler(event)
             except Exception:
-                logger.warning(
-                    "Event handler failed for %s", event.type.value, exc_info=True
-                )
+                logger.warning("Event handler failed for %s", event.type.value, exc_info=True)
 
     def emit(self, event_type: EventType, source: str = "", **data: Any) -> None:
         """Convenience method to create and publish an event."""

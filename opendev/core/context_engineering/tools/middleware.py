@@ -68,7 +68,11 @@ class ToolMiddleware(Protocol):
 
 
 class MiddlewareChain:
-    """Ordered chain of middlewares for tool execution."""
+    """Ordered chain of middlewares for tool execution.
+
+    NOTE: Not currently instantiated — the tool registry calls normalizer
+    and sanitizer directly. Reserved for future middleware chain expansion.
+    """
 
     def __init__(self) -> None:
         self._middlewares: list[ToolMiddleware] = []
@@ -144,6 +148,7 @@ class ParamNormalizerMiddleware:
         ctx: ToolExecutionContext,
     ) -> tuple[dict[str, Any], bool]:
         from opendev.core.context_engineering.tools.param_normalizer import normalize_params
+
         normalized = normalize_params(tool_name, args, self._working_dir)
         return normalized, True
 
@@ -162,6 +167,7 @@ class ResultSanitizerMiddleware:
 
     def __init__(self, custom_limits: Optional[dict[str, int]] = None) -> None:
         from opendev.core.context_engineering.tools.result_sanitizer import ToolResultSanitizer
+
         self._sanitizer = ToolResultSanitizer(custom_limits)
 
     def before(
