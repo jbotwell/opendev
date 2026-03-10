@@ -18,59 +18,16 @@ router = APIRouter(
 
 class QueryRequest(BaseModel):
     """Request model for sending a query."""
+
     message: str
     sessionId: str | None = None
 
 
-class ToolCallInfo(BaseModel):
-    """Tool call information."""
-    id: str
-    name: str
-    parameters: Dict
-    result: str | None = None
-    error: str | None = None
-    result_summary: str | None = None
-    approved: bool | None = None
-    nested_tool_calls: List["ToolCallInfo"] | None = None
-
-
-# Required for self-referential Pydantic model
-ToolCallInfo.model_rebuild()
-
-
-class MessageResponse(BaseModel):
-    """Response model for a chat message."""
-    role: str
-    content: str
-    timestamp: str | None = None
-    tool_calls: List[ToolCallInfo] | None = None
-    thinking_trace: str | None = None
-    reasoning_content: str | None = None
-
-
-def tool_call_to_info(tc) -> ToolCallInfo:
-    """Recursively convert a ToolCall model to ToolCallInfo, including nested calls."""
-    nested = None
-    if tc.nested_tool_calls:
-        nested = [tool_call_to_info(ntc) for ntc in tc.nested_tool_calls]
-    # Serialize result to string if it's a dict/non-string
-    result = tc.result
-    if result is not None and not isinstance(result, str):
-        import json
-        try:
-            result = json.dumps(result)
-        except (TypeError, ValueError):
-            result = str(result)
-    return ToolCallInfo(
-        id=tc.id,
-        name=tc.name,
-        parameters=tc.parameters,
-        result=result,
-        error=tc.error,
-        result_summary=tc.result_summary,
-        approved=tc.approved,
-        nested_tool_calls=nested if nested else None,
-    )
+from opendev.models.api import (
+    MessageResponse,
+    ToolCallResponse as ToolCallInfo,
+    tool_call_to_response as tool_call_to_info,
+)
 
 
 @router.post("/query")
@@ -98,7 +55,7 @@ async def send_query(request: QueryRequest) -> Dict[str, str]:
 
         return {
             "status": "received",
-            "message": "Query processing will be implemented in next phase"
+            "message": "Query processing will be implemented in next phase",
         }
 
     except Exception as e:
@@ -129,8 +86,14 @@ async def get_messages() -> List[MessageResponse]:
             MessageResponse(
                 role=msg.role.value,
                 content=msg.content,
-                timestamp=msg.timestamp.isoformat() if hasattr(msg, 'timestamp') and msg.timestamp else None,
-                tool_calls=[tool_call_to_info(tc) for tc in msg.tool_calls] if msg.tool_calls else None,
+                timestamp=(
+                    msg.timestamp.isoformat()
+                    if hasattr(msg, "timestamp") and msg.timestamp
+                    else None
+                ),
+                tool_calls=(
+                    [tool_call_to_info(tc) for tc in msg.tool_calls] if msg.tool_calls else None
+                ),
                 thinking_trace=msg.thinking_trace,
                 reasoning_content=msg.reasoning_content,
             )
@@ -143,6 +106,7 @@ async def get_messages() -> List[MessageResponse]:
 
 class ClearChatRequest(BaseModel):
     """Request model for clearing chat with optional workspace."""
+
     workspace: str | None = None
 
 

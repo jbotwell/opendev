@@ -8,7 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from opendev.web.state import get_state
-from opendev.web.routes.chat import MessageResponse, ToolCallInfo, tool_call_to_info
+from opendev.models.api import (
+    MessageResponse,
+    SessionResponse as SessionInfo,
+    ToolCallResponse as ToolCallInfo,
+    tool_call_to_response as tool_call_to_info,
+)
 from opendev.web.dependencies.auth import require_authenticated_user
 
 router = APIRouter(
@@ -18,20 +23,9 @@ router = APIRouter(
 )
 
 
-class SessionInfo(BaseModel):
-    """Session information model."""
-    id: str
-    working_dir: str
-    created_at: str
-    updated_at: str
-    message_count: int
-    total_tokens: int
-    title: str | None = None
-    has_session_model: bool = False
-
-
 class CreateSessionRequest(BaseModel):
     """Request model for creating a new session."""
+
     workspace: str
 
 
@@ -96,7 +90,7 @@ async def create_session(
                 "updated_at": session.updated_at.isoformat(),
                 "message_count": len(session.messages),
                 "total_tokens": session.total_tokens(),
-            }
+            },
         }
 
     except Exception as e:
@@ -221,9 +215,7 @@ async def get_session_messages(
             else:
                 raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
-        visible_messages = [
-            m for m in session.messages if not m.metadata.get("display_hidden")
-        ]
+        visible_messages = [m for m in session.messages if not m.metadata.get("display_hidden")]
         return [
             MessageResponse(
                 role=msg.role.value,
@@ -233,9 +225,9 @@ async def get_session_messages(
                     if hasattr(msg, "timestamp") and msg.timestamp
                     else None
                 ),
-                tool_calls=[tool_call_to_info(tc) for tc in msg.tool_calls]
-                if msg.tool_calls
-                else None,
+                tool_calls=(
+                    [tool_call_to_info(tc) for tc in msg.tool_calls] if msg.tool_calls else None
+                ),
                 thinking_trace=msg.thinking_trace,
                 reasoning_content=msg.reasoning_content,
             )
@@ -249,7 +241,9 @@ async def get_session_messages(
 
 
 @router.delete("/{session_id}")
-async def delete_session(session_id: str, user=Depends(require_authenticated_user)) -> Dict[str, str]:
+async def delete_session(
+    session_id: str, user=Depends(require_authenticated_user)
+) -> Dict[str, str]:
     """Delete a specific session.
 
     Args:
@@ -285,7 +279,9 @@ async def delete_session(session_id: str, user=Depends(require_authenticated_use
 
 
 @router.get("/{session_id}/export")
-async def export_session(session_id: str, user=Depends(require_authenticated_user)) -> Dict[str, Any]:
+async def export_session(
+    session_id: str, user=Depends(require_authenticated_user)
+) -> Dict[str, Any]:
     """Export a session as JSON.
 
     Args:
@@ -319,7 +315,11 @@ async def export_session(session_id: str, user=Depends(require_authenticated_use
                 {
                     "role": msg.role.value,
                     "content": msg.content,
-                    "timestamp": msg.timestamp.isoformat() if hasattr(msg, 'timestamp') and msg.timestamp else None,
+                    "timestamp": (
+                        msg.timestamp.isoformat()
+                        if hasattr(msg, "timestamp") and msg.timestamp
+                        else None
+                    ),
                 }
                 for msg in session.messages
             ],
@@ -349,53 +349,29 @@ async def verify_path(path_data: Dict[str, str]) -> Dict[str, Any]:
         path = path_data.get("path", "").strip()
 
         if not path:
-            return {
-                "exists": False,
-                "is_directory": False,
-                "error": "Path cannot be empty"
-            }
+            return {"exists": False, "is_directory": False, "error": "Path cannot be empty"}
 
         path_obj = Path(path).expanduser().resolve()
 
         if not path_obj.exists():
-            return {
-                "exists": False,
-                "is_directory": False,
-                "error": "Path does not exist"
-            }
+            return {"exists": False, "is_directory": False, "error": "Path does not exist"}
 
         if not path_obj.is_dir():
-            return {
-                "exists": True,
-                "is_directory": False,
-                "error": "Path is not a directory"
-            }
+            return {"exists": True, "is_directory": False, "error": "Path is not a directory"}
 
         # Check if we have read access
         if not os.access(path_obj, os.R_OK):
-            return {
-                "exists": True,
-                "is_directory": True,
-                "error": "No read access to directory"
-            }
+            return {"exists": True, "is_directory": True, "error": "No read access to directory"}
 
-        return {
-            "exists": True,
-            "is_directory": True,
-            "path": str(path_obj),
-            "error": None
-        }
+        return {"exists": True, "is_directory": True, "path": str(path_obj), "error": None}
 
     except Exception as e:
-        return {
-            "exists": False,
-            "is_directory": False,
-            "error": f"Failed to verify path: {str(e)}"
-        }
+        return {"exists": False, "is_directory": False, "error": f"Failed to verify path: {str(e)}"}
 
 
 class BrowseDirectoryRequest(BaseModel):
     """Request model for browsing directories."""
+
     path: str = ""
     show_hidden: bool = False
 
@@ -495,7 +471,7 @@ async def get_session_file_changes(
 
         return {
             "file_changes": [fc.model_dump() for fc in session.file_changes],
-            "message": "File change history retrieved successfully"
+            "message": "File change history retrieved successfully",
         }
 
     except HTTPException:
@@ -532,35 +508,86 @@ async def list_files(query: str = "") -> Dict[str, Any]:
         # Tier 1: Always exclude (obviously generated, never source code)
         always_exclude = {
             # Version Control
-            '.git', '.hg', '.svn', '.bzr', '_darcs', '.fossil',
+            ".git",
+            ".hg",
+            ".svn",
+            ".bzr",
+            "_darcs",
+            ".fossil",
             # OS Generated
-            '.DS_Store', '.Spotlight-V100', '.Trashes', 'Thumbs.db', 'desktop.ini', '$RECYCLE.BIN',
+            ".DS_Store",
+            ".Spotlight-V100",
+            ".Trashes",
+            "Thumbs.db",
+            "desktop.ini",
+            "$RECYCLE.BIN",
             # Python
-            '__pycache__', '.pytest_cache', '.mypy_cache', '.pytype', '.pyre',
-            '.hypothesis', '.tox', '.nox', 'cython_debug', '.eggs',
+            "__pycache__",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".pytype",
+            ".pyre",
+            ".hypothesis",
+            ".tox",
+            ".nox",
+            "cython_debug",
+            ".eggs",
             # Node/JS
-            'node_modules', '.npm', '.yarn', '.pnpm-store',
-            '.next', '.nuxt', '.output', '.svelte-kit', '.angular', '.parcel-cache', '.turbo',
+            "node_modules",
+            ".npm",
+            ".yarn",
+            ".pnpm-store",
+            ".next",
+            ".nuxt",
+            ".output",
+            ".svelte-kit",
+            ".angular",
+            ".parcel-cache",
+            ".turbo",
             # IDE/Editor
-            '.idea', '.vscode', '.vs', '.settings',
+            ".idea",
+            ".vscode",
+            ".vs",
+            ".settings",
             # Java/Kotlin
-            '.gradle',
+            ".gradle",
             # Elixir
-            '_build', 'deps', '.elixir_ls',
+            "_build",
+            "deps",
+            ".elixir_ls",
             # iOS
-            'Pods', 'DerivedData', 'xcuserdata',
+            "Pods",
+            "DerivedData",
+            "xcuserdata",
             # Ruby
-            '.bundle',
+            ".bundle",
             # Virtual Environments
-            '.venv', 'venv',
+            ".venv",
+            "venv",
             # Misc caches
-            '.cache', '.sass-cache', '.eslintcache', '.tmp', '.temp', 'tmp', 'temp',
+            ".cache",
+            ".sass-cache",
+            ".eslintcache",
+            ".tmp",
+            ".temp",
+            "tmp",
+            "temp",
         }
         # Tier 2: Likely exclude (common build output dirs)
         likely_exclude = {
-            'dist', 'build', 'out', 'bin', 'obj', 'target',
-            'coverage', 'htmlcov', 'cover', 'logs',
-            'vendor', 'packages', 'bower_components',
+            "dist",
+            "build",
+            "out",
+            "bin",
+            "obj",
+            "target",
+            "coverage",
+            "htmlcov",
+            "cover",
+            "logs",
+            "vendor",
+            "packages",
+            "bower_components",
         }
         fallback_ignore_patterns = always_exclude | likely_exclude
 
@@ -569,6 +596,7 @@ async def list_files(query: str = "") -> Dict[str, Any]:
         gitignore_path = working_dir / ".gitignore"
         if gitignore_path.exists():
             from opendev.ui_textual.autocomplete_internal.gitignore import GitIgnoreParser
+
             gitignore_parser = GitIgnoreParser(working_dir)
 
         def should_skip_dir(dir_path: Path, dir_name: str) -> bool:
@@ -608,11 +636,7 @@ async def list_files(query: str = "") -> Dict[str, Any]:
                         if query and query.lower() not in path_str.lower():
                             continue
 
-                        files.append({
-                            'path': path_str,
-                            'name': filename,
-                            'is_file': True
-                        })
+                        files.append({"path": path_str, "name": filename, "is_file": True})
                     except ValueError:
                         continue
 
@@ -627,7 +651,7 @@ async def list_files(query: str = "") -> Dict[str, Any]:
             pass  # Skip directories we can't access
 
         # Sort files by path
-        files.sort(key=lambda x: x['path'])
+        files.sort(key=lambda x: x["path"])
 
         # Limit to 100 results for performance
         files = files[:100]
@@ -645,6 +669,7 @@ async def list_files(query: str = "") -> Dict[str, Any]:
 
 class SessionModelUpdate(BaseModel):
     """Request body for updating session model overlay."""
+
     model_provider: str | None = None
     model: str | None = None
     model_thinking_provider: str | None = None
@@ -713,9 +738,7 @@ async def update_session_model(
             try:
                 session = state.session_manager.get_session_by_id(session_id, owner_id=str(user.id))
             except FileNotFoundError:
-                raise HTTPException(
-                    status_code=404, detail=f"Session {session_id} not found"
-                )
+                raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
         # Apply overlay to live config if this is the active session
         if is_current:
@@ -740,7 +763,9 @@ async def update_session_model(
 
 
 @router.delete("/{session_id}/model")
-async def delete_session_model(session_id: str, user=Depends(require_authenticated_user)) -> Dict[str, str]:
+async def delete_session_model(
+    session_id: str, user=Depends(require_authenticated_user)
+) -> Dict[str, str]:
     try:
         from opendev.core.runtime.session_model import clear_session_model
 
@@ -759,9 +784,7 @@ async def delete_session_model(session_id: str, user=Depends(require_authenticat
             try:
                 session = state.session_manager.get_session_by_id(session_id, owner_id=str(user.id))
             except FileNotFoundError:
-                raise HTTPException(
-                    status_code=404, detail=f"Session {session_id} not found"
-                )
+                raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
         clear_session_model(session)
         state.session_manager.save_session(session)
