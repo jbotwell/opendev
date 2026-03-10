@@ -14,6 +14,7 @@ from typing import Any, Dict
 from opendev.models.message import ToolCall
 from opendev.ui_textual.callback_interface import BaseUICallback
 from opendev.web.logging_config import logger
+from opendev.web.protocol import WSMessageType
 
 
 class WebUICallback(BaseUICallback):
@@ -43,13 +44,15 @@ class WebUICallback(BaseUICallback):
 
     def display_plan_content(self, plan_content: str) -> None:
         """Broadcast plan content for display before the approval dialog."""
-        self._broadcast({
-            "type": "plan_content",
-            "data": {
-                "plan_content": plan_content,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.PLAN_CONTENT,
+                "data": {
+                    "plan_content": plan_content,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     def request_plan_approval(
         self, plan_content: str = "", allowed_prompts: Any = None
@@ -76,10 +79,12 @@ class WebUICallback(BaseUICallback):
 
         # Broadcast to frontend
         logger.info(f"Requesting plan approval: {request_id}")
-        self._broadcast({
-            "type": "plan_approval_required",
-            "data": approval_request,
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.PLAN_APPROVAL_REQUIRED,
+                "data": approval_request,
+            }
+        )
 
         # Block until user responds (or timeout)
         wait_timeout = 600  # 10 minutes
@@ -100,10 +105,12 @@ class WebUICallback(BaseUICallback):
 
         # Broadcast status_update to reset mode to normal after plan approval
         if action in ("approve_auto", "approve"):
-            self._broadcast({
-                "type": "status_update",
-                "data": {"mode": "normal", "session_id": self.session_id},
-            })
+            self._broadcast(
+                {
+                    "type": WSMessageType.STATUS_UPDATE,
+                    "data": {"mode": "normal", "session_id": self.session_id},
+                }
+            )
 
         return {"action": action, "feedback": feedback}
 
@@ -122,75 +129,87 @@ class WebUICallback(BaseUICallback):
         self, tool_name: str, tool_args: Dict[str, Any], result: Any, tool_call_id: str = ""
     ) -> None:
         if tool_name == "task_complete":
-            self._broadcast({
-                "type": "task_completed",
-                "data": {
-                    "summary": result.get("output", "") if isinstance(result, dict) else str(result),
-                    "session_id": self.session_id,
-                },
-            })
+            self._broadcast(
+                {
+                    "type": WSMessageType.TASK_COMPLETED,
+                    "data": {
+                        "summary": (
+                            result.get("output", "") if isinstance(result, dict) else str(result)
+                        ),
+                        "session_id": self.session_id,
+                    },
+                }
+            )
 
     # ------------------------------------------------------------------
     # Subagent lifecycle (used by SubAgentManager)
     # ------------------------------------------------------------------
 
-    def on_single_agent_start(
-        self, agent_type: str, description: str, tool_call_id: str
-    ) -> None:
+    def on_single_agent_start(self, agent_type: str, description: str, tool_call_id: str) -> None:
         """Broadcast when a single subagent begins executing."""
         logger.info(f"Subagent start: {agent_type} ({tool_call_id})")
-        self._broadcast({
-            "type": "subagent_start",
-            "data": {
-                "agent_type": agent_type,
-                "description": description,
-                "tool_call_id": tool_call_id,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.SUBAGENT_START,
+                "data": {
+                    "agent_type": agent_type,
+                    "description": description,
+                    "tool_call_id": tool_call_id,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     def on_single_agent_complete(
         self, tool_call_id: str, success: bool, failure_reason: str = ""
     ) -> None:
         """Broadcast when a single subagent finishes."""
         logger.info(f"Subagent complete: {tool_call_id} success={success}")
-        self._broadcast({
-            "type": "subagent_complete",
-            "data": {
-                "tool_call_id": tool_call_id,
-                "success": success,
-                "failure_reason": failure_reason,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.SUBAGENT_COMPLETE,
+                "data": {
+                    "tool_call_id": tool_call_id,
+                    "success": success,
+                    "failure_reason": failure_reason,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     def on_parallel_agents_start(self, agent_infos: list) -> None:
         """Broadcast when parallel subagents begin."""
-        self._broadcast({
-            "type": "parallel_agents_start",
-            "data": {
-                "agents": agent_infos,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.PARALLEL_AGENTS_START,
+                "data": {
+                    "agents": agent_infos,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     def on_parallel_agent_complete(self, tool_call_id: str, success: bool) -> None:
         """Broadcast when one of the parallel agents finishes."""
-        self._broadcast({
-            "type": "subagent_complete",
-            "data": {
-                "tool_call_id": tool_call_id,
-                "success": success,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.SUBAGENT_COMPLETE,
+                "data": {
+                    "tool_call_id": tool_call_id,
+                    "success": success,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     def on_parallel_agents_done(self) -> None:
         """Broadcast when all parallel agents have finished."""
-        self._broadcast({
-            "type": "parallel_agents_done",
-            "data": {"session_id": self.session_id},
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.PARALLEL_AGENTS_DONE,
+                "data": {"session_id": self.session_id},
+            }
+        )
 
     # ------------------------------------------------------------------
     # Cost tracking
@@ -198,13 +217,15 @@ class WebUICallback(BaseUICallback):
 
     def on_cost_update(self, total_cost_usd: float) -> None:
         """Broadcast updated session cost to the frontend."""
-        self._broadcast({
-            "type": "status_update",
-            "data": {
-                "session_cost": total_cost_usd,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.STATUS_UPDATE,
+                "data": {
+                    "session_cost": total_cost_usd,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     # ------------------------------------------------------------------
     # Context usage
@@ -212,13 +233,15 @@ class WebUICallback(BaseUICallback):
 
     def on_context_usage(self, usage_pct: float) -> None:
         """Broadcast updated context usage percentage to the frontend."""
-        self._broadcast({
-            "type": "status_update",
-            "data": {
-                "context_usage_pct": usage_pct,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.STATUS_UPDATE,
+                "data": {
+                    "context_usage_pct": usage_pct,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     # ------------------------------------------------------------------
     # Thinking lifecycle
@@ -226,30 +249,36 @@ class WebUICallback(BaseUICallback):
 
     def on_thinking_start(self) -> None:
         """Broadcast that the agent has started thinking."""
-        self._broadcast({
-            "type": "status_update",
-            "data": {"thinking_active": True, "session_id": self.session_id},
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.STATUS_UPDATE,
+                "data": {"thinking_active": True, "session_id": self.session_id},
+            }
+        )
 
     def on_thinking_complete(self) -> None:
         """Broadcast that the agent has finished thinking."""
-        self._broadcast({
-            "type": "status_update",
-            "data": {"thinking_active": False, "session_id": self.session_id},
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.STATUS_UPDATE,
+                "data": {"thinking_active": False, "session_id": self.session_id},
+            }
+        )
 
     def on_thinking(self, content: str) -> None:
         """Broadcast thinking content as a thinking_block."""
         if not content or not content.strip():
             return
-        self._broadcast({
-            "type": "thinking_block",
-            "data": {
-                "content": content.strip(),
-                "level": "Medium",
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.THINKING_BLOCK,
+                "data": {
+                    "content": content.strip(),
+                    "level": "Medium",
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     # ------------------------------------------------------------------
     # Progress indicators
@@ -257,37 +286,43 @@ class WebUICallback(BaseUICallback):
 
     def on_progress_start(self, message: str) -> None:
         """Broadcast progress start event."""
-        self._broadcast({
-            "type": "progress",
-            "data": {
-                "status": "start",
-                "message": message,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.PROGRESS,
+                "data": {
+                    "status": "start",
+                    "message": message,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     def on_progress_update(self, message: str) -> None:
         """Broadcast progress update event."""
-        self._broadcast({
-            "type": "progress",
-            "data": {
-                "status": "update",
-                "message": message,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.PROGRESS,
+                "data": {
+                    "status": "update",
+                    "message": message,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     def on_progress_complete(self, message: str = "", success: bool = True) -> None:
         """Broadcast progress complete event."""
-        self._broadcast({
-            "type": "progress",
-            "data": {
-                "status": "complete",
-                "message": message,
-                "success": success,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.PROGRESS,
+                "data": {
+                    "status": "complete",
+                    "message": message,
+                    "success": success,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     # ------------------------------------------------------------------
     # Nested tool calls (subagent tools)
@@ -301,16 +336,18 @@ class WebUICallback(BaseUICallback):
         parent: str = "",
     ) -> None:
         """Broadcast nested tool call from a subagent."""
-        self._broadcast({
-            "type": "nested_tool_call",
-            "data": {
-                "tool_name": tool_name,
-                "arguments": tool_args,
-                "depth": depth,
-                "parent": parent,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.NESTED_TOOL_CALL,
+                "data": {
+                    "tool_name": tool_name,
+                    "arguments": tool_args,
+                    "depth": depth,
+                    "parent": parent,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     def on_nested_tool_result(
         self,
@@ -330,17 +367,19 @@ class WebUICallback(BaseUICallback):
         else:
             summary = str(result)[:200]
 
-        self._broadcast({
-            "type": "nested_tool_result",
-            "data": {
-                "tool_name": tool_name,
-                "depth": depth,
-                "parent": parent,
-                "success": not (isinstance(result, dict) and result.get("success") is False),
-                "summary": summary,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.NESTED_TOOL_RESULT,
+                "data": {
+                    "tool_name": tool_name,
+                    "depth": depth,
+                    "parent": parent,
+                    "success": not (isinstance(result, dict) and result.get("success") is False),
+                    "summary": summary,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
         # Collect for session persistence (mirrors TUI tool_display.py:508)
         self._pending_nested_calls.append(
@@ -370,13 +409,15 @@ class WebUICallback(BaseUICallback):
         """Broadcast assistant message content as a message_chunk."""
         if not content:
             return
-        self._broadcast({
-            "type": "message_chunk",
-            "data": {
-                "content": content,
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.MESSAGE_CHUNK,
+                "data": {
+                    "content": content,
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     # ------------------------------------------------------------------
     # Debug
@@ -394,24 +435,28 @@ class WebUICallback(BaseUICallback):
         """Broadcast critique content as a thinking_block to the frontend."""
         if not content or not content.strip():
             return
-        self._broadcast({
-            "type": "thinking_block",
-            "data": {
-                "content": content.strip(),
-                "level": "High",
-                "session_id": self.session_id,
-            },
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.THINKING_BLOCK,
+                "data": {
+                    "content": content.strip(),
+                    "level": "High",
+                    "session_id": self.session_id,
+                },
+            }
+        )
 
     # ------------------------------------------------------------------
     # Interrupt
     # ------------------------------------------------------------------
 
     def on_interrupt(self, context: Any = None) -> None:
-        self._broadcast({
-            "type": "status_update",
-            "data": {"interrupted": True, "session_id": self.session_id},
-        })
+        self._broadcast(
+            {
+                "type": WSMessageType.STATUS_UPDATE,
+                "data": {"interrupted": True, "session_id": self.session_id},
+            }
+        )
 
     def mark_interrupt_shown(self) -> None:
         pass

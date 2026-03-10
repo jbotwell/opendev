@@ -10,18 +10,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from opendev.web.logging_config import logger
+from opendev.web.protocol import WSMessageType
 from opendev.core.utils.tool_result_summarizer import summarize_tool_result
-from opendev.ui_textual.utils.tool_display import summarize_tool_arguments
-
-_PATH_KEYS = {
-    "file_path",
-    "path",
-    "directory",
-    "dir",
-    "target",
-    "image_path",
-    "working_dir",
-}
+from opendev.ui_textual.utils.tool_display import (
+    PATH_ARG_KEYS as _PATH_KEYS,
+    format_tool_call,
+    summarize_tool_arguments,
+)
 
 
 class WebSocketToolBroadcaster:
@@ -50,12 +45,7 @@ class WebSocketToolBroadcaster:
         self.working_dir = Path(working_dir).resolve() if working_dir else None
         self.session_id = session_id
 
-    def execute_tool(
-        self,
-        tool_name: str,
-        arguments: Dict[str, Any],
-        **kwargs
-    ) -> Dict[str, Any]:
+    def execute_tool(self, tool_name: str, arguments: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """Execute tool with WebSocket broadcasting.
 
         Broadcasts tool_call before execution and tool_result after.
@@ -69,8 +59,9 @@ class WebSocketToolBroadcaster:
             Tool execution result
         """
         call_id = uuid.uuid4().hex
-        normalized_args = self._normalize_arguments(arguments)
-        display = summarize_tool_arguments(tool_name, normalized_args)
+        arguments = arguments or {}
+        normalized_args = self._normalize_arguments(arguments) or {}
+        display = format_tool_call(tool_name, normalized_args)
         self._broadcast_tool_call(call_id, tool_name, normalized_args, display)
 
         result = self.tool_registry.execute_tool(tool_name, arguments, **kwargs)
@@ -89,17 +80,19 @@ class WebSocketToolBroadcaster:
     ) -> None:
         """Broadcast tool call event."""
         try:
-            payload = self._make_json_safe({
-                "type": "tool_call",
-                "data": {
-                    "tool_call_id": call_id,
-                    "tool_name": tool_name,
-                    "arguments": arguments,
-                    "arguments_display": display,
-                    "description": f"Calling {tool_name}",
-                    "session_id": self.session_id,
+            payload = self._make_json_safe(
+                {
+                    "type": WSMessageType.TOOL_CALL,
+                    "data": {
+                        "tool_call_id": call_id,
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                        "arguments_display": display,
+                        "description": f"Calling {tool_name}",
+                        "session_id": self.session_id,
+                    },
                 }
-            })
+            )
             future = asyncio.run_coroutine_threadsafe(
                 self.ws_manager.broadcast(payload),
                 self.loop,
@@ -113,10 +106,12 @@ class WebSocketToolBroadcaster:
     def _broadcast_tool_result(self, payload: Dict[str, Any]) -> None:
         """Broadcast tool result event."""
         try:
-            safe_payload = self._make_json_safe({
-                "type": "tool_result",
-                "data": {**payload, "session_id": self.session_id},
-            })
+            safe_payload = self._make_json_safe(
+                {
+                    "type": WSMessageType.TOOL_RESULT,
+                    "data": {**payload, "session_id": self.session_id},
+                }
+            )
             future = asyncio.run_coroutine_threadsafe(
                 self.ws_manager.broadcast(safe_payload),
                 self.loop,
@@ -138,7 +133,7 @@ class WebSocketToolBroadcaster:
         success = bool(result.get("success"))
         output_text = self._stringify_output(result)
         summary = summarize_tool_result(tool_name, output_text, result.get("error"))
-        argument_summary = summarize_tool_arguments(tool_name, arguments)
+        argument_summary = format_tool_call(tool_name, arguments or {})
 
         return {
             "tool_call_id": call_id,
@@ -157,8 +152,7 @@ class WebSocketToolBroadcaster:
         if not isinstance(normalized, dict):
             return normalized
         return {
-            key: self._normalize_argument_value(key, value)
-            for key, value in normalized.items()
+            key: self._normalize_argument_value(key, value) for key, value in normalized.items()
         }
 
     def _normalize_argument_value(self, key: str, value: Any) -> Any:
@@ -245,7 +239,7 @@ class WebSocketToolBroadcaster:
                 return ""
 
         # Handle objects with __dict__
-        if hasattr(value, '__dict__'):
+        if hasattr(value, "__dict__"):
             try:
                 return self._make_json_safe(value.__dict__)
             except Exception:  # noqa: BLE001
@@ -266,13 +260,13 @@ class WebSocketToolBroadcaster:
         Args:
             manager: SubAgentManager instance
         """
-        if hasattr(self.tool_registry, 'set_subagent_manager'):
+        if hasattr(self.tool_registry, "set_subagent_manager"):
             self.tool_registry.set_subagent_manager(manager)
 
     @property
     def _subagent_manager(self) -> Any:
         """Get subagent manager from the underlying registry."""
-        return getattr(self.tool_registry, '_subagent_manager', None)
+        return getattr(self.tool_registry, "_subagent_manager", None)
 
     def __getattr__(self, name: str) -> Any:
         """Delegate all other attributes to the wrapped tool registry."""

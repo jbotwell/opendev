@@ -7,8 +7,9 @@ import threading
 import uuid
 from typing import Any, Dict, List, Optional
 
-from opendev.web.state import get_state
 from opendev.web.logging_config import logger
+from opendev.web.protocol import WSMessageType
+from opendev.web.state import get_state
 
 
 class WebAskUserManager:
@@ -52,16 +53,20 @@ class WebAskUserManager:
         for q in questions:
             serialized_options = []
             for opt in q.options:
-                serialized_options.append({
-                    "label": opt.label,
-                    "description": opt.description,
-                })
-            serialized_questions.append({
-                "question": q.question,
-                "header": q.header,
-                "options": serialized_options,
-                "multi_select": q.multi_select,
-            })
+                serialized_options.append(
+                    {
+                        "label": opt.label,
+                        "description": opt.description,
+                    }
+                )
+            serialized_questions.append(
+                {
+                    "question": q.question,
+                    "header": q.header,
+                    "options": serialized_options,
+                    "multi_select": q.multi_select,
+                }
+            )
 
         ask_user_request = {
             "request_id": request_id,
@@ -79,10 +84,12 @@ class WebAskUserManager:
         # Broadcast ask-user request via WebSocket
         logger.info(f"Requesting ask-user: {request_id} ({len(questions)} questions)")
         future = asyncio.run_coroutine_threadsafe(
-            self.ws_manager.broadcast({
-                "type": "ask_user_required",
-                "data": ask_user_request,
-            }),
+            self.ws_manager.broadcast(
+                {
+                    "type": WSMessageType.ASK_USER_REQUIRED,
+                    "data": ask_user_request,
+                }
+            ),
             self.loop,
         )
 

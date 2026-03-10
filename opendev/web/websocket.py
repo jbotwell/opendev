@@ -8,8 +8,8 @@ from fastapi import WebSocket, WebSocketDisconnect, status
 
 from opendev.web.state import get_state
 from opendev.web.logging_config import logger
+from opendev.web.protocol import WSMessageType
 from opendev.models.message import ChatMessage, Role
-from opendev.web.routes.auth import TOKEN_COOKIE, verify_token
 from opendev.web.routes.auth import TOKEN_COOKIE, verify_token
 
 
@@ -93,12 +93,12 @@ class WebSocketManager:
         elif msg_type == "plan_approval_response":
             await self._handle_plan_approval_response(websocket, data)
         elif msg_type == "ping":
-            await self.send_message(websocket, {"type": "pong"})
+            await self.send_message(websocket, {"type": WSMessageType.PONG})
         else:
             logger.warning(f"Unknown message type: {msg_type}")
             await self.send_message(
                 websocket,
-                {"type": "error", "data": {"message": f"Unknown message type: {msg_type}"}},
+                {"type": WSMessageType.ERROR, "data": {"message": f"Unknown message type: {msg_type}"}},
             )
 
     async def _handle_query(self, websocket: WebSocket, data: Dict[str, Any]):
@@ -110,7 +110,7 @@ class WebSocketManager:
 
         if not message:
             await self.send_message(
-                websocket, {"type": "error", "data": {"message": "Missing message field"}}
+                websocket, {"type": WSMessageType.ERROR, "data": {"message": "Missing message field"}}
             )
             return
 
@@ -121,7 +121,7 @@ class WebSocketManager:
             session_id = state.get_current_session_id()
         if not session_id:
             await self.send_message(
-                websocket, {"type": "error", "data": {"message": "No active session"}}
+                websocket, {"type": WSMessageType.ERROR, "data": {"message": "No active session"}}
             )
             return
 
@@ -130,7 +130,7 @@ class WebSocketManager:
             # Broadcast user message to all WS clients
             await self.broadcast(
                 {
-                    "type": "user_message",
+                    "type": WSMessageType.USER_MESSAGE,
                     "data": {
                         "role": "user",
                         "content": message,
@@ -174,7 +174,7 @@ class WebSocketManager:
             # Broadcast injected user message (EC5: no session persistence here)
             await self.broadcast(
                 {
-                    "type": "user_message",
+                    "type": WSMessageType.USER_MESSAGE,
                     "data": {
                         "role": "user",
                         "content": message,
@@ -211,7 +211,7 @@ class WebSocketManager:
         # Broadcast user message with session_id
         await self.broadcast(
             {
-                "type": "user_message",
+                "type": WSMessageType.USER_MESSAGE,
                 "data": {
                     "role": "user",
                     "content": message,
@@ -243,7 +243,7 @@ class WebSocketManager:
         if approval_id is None or approved is None:
             logger.error(f"Invalid approval data: {approval_data}")
             await self.send_message(
-                websocket, {"type": "error", "data": {"message": "Invalid approval data"}}
+                websocket, {"type": WSMessageType.ERROR, "data": {"message": "Invalid approval data"}}
             )
             return
 
@@ -262,7 +262,7 @@ class WebSocketManager:
         # Broadcast the resolution to all clients
         await self.broadcast(
             {
-                "type": "approval_resolved",
+                "type": WSMessageType.APPROVAL_RESOLVED,
                 "data": {
                     "approvalId": approval_id,
                     "approved": approved,
@@ -282,7 +282,7 @@ class WebSocketManager:
         if not request_id:
             logger.error(f"Invalid ask-user response data: {response_data}")
             await self.send_message(
-                websocket, {"type": "error", "data": {"message": "Invalid ask-user response data"}}
+                websocket, {"type": WSMessageType.ERROR, "data": {"message": "Invalid ask-user response data"}}
             )
             return
 
@@ -293,7 +293,7 @@ class WebSocketManager:
             logger.error(f"Ask-user request {request_id} not found in state")
             await self.send_message(
                 websocket,
-                {"type": "error", "data": {"message": f"Ask-user request {request_id} not found"}},
+                {"type": WSMessageType.ERROR, "data": {"message": f"Ask-user request {request_id} not found"}},
             )
             return
 
@@ -303,7 +303,7 @@ class WebSocketManager:
         resolved_session_id = pending.get("session_id") if pending else None
         await self.broadcast(
             {
-                "type": "ask_user_resolved",
+                "type": WSMessageType.ASK_USER_RESOLVED,
                 "data": {"requestId": request_id, "session_id": resolved_session_id},
             }
         )
@@ -320,7 +320,7 @@ class WebSocketManager:
             logger.error(f"Invalid plan approval response data: {response_data}")
             await self.send_message(
                 websocket,
-                {"type": "error", "data": {"message": "Invalid plan approval response data"}},
+                {"type": WSMessageType.ERROR, "data": {"message": "Invalid plan approval response data"}},
             )
             return
 
@@ -343,7 +343,7 @@ class WebSocketManager:
         resolved_session_id = pending.get("session_id") if pending else None
         await self.broadcast(
             {
-                "type": "plan_approval_resolved",
+                "type": WSMessageType.PLAN_APPROVAL_RESOLVED,
                 "data": {
                     "requestId": request_id,
                     "action": action,

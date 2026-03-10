@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from opendev.web.state import get_state, broadcast_to_all_clients
+from opendev.web.protocol import WSMessageType
 from opendev.core.context_engineering.mcp.config import get_config_path, get_project_config_path
 from opendev.core.context_engineering.mcp.models import MCPServerConfig
 
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
 class MCPServerCreate(BaseModel):
     """Model for creating a new MCP server."""
+
     name: str
     command: str
     args: List[str] = []
@@ -24,6 +26,7 @@ class MCPServerCreate(BaseModel):
 
 class MCPServerUpdate(BaseModel):
     """Model for updating an MCP server."""
+
     command: Optional[str] = None
     args: Optional[List[str]] = None
     env: Optional[Dict[str, str]] = None
@@ -61,20 +64,22 @@ async def list_servers() -> Dict[str, Any]:
                 config_location = "global"
                 config_path = str(global_config)
 
-            result.append({
-                "name": name,
-                "status": "connected" if is_connected else "disconnected",
-                "config": {
-                    "command": config.command,
-                    "args": config.args,
-                    "env": config.env,
-                    "enabled": config.enabled,
-                    "auto_start": config.auto_start,
-                },
-                "tools_count": len(tools),
-                "config_location": config_location,
-                "config_path": config_path,
-            })
+            result.append(
+                {
+                    "name": name,
+                    "status": "connected" if is_connected else "disconnected",
+                    "config": {
+                        "command": config.command,
+                        "args": config.args,
+                        "env": config.env,
+                        "enabled": config.enabled,
+                        "auto_start": config.auto_start,
+                    },
+                    "tools_count": len(tools),
+                    "config_location": config_location,
+                    "config_path": config_path,
+                }
+            )
 
         return {"servers": result}
 
@@ -171,7 +176,7 @@ async def connect_server(name: str) -> Dict[str, Any]:
             return {
                 "success": True,
                 "message": f"Already connected to '{name}'",
-                "tools_count": len(tools)
+                "tools_count": len(tools),
             }
 
         # Connect asynchronously
@@ -181,26 +186,20 @@ async def connect_server(name: str) -> Dict[str, Any]:
             tools = state.mcp_manager.get_server_tools(name)
 
             # Broadcast status change to all WebSocket clients
-            await broadcast_to_all_clients({
-                "type": "mcp:status_changed",
-                "data": {
-                    "server_name": name,
-                    "status": "connected",
-                    "tools_count": len(tools),
+            await broadcast_to_all_clients(
+                {
+                    "type": WSMessageType.MCP_STATUS_CHANGED,
+                    "data": {
+                        "server_name": name,
+                        "status": "connected",
+                        "tools_count": len(tools),
+                    },
                 }
-            })
+            )
 
-            return {
-                "success": True,
-                "message": f"Connected to '{name}'",
-                "tools_count": len(tools)
-            }
+            return {"success": True, "message": f"Connected to '{name}'", "tools_count": len(tools)}
         else:
-            return {
-                "success": False,
-                "message": f"Failed to connect to '{name}'",
-                "tools_count": 0
-            }
+            return {"success": False, "message": f"Failed to connect to '{name}'", "tools_count": 0}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Connection failed: {str(e)}")
@@ -222,28 +221,24 @@ async def disconnect_server(name: str) -> Dict[str, Any]:
             raise HTTPException(status_code=404, detail="MCP manager not available")
 
         if not state.mcp_manager.is_connected(name):
-            return {
-                "success": True,
-                "message": f"Not connected to '{name}'"
-            }
+            return {"success": True, "message": f"Not connected to '{name}'"}
 
         # Disconnect synchronously (it's fast)
         state.mcp_manager.disconnect_sync(name)
 
         # Broadcast status change to all WebSocket clients
-        await broadcast_to_all_clients({
-            "type": "mcp:status_changed",
-            "data": {
-                "server_name": name,
-                "status": "disconnected",
-                "tools_count": 0,
+        await broadcast_to_all_clients(
+            {
+                "type": WSMessageType.MCP_STATUS_CHANGED,
+                "data": {
+                    "server_name": name,
+                    "status": "disconnected",
+                    "tools_count": 0,
+                },
             }
-        })
+        )
 
-        return {
-            "success": True,
-            "message": f"Disconnected from '{name}'"
-        }
+        return {"success": True, "message": f"Disconnected from '{name}'"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Disconnection failed: {str(e)}")
@@ -273,24 +268,12 @@ async def test_server(name: str) -> Dict[str, Any]:
 
         if success:
             tools = state.mcp_manager.get_server_tools(name)
-            return {
-                "success": True,
-                "message": "Connection successful",
-                "tools_count": len(tools)
-            }
+            return {"success": True, "message": "Connection successful", "tools_count": len(tools)}
         else:
-            return {
-                "success": False,
-                "message": "Connection failed",
-                "tools_count": 0
-            }
+            return {"success": False, "message": "Connection failed", "tools_count": 0}
 
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"Test failed: {str(e)}",
-            "tools_count": 0
-        }
+        return {"success": False, "message": f"Test failed: {str(e)}", "tools_count": 0}
 
 
 @router.post("/servers")
@@ -329,25 +312,24 @@ async def create_server(server: MCPServerCreate) -> Dict[str, Any]:
             name=server.name,
             config=config,
             project_config=server.project_config,
-            working_dir=state.mcp_manager.working_dir if server.project_config else None
+            working_dir=state.mcp_manager.working_dir if server.project_config else None,
         )
 
         # Reload configuration
         state.mcp_manager.load_configuration()
 
         # Broadcast server list update
-        await broadcast_to_all_clients({
-            "type": "mcp:servers_updated",
-            "data": {
-                "action": "added",
-                "server_name": server.name,
+        await broadcast_to_all_clients(
+            {
+                "type": WSMessageType.MCP_SERVERS_UPDATED,
+                "data": {
+                    "action": "added",
+                    "server_name": server.name,
+                },
             }
-        })
+        )
 
-        return {
-            "success": True,
-            "message": f"Server '{server.name}' added successfully"
-        }
+        return {"success": True, "message": f"Server '{server.name}' added successfully"}
 
     except HTTPException:
         raise
@@ -390,7 +372,10 @@ async def update_server(name: str, update: MCPServerUpdate) -> Dict[str, Any]:
             config.auto_start = update.auto_start
 
         # Save updated config
-        from opendev.core.context_engineering.mcp.config import save_server_config, get_project_config_path
+        from opendev.core.context_engineering.mcp.config import (
+            save_server_config,
+            get_project_config_path,
+        )
 
         # Determine if it's a project config
         project_config_path = get_project_config_path(state.mcp_manager.working_dir)
@@ -400,25 +385,24 @@ async def update_server(name: str, update: MCPServerUpdate) -> Dict[str, Any]:
             name=name,
             config=config,
             project_config=is_project,
-            working_dir=state.mcp_manager.working_dir if is_project else None
+            working_dir=state.mcp_manager.working_dir if is_project else None,
         )
 
         # Reload configuration
         state.mcp_manager.load_configuration()
 
         # Broadcast server list update
-        await broadcast_to_all_clients({
-            "type": "mcp:servers_updated",
-            "data": {
-                "action": "updated",
-                "server_name": name,
+        await broadcast_to_all_clients(
+            {
+                "type": WSMessageType.MCP_SERVERS_UPDATED,
+                "data": {
+                    "action": "updated",
+                    "server_name": name,
+                },
             }
-        })
+        )
 
-        return {
-            "success": True,
-            "message": f"Server '{name}' updated successfully"
-        }
+        return {"success": True, "message": f"Server '{name}' updated successfully"}
 
     except HTTPException:
         raise
@@ -450,7 +434,10 @@ async def delete_server(name: str) -> Dict[str, Any]:
             state.mcp_manager.disconnect_sync(name)
 
         # Remove from config
-        from opendev.core.context_engineering.mcp.config import remove_server_config, get_project_config_path
+        from opendev.core.context_engineering.mcp.config import (
+            remove_server_config,
+            get_project_config_path,
+        )
 
         # Determine if it's a project config
         project_config_path = get_project_config_path(state.mcp_manager.working_dir)
@@ -459,25 +446,24 @@ async def delete_server(name: str) -> Dict[str, Any]:
         remove_server_config(
             name=name,
             project_config=is_project,
-            working_dir=state.mcp_manager.working_dir if is_project else None
+            working_dir=state.mcp_manager.working_dir if is_project else None,
         )
 
         # Reload configuration
         state.mcp_manager.load_configuration()
 
         # Broadcast server list update
-        await broadcast_to_all_clients({
-            "type": "mcp:servers_updated",
-            "data": {
-                "action": "removed",
-                "server_name": name,
+        await broadcast_to_all_clients(
+            {
+                "type": WSMessageType.MCP_SERVERS_UPDATED,
+                "data": {
+                    "action": "removed",
+                    "server_name": name,
+                },
             }
-        })
+        )
 
-        return {
-            "success": True,
-            "message": f"Server '{name}' removed successfully"
-        }
+        return {"success": True, "message": f"Server '{name}' removed successfully"}
 
     except HTTPException:
         raise

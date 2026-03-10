@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from opendev.web.state import WebState
 from opendev.web.logging_config import logger
+from opendev.web.protocol import WSMessageType
 from opendev.models.message import ChatMessage, Role
 from opendev.models.agent_deps import AgentDependencies
 from opendev.core.runtime import ConfigManager
@@ -28,6 +29,8 @@ class AgentExecutor:
         """
         self.state = state
         self.executor = ThreadPoolExecutor(max_workers=4)
+        # Lock protecting session_manager.current_session mutation
+        self._session_lock = __import__("threading").Lock()
         atexit.register(self.executor.shutdown, wait=False)
 
         # Shared thread pool for parallel tool execution across sessions
@@ -74,7 +77,7 @@ class AgentExecutor:
             self.state.set_session_running(session_id)
             await ws_manager.broadcast(
                 {
-                    "type": "session_activity",
+                    "type": WSMessageType.SESSION_ACTIVITY,
                     "data": {"session_id": session_id, "status": "running"},
                 }
             )
@@ -83,7 +86,7 @@ class AgentExecutor:
             try:
                 await ws_manager.broadcast(
                     {
-                        "type": "message_start",
+                        "type": WSMessageType.MESSAGE_START,
                         "data": {
                             "messageId": str(time.time()),
                             "session_id": session_id,
@@ -115,7 +118,7 @@ class AgentExecutor:
             try:
                 await ws_manager.broadcast(
                     {
-                        "type": "message_complete",
+                        "type": WSMessageType.MESSAGE_COMPLETE,
                         "data": {
                             "messageId": str(time.time()),
                             "session_id": session_id,
@@ -126,16 +129,28 @@ class AgentExecutor:
                 logger.error(f"Failed to broadcast message_complete: {e}")
 
         except Exception as e:
-            # Broadcast error
+            # Broadcast structured error
             logger.error(f"Agent execution error: {e}")
             import traceback
 
             logger.error(traceback.format_exc())
             try:
+                from opendev.core.errors import StructuredError, classify_api_error
+
+                if isinstance(e, StructuredError):
+                    structured = e
+                else:
+                    structured = classify_api_error(str(e))
                 await ws_manager.broadcast(
                     {
-                        "type": "error",
-                        "data": {"message": str(e), "session_id": session_id},
+                        "type": WSMessageType.ERROR,
+                        "data": {
+                            "message": structured.message,
+                            "category": structured.category.value,
+                            "is_retryable": structured.is_retryable,
+                            "status_code": structured.status_code,
+                            "session_id": session_id,
+                        },
                     }
                 )
             except Exception as broadcast_err:
@@ -150,7 +165,7 @@ class AgentExecutor:
             try:
                 await ws_manager.broadcast(
                     {
-                        "type": "session_activity",
+                        "type": WSMessageType.SESSION_ACTIVITY,
                         "data": {"session_id": session_id, "status": "idle"},
                     }
                 )
@@ -242,7 +257,7 @@ class AgentExecutor:
             mcp_manager=self.state.mcp_manager,
         )
 
-        # Wire hooks system
+        # Wire hooks system (4-point wiring, matching TUI's repl.py)
         hook_manager = None
         try:
             from opendev.core.hooks.loader import load_hooks_config
@@ -253,7 +268,9 @@ class AgentExecutor:
                 hook_manager = HookManager(
                     hooks_config, session_id=session_id, cwd=str(working_dir)
                 )
+                # 1. Tool registry
                 runtime_suite.tool_registry.set_hook_manager(hook_manager)
+                # 2. Subagent manager
                 subagent_mgr = runtime_suite.tool_registry.get_subagent_manager()
                 if subagent_mgr and hasattr(subagent_mgr, "set_hook_manager"):
                     subagent_mgr.set_hook_manager(hook_manager)
@@ -289,8 +306,10 @@ class AgentExecutor:
         agent.tool_registry = wrapped_registry
         agent._cost_tracker = cost_tracker
 
-        # Point session manager at the right session for this execution
-        self.state.session_manager.current_session = session
+        # Point session manager at the right session for this execution.
+        # Protected by lock to avoid race conditions with concurrent requests.
+        with self._session_lock:
+            self.state.session_manager.current_session = session
 
         # Prepare messages for the ReAct loop
         message_history = session.to_api_messages()
@@ -311,9 +330,15 @@ class AgentExecutor:
             parallel_executor=self._shared_parallel_executor,
         )
 
-        # Wire hooks
+        # 3. Wire hooks into react_executor (covers query_processor path)
         if hook_manager:
             react_executor.set_hook_manager(hook_manager)
+
+        # 4. Wire hooks into compactor (matches TUI's repl.py:363-366)
+        if hook_manager and hasattr(react_executor, "_compactor"):
+            compactor = react_executor._compactor
+            if compactor and hasattr(compactor, "set_hook_manager"):
+                compactor.set_hook_manager(hook_manager)
 
         # Wire injection queue for mid-execution user messages
         react_executor._injection_queue = self.state.get_injection_queue(session_id)
@@ -323,6 +348,12 @@ class AgentExecutor:
 
         # Execute unified ReAct loop
         try:
+            # Fire SESSION_START hook (matches TUI's repl.py:474)
+            if hook_manager:
+                from opendev.core.hooks.models import HookEvent
+
+                hook_manager.run_hooks(HookEvent.SESSION_START, match_value="web_query")
+
             summary, error, latency_ms = react_executor.execute(
                 query=message,
                 messages=message_history,
@@ -339,6 +370,16 @@ class AgentExecutor:
 
             logger.error(traceback.format_exc())
             return {"summary": None, "error": str(e), "latency_ms": 0}
+        finally:
+            # Fire SESSION_END hook (matches TUI's repl.py:690)
+            if hook_manager:
+                try:
+                    from opendev.core.hooks.models import HookEvent
+
+                    hook_manager.run_hooks(HookEvent.SESSION_END)
+                    hook_manager.shutdown()
+                except Exception as e:
+                    logger.warning(f"Failed to run SESSION_END hook: {e}")
 
     def _resolve_runtime_context_for_session(
         self, session: Any
