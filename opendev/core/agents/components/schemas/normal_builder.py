@@ -39,9 +39,8 @@ class ToolSchemaBuilder:
         """Return tool schema definitions including MCP and task tool extensions.
 
         Args:
-            thinking_visible: Deprecated parameter (kept for API compatibility).
-                             Thinking is now a separate pre-processing phase,
-                             not a tool the model calls.
+            thinking_visible: Deprecated. Kept for API compatibility but no longer
+                             affects schema generation.
 
         Returns:
             List of tool schemas. If allowed_tools was set, only returns

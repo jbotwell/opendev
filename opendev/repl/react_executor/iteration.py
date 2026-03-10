@@ -60,6 +60,49 @@ class IterationMixin:
         - self.MAX_TODO_NUDGES
     """
 
+    # Tools that don't change state — no need to re-plan after these
+    _READONLY_TOOLS = frozenset({
+        "read_file", "list_files", "search", "fetch_url", "web_search",
+        "find_symbol", "find_referencing_symbols", "list_todos",
+        "search_tools", "list_processes", "get_process_output",
+        "analyze_image", "capture_screenshot", "capture_web_screenshot",
+        "read_pdf", "list_sessions", "get_session_history", "list_subagents",
+        "memory_search", "list_agents",
+    })
+
+    def _last_tools_were_readonly(self, messages: list) -> bool:
+        """Check if the most recent tool calls were all read-only.
+
+        Scans backwards from the end of messages looking for the most recent
+        assistant+tool message pair. Returns True only if ALL tool calls in
+        that pair were read-only and succeeded (no errors).
+
+        Returns False (= do NOT skip thinking) when:
+        - No previous tool calls found (first iteration)
+        - Any tool call was a write/execute operation
+        - Any tool result was an error
+        """
+        found_tools = False
+        for msg in reversed(messages):
+            if msg.get("role") == "tool":
+                content = msg.get("content", "")
+                tool_name = msg.get("name", "")
+                # If any tool errored, don't skip thinking
+                if content.startswith("Error") or '"success": false' in content.lower():
+                    return False
+                if tool_name and tool_name not in self._READONLY_TOOLS:
+                    return False
+                found_tools = True
+            elif msg.get("role") == "assistant" and found_tools:
+                # We've found all tool results from the last assistant turn
+                break
+            elif msg.get("role") == "user" and found_tools:
+                break
+            elif msg.get("role") in ("user", "assistant") and not found_tools:
+                # Hit a non-tool message before finding any tools = first iteration
+                return False
+        return found_tools
+
     def _check_subagent_completion(self, messages: list) -> bool:
         """Check if the last tool result was from a completed subagent.
 
@@ -152,6 +195,10 @@ class IterationMixin:
         # Skip thinking if previous iteration set skip_next_thinking (e.g., explore-first block)
         should_skip_thinking = ctx.skip_next_thinking
         ctx.skip_next_thinking = False
+
+        # Skip thinking after simple read-only tool calls (they don't need re-planning)
+        if not should_skip_thinking:
+            should_skip_thinking = self._last_tools_were_readonly(ctx.messages)
 
         if thinking_visible and not should_skip_thinking:
             thinking_trace = self._get_thinking_trace(

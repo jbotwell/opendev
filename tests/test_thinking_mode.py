@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from opendev.core.context_engineering.tools.handlers.thinking_handler import (
     ThinkingHandler,
     ThinkingBlock,
+    ThinkingLevel,
 )
 
 
@@ -31,7 +32,9 @@ class TestThinkingHandler:
         assert result["success"] is True
         assert result["_thinking_content"] == "Step 1: analyze..."
         assert result["thinking_id"] == "think-1"
-        assert result["output"] == "Step 1: analyze..."  # Included in message history for next LLM call
+        assert (
+            result["output"] == "Step 1: analyze..."
+        )  # Included in message history for next LLM call
 
     def test_add_thinking_strips_whitespace(self):
         """Test that thinking content is stripped."""
@@ -142,23 +145,36 @@ class TestThinkingHandler:
 
 
 class TestThinkToolRemoved:
-    """Tests verifying think tool has been removed from schemas.
+    """Tests verifying think tool is NOT in schemas (removed from architecture).
 
-    Thinking is now a separate pre-processing phase, not a tool.
+    Thinking is handled via a separate LLM call phase, not a tool.
     """
 
-    def test_think_schema_not_in_builtin(self):
-        """Test that think tool schema is NOT defined (removed)."""
+    def test_think_not_in_builtin_schemas(self):
+        """Test that think tool schema is NOT in builtin schemas."""
         from opendev.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
 
         names = [s["function"]["name"] for s in _BUILTIN_TOOL_SCHEMAS]
-        assert "think" not in names, "Think tool should be removed from schemas"
+        assert "think" not in names, "Think tool should not be in builtin schemas"
+
+    def test_think_not_in_built_schemas(self):
+        """Test that think tool is never in built schemas regardless of thinking level."""
+        from opendev.core.agents.components.schemas.normal_builder import ToolSchemaBuilder
+        from opendev.core.context_engineering.tools.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        builder = ToolSchemaBuilder(registry)
+
+        for level in ThinkingLevel:
+            registry.thinking_handler.set_level(level)
+            names = [s["function"]["name"] for s in builder.build()]
+            assert "think" not in names, f"Think tool should not be in schemas for {level}"
 
     def test_think_not_in_planning_tools(self):
-        """Test that think is NOT in plan mode tools (removed)."""
+        """Test that think is NOT in plan mode tools."""
         from opendev.core.agents.components import PLANNING_TOOLS
 
-        assert "think" not in PLANNING_TOOLS, "Think should be removed from PLANNING_TOOLS"
+        assert "think" not in PLANNING_TOOLS, "Think should not be in PLANNING_TOOLS"
 
 
 class TestThinkingHandlerStillExists:
@@ -322,7 +338,9 @@ class TestThinkingUICallback:
         # Called directly from the thinking phase (not via tool result)
         callback.on_thinking("My reasoning from thinking phase")
 
-        mock_conversation.add_thinking_block.assert_called_once_with("My reasoning from thinking phase")
+        mock_conversation.add_thinking_block.assert_called_once_with(
+            "My reasoning from thinking phase"
+        )
 
 
 class TestCallbackProtocol:
@@ -387,9 +405,9 @@ class TestMessageRendererDedup:
 
         # Same message renders again (renderer no longer deduplicates)
         renderer.add_assistant_message("Hello! How can I help?")
-        assert mock_log.write.call_count > first_call_count, (
-            "Renderer should always render — dedup moved to DisplayLedger"
-        )
+        assert (
+            mock_log.write.call_count > first_call_count
+        ), "Renderer should always render — dedup moved to DisplayLedger"
 
     def test_display_ledger_handles_cross_path_dedup(self):
         """DisplayLedger deduplicates identical assistant messages from different paths."""
@@ -509,10 +527,7 @@ class TestThinkingModeReminder:
         mock_agent.system_prompt = "No placeholder here"
 
         messages = enhancer.prepare_messages(
-            query="Help me",
-            enhanced_query="Help me",
-            agent=mock_agent,
-            thinking_visible=True
+            query="Help me", enhanced_query="Help me", agent=mock_agent, thinking_visible=True
         )
 
         system_content = messages[0]["content"]
@@ -572,8 +587,10 @@ class TestThinkingModelSelection:
 
         mode_manager = MagicMock()
 
-        with patch.object(MainAgent, 'build_system_prompt', return_value="Test prompt"), \
-             patch.object(MainAgent, 'build_tool_schemas', return_value=[]):
+        with (
+            patch.object(MainAgent, "build_system_prompt", return_value="Test prompt"),
+            patch.object(MainAgent, "build_tool_schemas", return_value=[]),
+        ):
             agent = MainAgent(config, tool_registry, mode_manager)
 
             # Mock the HTTP client's post_json to return a successful response
@@ -582,7 +599,9 @@ class TestThinkingModelSelection:
             mock_result.response = MagicMock()
             mock_result.response.status_code = 200
             mock_result.response.json.return_value = {
-                "choices": [{"message": {"content": "test response", "reasoning_content": "my reasoning"}}]
+                "choices": [
+                    {"message": {"content": "test response", "reasoning_content": "my reasoning"}}
+                ]
             }
 
             with patch.object(agent, "_priv_http_client") as mock_client:
@@ -590,7 +609,9 @@ class TestThinkingModelSelection:
                 # Use the normal http client by patching _thinking_http_client to None
                 agent._priv_thinking_http_client = None
 
-                response = agent.call_llm([{"role": "user", "content": "test"}], thinking_visible=True)
+                response = agent.call_llm(
+                    [{"role": "user", "content": "test"}], thinking_visible=True
+                )
 
                 # Check payload used the normal model (thinking is a separate phase)
                 call_args = mock_client.post_json.call_args
@@ -616,8 +637,10 @@ class TestThinkingModelSelection:
 
         mode_manager = MagicMock()
 
-        with patch.object(MainAgent, 'build_system_prompt', return_value="Test prompt"), \
-             patch.object(MainAgent, 'build_tool_schemas', return_value=[]):
+        with (
+            patch.object(MainAgent, "build_system_prompt", return_value="Test prompt"),
+            patch.object(MainAgent, "build_tool_schemas", return_value=[]),
+        ):
             agent = MainAgent(config, tool_registry, mode_manager)
 
             mock_result = MagicMock()
@@ -631,7 +654,9 @@ class TestThinkingModelSelection:
             with patch.object(agent, "_priv_http_client") as mock_client:
                 mock_client.post_json.return_value = mock_result
 
-                response = agent.call_llm([{"role": "user", "content": "test"}], thinking_visible=False)
+                response = agent.call_llm(
+                    [{"role": "user", "content": "test"}], thinking_visible=False
+                )
 
                 call_args = mock_client.post_json.call_args
                 payload = call_args[0][0]
@@ -655,8 +680,10 @@ class TestThinkingModelSelection:
 
         mode_manager = MagicMock()
 
-        with patch.object(MainAgent, 'build_system_prompt', return_value="Test prompt"), \
-             patch.object(MainAgent, 'build_tool_schemas', return_value=[]):
+        with (
+            patch.object(MainAgent, "build_system_prompt", return_value="Test prompt"),
+            patch.object(MainAgent, "build_tool_schemas", return_value=[]),
+        ):
             agent = MainAgent(config, tool_registry, mode_manager)
 
             mock_result = MagicMock()
@@ -670,7 +697,9 @@ class TestThinkingModelSelection:
             with patch.object(agent, "_priv_http_client") as mock_client:
                 mock_client.post_json.return_value = mock_result
 
-                response = agent.call_llm([{"role": "user", "content": "test"}], thinking_visible=True)
+                response = agent.call_llm(
+                    [{"role": "user", "content": "test"}], thinking_visible=True
+                )
 
                 call_args = mock_client.post_json.call_args
                 payload = call_args[0][0]
@@ -698,8 +727,10 @@ class TestReasoningContentExtraction:
 
         mode_manager = MagicMock()
 
-        with patch.object(MainAgent, 'build_system_prompt', return_value="Test prompt"), \
-             patch.object(MainAgent, 'build_tool_schemas', return_value=[]):
+        with (
+            patch.object(MainAgent, "build_system_prompt", return_value="Test prompt"),
+            patch.object(MainAgent, "build_tool_schemas", return_value=[]),
+        ):
             agent = MainAgent(config, tool_registry, mode_manager)
 
             mock_result = MagicMock()
@@ -707,12 +738,14 @@ class TestReasoningContentExtraction:
             mock_result.response = MagicMock()
             mock_result.response.status_code = 200
             mock_result.response.json.return_value = {
-                "choices": [{
-                    "message": {
-                        "content": "Final answer",
-                        "reasoning_content": "Step 1: analyze...\nStep 2: evaluate..."
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Final answer",
+                            "reasoning_content": "Step 1: analyze...\nStep 2: evaluate...",
+                        }
                     }
-                }]
+                ]
             }
 
             with patch.object(agent, "_priv_http_client") as mock_client:
@@ -741,8 +774,10 @@ class TestReasoningContentExtraction:
 
         mode_manager = MagicMock()
 
-        with patch.object(MainAgent, 'build_system_prompt', return_value="Test prompt"), \
-             patch.object(MainAgent, 'build_tool_schemas', return_value=[]):
+        with (
+            patch.object(MainAgent, "build_system_prompt", return_value="Test prompt"),
+            patch.object(MainAgent, "build_tool_schemas", return_value=[]),
+        ):
             agent = MainAgent(config, tool_registry, mode_manager)
 
             mock_result = MagicMock()
@@ -781,13 +816,13 @@ class TestReactExecutorReasoningDisplay:
             mode_manager=MagicMock(),
             console=mock_console,
             llm_caller=mock_llm_caller,
-            tool_executor=mock_tool_executor
+            tool_executor=mock_tool_executor,
         )
 
         response = {
             "content": "My response",
             "tool_calls": [{"function": {"name": "test"}}],
-            "reasoning_content": "My reasoning"
+            "reasoning_content": "My reasoning",
         }
 
         content, tool_calls, reasoning_content = executor._parse_llm_response(response)
@@ -812,13 +847,10 @@ class TestReactExecutorReasoningDisplay:
             mode_manager=MagicMock(),
             console=mock_console,
             llm_caller=mock_llm_caller,
-            tool_executor=mock_tool_executor
+            tool_executor=mock_tool_executor,
         )
 
-        response = {
-            "content": "My response",
-            "tool_calls": None
-        }
+        response = {"content": "My response", "tool_calls": None}
 
         content, tool_calls, reasoning_content = executor._parse_llm_response(response)
 
@@ -834,7 +866,9 @@ class TestThinkingPromptBuilder:
         """Test ThinkingPromptBuilder loads thinking prompt template."""
         from opendev.core.agents.components import ThinkingPromptBuilder
 
-        mock_return = "Thinking Mode: You are in thinking mode.\nWorking directory context will be added."
+        mock_return = (
+            "Thinking Mode: You are in thinking mode.\nWorking directory context will be added."
+        )
         with (
             patch("opendev.core.agents.components.prompts.builders.load_prompt") as mock_load,
             patch("opendev.core.agents.prompts.loader.load_prompt") as mock_loader_load,
@@ -946,8 +980,10 @@ class TestToolChoiceBehavior:
 
         mode_manager = MagicMock()
 
-        with patch.object(MainAgent, 'build_system_prompt', return_value="Test prompt"), \
-             patch.object(MainAgent, 'build_tool_schemas', return_value=[]):
+        with (
+            patch.object(MainAgent, "build_system_prompt", return_value="Test prompt"),
+            patch.object(MainAgent, "build_tool_schemas", return_value=[]),
+        ):
             agent = MainAgent(config, tool_registry, mode_manager)
 
             mock_result = MagicMock()
@@ -963,10 +999,7 @@ class TestToolChoiceBehavior:
                 agent._priv_thinking_http_client = None
 
                 # Call without force_think (parameter removed)
-                agent.call_llm(
-                    [{"role": "user", "content": "hello"}],
-                    thinking_visible=True
-                )
+                agent.call_llm([{"role": "user", "content": "hello"}], thinking_visible=True)
 
                 call_args = mock_client.post_json.call_args
                 payload = call_args[0][0]

@@ -13,7 +13,6 @@ from typing import Any
 
 from opendev.core.agents.prompts.loader import load_tool_description
 
-
 _BUILTIN_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",

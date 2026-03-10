@@ -74,14 +74,19 @@ def get_available_tools(
     """
     if tool_schemas is None:
         from opendev.core.agents.components.schemas import _BUILTIN_TOOL_SCHEMAS
+
         tool_schemas = _BUILTIN_TOOL_SCHEMAS
 
     tools: List[ToolInfo] = []
 
     # Tools to exclude from selection (MCP tools that are for discovery only)
-    excluded_tools = {
-        "search_tools",  # For discovering MCP tools
-    } if exclude_mcp_tools else set()
+    excluded_tools = (
+        {
+            "search_tools",  # For discovering MCP tools
+        }
+        if exclude_mcp_tools
+        else set()
+    )
 
     for schema in tool_schemas:
         function_data = schema.get("function", {})
@@ -93,19 +98,20 @@ def get_available_tools(
 
         # Get display name, or generate from snake_case
         display_name = _TOOL_DISPLAY_NAMES.get(
-            name,
-            " ".join(word.capitalize() for word in name.split("_"))
+            name, " ".join(word.capitalize() for word in name.split("_"))
         )
 
         # Truncate long descriptions
         if len(description) > 60:
             description = description[:57] + "..."
 
-        tools.append(ToolInfo(
-            name=name,
-            display_name=display_name,
-            description=description,
-        ))
+        tools.append(
+            ToolInfo(
+                name=name,
+                display_name=display_name,
+                description=description,
+            )
+        )
 
     # Sort alphabetically by display name
     tools.sort(key=lambda t: t.display_name)

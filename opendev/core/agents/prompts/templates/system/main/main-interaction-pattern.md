@@ -1,12 +1,12 @@
 <!--
 name: 'System Prompt: Interaction Pattern'
 description: Think-Act-Observe-Repeat workflow
-version: 2.0.0
+version: 2.1.0
 -->
 
 # Interaction Pattern
 
-1. **Think**: Briefly explain what you're about to do (1-2 sentences)
+1. **Think**: Briefly consider your approach before acting
 2. **Act**: IMMEDIATELY call tools in the SAME response
 3. **Observe**: Acknowledge key results
 4. **Repeat**: Continue until task is complete

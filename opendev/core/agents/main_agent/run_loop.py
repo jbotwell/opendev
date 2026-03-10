@@ -9,7 +9,6 @@ from typing import Any, Optional
 from opendev.core.agents.prompts import get_reminder
 from opendev.core.utils.sound import play_finish_sound
 
-
 PARALLELIZABLE_TOOLS = frozenset(
     {
         "read_file",
@@ -199,9 +198,7 @@ class RunLoopMixin:
                 if ui_callback and hasattr(ui_callback, "on_tool_result"):
                     t_name = tc["function"]["name"]
                     t_args = json.loads(tc["function"]["arguments"])
-                    ui_callback.on_tool_result(
-                        t_name, t_args, result, tool_call_id=tc["id"]
-                    )
+                    ui_callback.on_tool_result(t_name, t_args, result, tool_call_id=tc["id"])
 
         return results_by_id
 
@@ -426,13 +423,16 @@ class RunLoopMixin:
                                 consecutive_no_tool_calls = 0
                                 continue
 
-                            # Nudge once for empty completion summary
-                            if not cleaned_content and not completion_nudge_sent:
+                            # Before accepting implicit completion, remind of original task (once)
+                            if not completion_nudge_sent:
                                 completion_nudge_sent = True
                                 messages.append(
                                     {
                                         "role": "user",
-                                        "content": get_reminder("completion_summary_nudge"),
+                                        "content": get_reminder(
+                                            "implicit_completion_nudge",
+                                            original_task=message,
+                                        ),
                                     }
                                 )
                                 continue
@@ -465,13 +465,16 @@ class RunLoopMixin:
                         self._drain_injected_messages(messages)
                         continue
 
-                    # Nudge once for empty completion summary
-                    if not cleaned_content and not completion_nudge_sent:
+                    # Before accepting implicit completion, remind of original task (once)
+                    if not completion_nudge_sent:
                         completion_nudge_sent = True
                         messages.append(
                             {
                                 "role": "user",
-                                "content": get_reminder("completion_summary_nudge"),
+                                "content": get_reminder(
+                                    "implicit_completion_nudge",
+                                    original_task=message,
+                                ),
                             }
                         )
                         continue
@@ -552,9 +555,7 @@ class RunLoopMixin:
                                             {
                                                 "role": "tool",
                                                 "tool_call_id": t["id"],
-                                                "content": get_reminder(
-                                                    "explore_first_nudge"
-                                                ),
+                                                "content": get_reminder("explore_first_nudge"),
                                             }
                                         )
                                     else:
@@ -616,9 +617,7 @@ class RunLoopMixin:
 
                     # Notify UI callback before tool execution
                     if ui_callback and hasattr(ui_callback, "on_tool_call"):
-                        ui_callback.on_tool_call(
-                            tool_name, tool_args, tool_call_id=tool_call["id"]
-                        )
+                        ui_callback.on_tool_call(tool_name, tool_args, tool_call_id=tool_call["id"])
 
                     # Log tool registry type for debugging Docker execution
                     _logger = logging.getLogger(__name__)
