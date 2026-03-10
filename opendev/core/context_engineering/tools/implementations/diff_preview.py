@@ -31,8 +31,8 @@ class Diff:
         self.file_path = file_path
         self.original = original
         self.modified = modified
-        self.original_lines = original_lines or original.splitlines()
-        self.modified_lines = modified_lines or modified.splitlines()
+        self.original_lines = original_lines or original.split("\n")
+        self.modified_lines = modified_lines or modified.split("\n")
 
     def generate_unified_diff(self, context_lines: int = 3) -> str:
         """Generate unified diff format.
@@ -59,11 +59,7 @@ class Diff:
         Returns:
             Dict with lines_added, lines_removed, lines_changed
         """
-        diff = list(
-            difflib.unified_diff(
-                self.original_lines, self.modified_lines, lineterm=""
-            )
-        )
+        diff = list(difflib.unified_diff(self.original_lines, self.modified_lines, lineterm=""))
 
         added = sum(1 for line in diff if line.startswith("+") and not line.startswith("+++"))
         removed = sum(1 for line in diff if line.startswith("-") and not line.startswith("---"))
@@ -86,9 +82,7 @@ class DiffPreview:
         """
         self.console = console or Console()
 
-    def generate_diff(
-        self, file_path: str, original: str, modified: str
-    ) -> Diff:
+    def generate_diff(self, file_path: str, original: str, modified: str) -> Diff:
         """Generate a diff object.
 
         Args:
@@ -136,9 +130,7 @@ class DiffPreview:
         if show_stats:
             output.append("─" * 50)
             stats = diff.get_stats()
-            output.append(
-                f"Changes: +{stats['lines_added']} -{stats['lines_removed']}"
-            )
+            output.append(f"Changes: +{stats['lines_added']} -{stats['lines_removed']}")
 
         return "\n".join(output)
 
@@ -162,9 +154,13 @@ class DiffPreview:
         if syntax_highlight:
             # Use diff syntax highlighting
             syntax = Syntax(content, "diff", theme="monokai", line_numbers=False)
-            self.console.print(Panel(syntax, title=f"Changes: {diff.file_path}", border_style="cyan"))
+            self.console.print(
+                Panel(syntax, title=f"Changes: {diff.file_path}", border_style="cyan")
+            )
         else:
-            self.console.print(Panel(content, title=f"Changes: {diff.file_path}", border_style="cyan"))
+            self.console.print(
+                Panel(content, title=f"Changes: {diff.file_path}", border_style="cyan")
+            )
 
     def preview_edit(
         self,
