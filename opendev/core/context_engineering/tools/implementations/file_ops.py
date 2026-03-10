@@ -11,120 +11,111 @@ from opendev.models.config import AppConfig
 # Covers 20+ programming languages and ecosystems
 DEFAULT_SEARCH_EXCLUDES = [
     # ===== Package/Dependency Directories =====
-    "node_modules",        # JavaScript/TypeScript (npm, yarn, pnpm, bun)
-    "bower_components",    # Bower (legacy JS)
-    "jspm_packages",       # JSPM
-    "vendor",              # Go, PHP (Composer), Ruby (Bundler)
-    "Pods",                # Swift/Objective-C (CocoaPods)
-    ".bundle",             # Ruby Bundler
-    "packages",            # Dart/Flutter, .NET
-    ".pub-cache",          # Dart pub
-    ".pub",                # Dart pub
-    "deps",                # Elixir Mix
-    ".nuget",              # .NET NuGet
-    ".m2",                 # Java Maven, Clojure
-
+    "node_modules",  # JavaScript/TypeScript (npm, yarn, pnpm, bun)
+    "bower_components",  # Bower (legacy JS)
+    "jspm_packages",  # JSPM
+    "vendor",  # Go, PHP (Composer), Ruby (Bundler)
+    "Pods",  # Swift/Objective-C (CocoaPods)
+    ".bundle",  # Ruby Bundler
+    "packages",  # Dart/Flutter, .NET
+    ".pub-cache",  # Dart pub
+    ".pub",  # Dart pub
+    "deps",  # Elixir Mix
+    ".nuget",  # .NET NuGet
+    ".m2",  # Java Maven, Clojure
     # ===== Virtual Environments =====
-    ".venv",               # Python (standard)
-    "venv",                # Python (common)
-    "env",                 # Python (common)
-    ".env",                # Python/Node env dirs
-    "ENV",                 # Python
-    ".virtualenvs",        # virtualenvwrapper
-    ".conda",              # Conda environments
-
+    ".venv",  # Python (standard)
+    "venv",  # Python (common)
+    "env",  # Python (common)
+    ".env",  # Python/Node env dirs
+    "ENV",  # Python
+    ".virtualenvs",  # virtualenvwrapper
+    ".conda",  # Conda environments
     # ===== Build Output Directories =====
-    "build",               # Universal (C/C++, Python, Gradle, etc.)
-    "dist",                # Universal (JS, Python, Haskell)
-    "out",                 # TypeScript, Android, general
-    "target",              # Rust (Cargo), Java (Maven), Scala (sbt), Clojure
-    "bin",                 # .NET, Go, general compiled output
-    "obj",                 # .NET intermediate
-    "lib",                 # Compiled libraries
-    "_build",              # Elixir, Erlang
-    "ebin",                # Erlang compiled
-    "dist-newstyle",       # Haskell Cabal
-    ".build",              # Swift Package Manager
-    "DerivedData",         # Xcode
-    "CMakeFiles",          # CMake build artifacts
-    ".cmake",              # CMake cache
-
+    "build",  # Universal (C/C++, Python, Gradle, etc.)
+    "dist",  # Universal (JS, Python, Haskell)
+    "out",  # TypeScript, Android, general
+    "target",  # Rust (Cargo), Java (Maven), Scala (sbt), Clojure
+    "bin",  # .NET, Go, general compiled output
+    "obj",  # .NET intermediate
+    "lib",  # Compiled libraries
+    "_build",  # Elixir, Erlang
+    "ebin",  # Erlang compiled
+    "dist-newstyle",  # Haskell Cabal
+    ".build",  # Swift Package Manager
+    "DerivedData",  # Xcode
+    "CMakeFiles",  # CMake build artifacts
+    ".cmake",  # CMake cache
     # ===== Framework-Specific Build =====
-    ".next",               # Next.js
-    ".nuxt",               # Nuxt.js
-    ".angular",            # Angular CLI
-    ".svelte-kit",         # SvelteKit
-    ".vuepress",           # VuePress
-    ".gatsby-cache",       # Gatsby
-    ".parcel-cache",       # Parcel bundler
-    ".turbo",              # Turborepo
-    "dist_electron",       # Electron
-
+    ".next",  # Next.js
+    ".nuxt",  # Nuxt.js
+    ".angular",  # Angular CLI
+    ".svelte-kit",  # SvelteKit
+    ".vuepress",  # VuePress
+    ".gatsby-cache",  # Gatsby
+    ".parcel-cache",  # Parcel bundler
+    ".turbo",  # Turborepo
+    "dist_electron",  # Electron
     # ===== Cache Directories =====
-    ".cache",              # Universal cache
-    "__pycache__",         # Python bytecode
-    ".pytest_cache",       # Pytest
-    ".mypy_cache",         # Mypy type checker
-    ".ruff_cache",         # Ruff linter
-    ".hypothesis",         # Hypothesis testing
-    ".tox",                # Tox testing
-    ".nox",                # Nox testing
-    ".eslintcache",        # ESLint
-    ".stylelintcache",     # Stylelint
-    ".gradle",             # Gradle
-    ".dart_tool",          # Dart
-    ".mix",                # Elixir
-    ".cpcache",            # Clojure
-    ".lsp",                # Clojure LSP
-
+    ".cache",  # Universal cache
+    "__pycache__",  # Python bytecode
+    ".pytest_cache",  # Pytest
+    ".mypy_cache",  # Mypy type checker
+    ".ruff_cache",  # Ruff linter
+    ".hypothesis",  # Hypothesis testing
+    ".tox",  # Tox testing
+    ".nox",  # Nox testing
+    ".eslintcache",  # ESLint
+    ".stylelintcache",  # Stylelint
+    ".gradle",  # Gradle
+    ".dart_tool",  # Dart
+    ".mix",  # Elixir
+    ".cpcache",  # Clojure
+    ".lsp",  # Clojure LSP
     # ===== IDE/Editor Directories =====
-    ".idea",               # JetBrains IDEs
-    ".vscode",             # VS Code
-    ".vscode-test",        # VS Code extension testing
-    ".vs",                 # Visual Studio
-    ".metadata",           # Eclipse
-    ".settings",           # Eclipse
-    "xcuserdata",          # Xcode user data
-    ".netbeans",           # NetBeans
-
+    ".idea",  # JetBrains IDEs
+    ".vscode",  # VS Code
+    ".vscode-test",  # VS Code extension testing
+    ".vs",  # Visual Studio
+    ".metadata",  # Eclipse
+    ".settings",  # Eclipse
+    "xcuserdata",  # Xcode user data
+    ".netbeans",  # NetBeans
     # ===== Version Control =====
-    ".git",                # Git
-    ".svn",                # Subversion
-    ".hg",                 # Mercurial
-
+    ".git",  # Git
+    ".svn",  # Subversion
+    ".hg",  # Mercurial
     # ===== Coverage/Testing Output =====
-    "coverage",            # Universal coverage
-    "htmlcov",             # Python coverage HTML
-    ".nyc_output",         # NYC (Istanbul) coverage
-
+    "coverage",  # Universal coverage
+    "htmlcov",  # Python coverage HTML
+    ".nyc_output",  # NYC (Istanbul) coverage
     # ===== Language-Specific Metadata =====
-    ".eggs",               # Python eggs
-    ".Rproj.user",         # R Studio
-    ".julia",              # Julia packages
-    "_opam",               # OCaml
-    ".cabal-sandbox",      # Haskell Cabal sandbox
-    ".stack-work",         # Haskell Stack
-    "blib",                # Perl build
-
+    ".eggs",  # Python eggs
+    ".Rproj.user",  # R Studio
+    ".julia",  # Julia packages
+    "_opam",  # OCaml
+    ".cabal-sandbox",  # Haskell Cabal sandbox
+    ".stack-work",  # Haskell Stack
+    "blib",  # Perl build
     # ===== Generated/Minified Files (glob patterns) =====
-    "*.min.js",            # Minified JavaScript
-    "*.min.css",           # Minified CSS
-    "*.bundle.js",         # Bundled JavaScript
-    "*.chunk.js",          # Webpack chunks
-    "*.map",               # Source maps
-    "*.pyc",               # Python compiled
-    "*.pyo",               # Python optimized
-    "*.class",             # Java compiled
-    "*.o",                 # C/C++ object files
-    "*.so",                # Shared libraries
-    "*.dylib",             # macOS dynamic libraries
-    "*.dll",               # Windows DLLs
-    "*.exe",               # Windows executables
-    "*.beam",              # Erlang/Elixir compiled
-    "*.hi",                # Haskell interface
-    "*.dyn_hi",            # Haskell dynamic interface
-    "*.dyn_o",             # Haskell dynamic object
-    "*.egg-info",          # Python egg info
+    "*.min.js",  # Minified JavaScript
+    "*.min.css",  # Minified CSS
+    "*.bundle.js",  # Bundled JavaScript
+    "*.chunk.js",  # Webpack chunks
+    "*.map",  # Source maps
+    "*.pyc",  # Python compiled
+    "*.pyo",  # Python optimized
+    "*.class",  # Java compiled
+    "*.o",  # C/C++ object files
+    "*.so",  # Shared libraries
+    "*.dylib",  # macOS dynamic libraries
+    "*.dll",  # Windows DLLs
+    "*.exe",  # Windows executables
+    "*.beam",  # Erlang/Elixir compiled
+    "*.hi",  # Haskell interface
+    "*.dyn_hi",  # Haskell dynamic interface
+    "*.dyn_o",  # Haskell dynamic object
+    "*.egg-info",  # Python egg info
 ]
 
 
@@ -161,8 +152,14 @@ class FileOperations:
 
     # Minimal fallback set when GitIgnoreParser is unavailable
     _FALLBACK_IGNORE_DIRS = {
-        "__pycache__", ".git", "node_modules", ".pytest_cache",
-        ".venv", "venv", ".mypy_cache", ".tox",
+        "__pycache__",
+        ".git",
+        "node_modules",
+        ".pytest_cache",
+        ".venv",
+        "venv",
+        ".mypy_cache",
+        ".tox",
     }
 
     def _is_gitignored(self, path: str | Path) -> bool:
@@ -242,9 +239,7 @@ class FileOperations:
         except OSError as e:
             return f"Error reading image: {e}"
 
-    def _read_pdf_file(
-        self, path: Path, offset: int = 1, max_lines: int = 2000
-    ) -> str:
+    def _read_pdf_file(self, path: Path, offset: int = 1, max_lines: int = 2000) -> str:
         """Read a PDF file and extract text content."""
         try:
             result = subprocess.run(
@@ -267,9 +262,7 @@ class FileOperations:
                     output_parts.append(f"  {i}\t{text}")
                 result_text = "\n".join(output_parts)
                 if end_idx < total:
-                    result_text += (
-                        f"\n... (truncated: showing lines {offset}-{end_idx} of {total})"
-                    )
+                    result_text += f"\n... (truncated: showing lines {offset}-{end_idx} of {total})"
                 return result_text
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
@@ -440,25 +433,49 @@ class FileOperations:
         context_lines: int = 0,
         max_results: int = 50,
         case_insensitive: bool = False,
+        include_glob: Optional[str] = None,
+        file_type: Optional[str] = None,
+        fixed_string: bool = False,
+        multiline: bool = False,
+        output_mode: str = "content",
     ) -> list[dict[str, any]]:
         """Search for pattern in files.
 
         Args:
-            pattern: Regex pattern to search for
+            pattern: Regex pattern to search for (or literal if fixed_string=True)
             path: Optional path/directory to search in (relative to working_dir)
             context_lines: Number of context lines to include
             max_results: Maximum number of matches
             case_insensitive: Case insensitive search
+            include_glob: Glob pattern to filter files (e.g., "*.py")
+            file_type: File type filter (e.g., "py", "js", "rust")
+            fixed_string: Treat pattern as literal string, not regex
+            multiline: Enable multiline matching
+            output_mode: "content" (default), "files_with_matches", or "count"
 
         Returns:
-            List of matches with file, line number, and content
+            List of matches (format depends on output_mode)
         """
         matches = []
 
         try:
             # Use ripgrep if available for better performance
-            # -F = fixed-strings (treat pattern as literal, not regex)
-            cmd = ["rg", "--json", "-F", pattern]
+            use_json = output_mode == "content"
+
+            cmd = ["rg"]
+            if use_json:
+                cmd.append("--json")
+
+            if fixed_string:
+                cmd.append("-F")
+            if multiline:
+                cmd.append("-U")
+            if output_mode == "files_with_matches":
+                cmd.append("--files-with-matches")
+            elif output_mode == "count":
+                cmd.append("--count")
+
+            cmd.append(pattern)
 
             # Add default exclusions (ripgrep respects .gitignore, but this is a safety net)
             for exclude in DEFAULT_SEARCH_EXCLUDES:
@@ -467,10 +484,16 @@ class FileOperations:
                 else:
                     cmd.extend(["--glob", f"!{exclude}/**"])
 
+            if include_glob:
+                cmd.extend(["--glob", include_glob])
+            if file_type:
+                cmd.extend(["--type", file_type])
             if case_insensitive:
                 cmd.append("-i")
             if context_lines > 0:
                 cmd.extend(["-C", str(context_lines)])
+            if max_results > 0:
+                cmd.extend(["-m", str(max_results)])
 
             # Add the search path if specified
             if path and path not in (".", "./"):
@@ -487,63 +510,129 @@ class FileOperations:
             )
 
             if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    if not line:
-                        continue
-                    try:
-                        import json
-                        data = json.loads(line)
-                        if data["type"] == "match":
-                            match_data = data["data"]
-                            file_path = match_data["path"]["text"]
-                            # Convert to absolute path
-                            abs_path = str(self.working_dir / file_path)
-                            matches.append({
-                                "file": abs_path,
-                                "line": match_data["line_number"],
-                                "content": match_data["lines"]["text"].strip(),
-                            })
-                            if len(matches) >= max_results:
-                                break
-                    except:
-                        continue
+                if output_mode == "files_with_matches":
+                    for line in result.stdout.strip().split("\n"):
+                        if not line:
+                            continue
+                        abs_path = str(self.working_dir / line)
+                        matches.append({"file": abs_path})
+                elif output_mode == "count":
+                    for line in result.stdout.strip().split("\n"):
+                        if not line or ":" not in line:
+                            continue
+                        # Format: file_path:count
+                        sep = line.rfind(":")
+                        file_path = line[:sep]
+                        count = int(line[sep + 1 :])
+                        abs_path = str(self.working_dir / file_path)
+                        matches.append({"file": abs_path, "count": count})
+                else:
+                    # content mode — JSON parsing
+                    for line in result.stdout.strip().split("\n"):
+                        if not line:
+                            continue
+                        try:
+                            import json
+
+                            data = json.loads(line)
+                            if data["type"] == "match":
+                                match_data = data["data"]
+                                file_path = match_data["path"]["text"]
+                                abs_path = str(self.working_dir / file_path)
+                                matches.append(
+                                    {
+                                        "file": abs_path,
+                                        "line": match_data["line_number"],
+                                        "content": match_data["lines"]["text"].strip(),
+                                    }
+                                )
+                                if len(matches) >= max_results:
+                                    break
+                        except Exception:
+                            continue
 
         except (subprocess.TimeoutExpired, FileNotFoundError):
             # Fallback to Python-based search if rg is not available
-            matches = self._python_grep(pattern, path, max_results, case_insensitive)
+            matches = self._python_grep(
+                pattern,
+                path,
+                max_results,
+                case_insensitive,
+                include_glob=include_glob,
+                file_type=file_type,
+                fixed_string=fixed_string,
+                multiline=multiline,
+                output_mode=output_mode,
+            )
 
         return matches
 
+    # File type to extension mapping for Python grep fallback
+    _FILE_TYPE_EXTENSIONS: dict[str, set[str]] = {
+        "py": {".py", ".pyi"},
+        "js": {".js", ".jsx", ".mjs"},
+        "ts": {".ts", ".tsx", ".mts"},
+        "rust": {".rs"},
+        "go": {".go"},
+        "java": {".java"},
+        "c": {".c", ".h"},
+        "cpp": {".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx", ".h"},
+        "ruby": {".rb"},
+        "php": {".php"},
+        "swift": {".swift"},
+        "kotlin": {".kt", ".kts"},
+        "scala": {".scala"},
+        "html": {".html", ".htm"},
+        "css": {".css"},
+        "json": {".json"},
+        "yaml": {".yaml", ".yml"},
+        "toml": {".toml"},
+        "md": {".md", ".markdown"},
+        "sh": {".sh", ".bash", ".zsh"},
+    }
+
     def _python_grep(
-        self, pattern: str, search_path: Optional[str],
-        max_results: int, case_insensitive: bool
+        self,
+        pattern: str,
+        search_path: Optional[str],
+        max_results: int,
+        case_insensitive: bool,
+        include_glob: Optional[str] = None,
+        file_type: Optional[str] = None,
+        fixed_string: bool = False,
+        multiline: bool = False,
+        output_mode: str = "content",
     ) -> list[dict[str, any]]:
         """Fallback grep implementation using Python."""
+        import fnmatch as _fnmatch
+
         matches = []
         flags = re.IGNORECASE if case_insensitive else 0
-        # Escape pattern for literal matching (consistent with ripgrep -F)
-        regex = re.compile(re.escape(pattern), flags)
+        if multiline:
+            flags |= re.DOTALL | re.MULTILINE
+
+        raw_pattern = re.escape(pattern) if fixed_string else pattern
+        regex = re.compile(raw_pattern, flags)
+
+        # Resolve file type extensions
+        type_exts = self._FILE_TYPE_EXTENSIONS.get(file_type) if file_type else None
 
         # Determine search root and glob pattern
         if search_path in (None, ".", "./"):
-            # Search from working_dir with all files
             search_root = self.working_dir
             glob_pattern = "**/*"
         else:
-            # Check if it's an absolute path
             search_path_obj = Path(search_path)
             if search_path_obj.is_absolute():
                 if search_path_obj.is_dir():
                     search_root = search_path_obj
                     glob_pattern = "**/*"
                 elif search_path_obj.is_file():
-                    # Single file search
                     search_root = search_path_obj.parent
                     glob_pattern = search_path_obj.name
                 else:
-                    return matches  # Path doesn't exist
+                    return matches
             else:
-                # Relative path - resolve from working_dir
                 resolved = self.working_dir / search_path
                 if resolved.is_dir():
                     search_root = resolved
@@ -552,9 +641,12 @@ class FileOperations:
                     search_root = resolved.parent
                     glob_pattern = resolved.name
                 else:
-                    # Treat as glob pattern
                     search_root = self.working_dir
                     glob_pattern = search_path
+
+        # Track per-file counts and seen files for non-content modes
+        file_counts: dict[str, int] = {}
+        seen_files: list[str] = []
 
         for path in search_root.glob(glob_pattern):
             if not path.is_file():
@@ -566,20 +658,75 @@ class FileOperations:
             if self._is_gitignored(path):
                 continue
 
+            # Apply include_glob filter
+            if include_glob and not _fnmatch.fnmatch(path.name, include_glob):
+                continue
+
+            # Apply file_type filter
+            if type_exts and path.suffix not in type_exts:
+                continue
+
             try:
                 with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                    for line_num, line in enumerate(f, 1):
-                        if regex.search(line):
-                            # Return absolute path for consistency with ripgrep output
-                            matches.append({
-                                "file": str(path),
-                                "line": line_num,
-                                "content": line.strip(),
-                            })
-                            if len(matches) >= max_results:
-                                return matches
+                    abs_path = str(path)
+
+                    if multiline:
+                        content = f.read()
+                        found = list(regex.finditer(content))
+                        if not found:
+                            continue
+
+                        if output_mode == "files_with_matches":
+                            seen_files.append(abs_path)
+                            if len(seen_files) >= max_results:
+                                break
+                        elif output_mode == "count":
+                            file_counts[abs_path] = len(found)
+                        else:
+                            # Compute line numbers from match positions
+                            for m in found:
+                                line_num = content[: m.start()].count("\n") + 1
+                                match_text = m.group(0)
+                                # Truncate long multiline matches
+                                if len(match_text) > 200:
+                                    match_text = match_text[:200] + "..."
+                                matches.append(
+                                    {
+                                        "file": abs_path,
+                                        "line": line_num,
+                                        "content": match_text.strip(),
+                                    }
+                                )
+                                if len(matches) >= max_results:
+                                    return matches
+                    else:
+                        for line_num, line in enumerate(f, 1):
+                            if regex.search(line):
+                                if output_mode == "files_with_matches":
+                                    seen_files.append(abs_path)
+                                    if len(seen_files) >= max_results:
+                                        return [{"file": fp} for fp in seen_files]
+                                    break  # One match is enough for this file
+                                elif output_mode == "count":
+                                    file_counts[abs_path] = file_counts.get(abs_path, 0) + 1
+                                else:
+                                    matches.append(
+                                        {
+                                            "file": abs_path,
+                                            "line": line_num,
+                                            "content": line.strip(),
+                                        }
+                                    )
+                                    if len(matches) >= max_results:
+                                        return matches
             except Exception:
                 continue
+
+        # Return based on output_mode
+        if output_mode == "files_with_matches":
+            return [{"file": fp} for fp in seen_files]
+        elif output_mode == "count":
+            return [{"file": fp, "count": c} for fp, c in file_counts.items()]
 
         return matches
 
@@ -603,8 +750,9 @@ class FileOperations:
 
         return self._build_tree(dir_path, max_depth=max_depth)
 
-    def _build_tree(self, path: Path, prefix: str = "", max_depth: int = 2,
-                    current_depth: int = 0) -> str:
+    def _build_tree(
+        self, path: Path, prefix: str = "", max_depth: int = 2, current_depth: int = 0
+    ) -> str:
         """Build a tree representation of directory structure."""
         if current_depth >= max_depth:
             return ""
@@ -714,11 +862,13 @@ class FileOperations:
                         except ValueError:
                             rel_path = file_path
 
-                        matches.append({
-                            "file": rel_path,
-                            "line": item.get("range", {}).get("start", {}).get("line", 0),
-                            "content": item.get("text", "").strip(),
-                        })
+                        matches.append(
+                            {
+                                "file": rel_path,
+                                "line": item.get("range", {}).get("start", {}).get("line", 0),
+                                "content": item.get("text", "").strip(),
+                            }
+                        )
 
                         if len(matches) >= max_results:
                             break

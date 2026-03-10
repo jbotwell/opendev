@@ -113,6 +113,16 @@ _BUILTIN_TOOL_SCHEMAS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": "Optional glob pattern to filter files (e.g., '*.py', '**/*.js')",
                     },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return",
+                        "default": 100,
+                    },
+                    "max_depth": {
+                        "type": "integer",
+                        "description": "Maximum directory depth to traverse when listing without a glob pattern",
+                        "default": 2,
+                    },
                 },
                 "required": [],
             },
@@ -143,6 +153,40 @@ _BUILTIN_TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "lang": {
                         "type": "string",
                         "description": "Language hint for AST mode: python, typescript, javascript, go, rust, java, etc. Auto-detected if not specified.",
+                    },
+                    "case_insensitive": {
+                        "type": "boolean",
+                        "description": "Case insensitive search (default false)",
+                        "default": False,
+                    },
+                    "context_lines": {
+                        "type": "integer",
+                        "description": "Number of context lines before and after each match",
+                        "default": 0,
+                    },
+                    "include_glob": {
+                        "type": "string",
+                        "description": "Glob pattern to filter which files to search (e.g., '*.py', '*.{ts,tsx}')",
+                    },
+                    "file_type": {
+                        "type": "string",
+                        "description": "File type filter (e.g., 'py', 'js', 'rust', 'go', 'java'). More efficient than include_glob.",
+                    },
+                    "multiline": {
+                        "type": "boolean",
+                        "description": "Enable multiline matching where . matches newlines and patterns can span lines",
+                        "default": False,
+                    },
+                    "output_mode": {
+                        "type": "string",
+                        "enum": ["content", "files_with_matches", "count"],
+                        "description": "Output format: 'content' shows matching lines (default), 'files_with_matches' shows only file paths, 'count' shows match counts per file",
+                        "default": "content",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of matches to return",
+                        "default": 50,
                     },
                 },
                 "required": ["pattern", "path"],
@@ -670,7 +714,21 @@ _BUILTIN_TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["navigate", "click", "type", "fill", "screenshot", "get_text", "wait", "evaluate", "tabs_list", "tab_close", "back", "forward", "reload"],
+                        "enum": [
+                            "navigate",
+                            "click",
+                            "type",
+                            "fill",
+                            "screenshot",
+                            "get_text",
+                            "wait",
+                            "evaluate",
+                            "tabs_list",
+                            "tab_close",
+                            "back",
+                            "forward",
+                            "reload",
+                        ],
                         "description": "Browser action to perform",
                     },
                     "target": {

@@ -75,7 +75,7 @@ class FileToolHandler:
                         file_path=file_path,
                         lines_added=len(content.split("\n")),
                         description=f"Created {Path(file_path).name}",
-                        session_id=session.id
+                        session_id=session.id,
                     )
                     session.add_file_change(file_change)
 
@@ -86,7 +86,11 @@ class FileToolHandler:
         return {
             "success": write_result.success,
             "output": output_msg,
-            "error": (write_result.error or "Write operation failed") if not write_result.success else None,
+            "error": (
+                (write_result.error or "Write operation failed")
+                if not write_result.success
+                else None
+            ),
         }
 
     def edit_file(self, args: dict[str, Any], context: ToolExecutionContext) -> dict[str, Any]:
@@ -172,7 +176,7 @@ class FileToolHandler:
                         lines_added=edit_result.lines_added,
                         lines_removed=edit_result.lines_removed,
                         description=f"Modified {Path(file_path).name} (+{edit_result.lines_added}/-{edit_result.lines_removed})",
-                        session_id=session.id
+                        session_id=session.id,
                     )
                     session.add_file_change(file_change)
 
@@ -196,14 +200,18 @@ class FileToolHandler:
         return {
             "success": edit_result.success,
             "output": output_msg,
-            "error": (edit_result.error or "Edit operation failed") if not edit_result.success else None,
+            "error": (
+                (edit_result.error or "Edit operation failed") if not edit_result.success else None
+            ),
             "file_path": file_path,
             "lines_added": edit_result.lines_added,
             "lines_removed": edit_result.lines_removed,
             "diff": edit_result.diff,
         }
 
-    def read_file(self, args: dict[str, Any], context: ToolExecutionContext | None = None) -> dict[str, Any]:
+    def read_file(
+        self, args: dict[str, Any], context: ToolExecutionContext | None = None
+    ) -> dict[str, Any]:
         if not self._file_ops:
             return {"success": False, "error": "FileOperations not available"}
 
@@ -281,7 +289,9 @@ class FileToolHandler:
                 output = "\n".join(files) if files else "No files found"
                 entries = files
             else:
-                output = self._file_ops.list_directory(str(base_path))
+                output = self._file_ops.list_directory(
+                    str(base_path), max_depth=args.get("max_depth", 2)
+                )
                 if output and not output.startswith(("Directory not found", "Not a directory")):
                     entries = [line for line in output.splitlines() if line.strip()]
 
@@ -314,6 +324,15 @@ class FileToolHandler:
         search_type = args.get("type", "text")  # "text" or "ast"
         lang = args.get("lang")
 
+        # New params for text mode
+        case_insensitive = args.get("case_insensitive", False)
+        context_lines = args.get("context_lines", 0)
+        include_glob = args.get("include_glob")
+        file_type = args.get("file_type")
+        multiline = args.get("multiline", False)
+        output_mode = args.get("output_mode", "content")
+        max_results = args.get("max_results", 50)
+
         try:
             if search_type == "ast":
                 # AST-based structural search using ast-grep
@@ -322,17 +341,35 @@ class FileToolHandler:
                     return {"success": True, "output": "No structural matches found", "matches": []}
             else:
                 # Default: text/regex search using ripgrep
-                matches = self._file_ops.grep_files(pattern, path)
+                matches = self._file_ops.grep_files(
+                    pattern,
+                    path,
+                    case_insensitive=case_insensitive,
+                    context_lines=context_lines,
+                    max_results=max_results,
+                    include_glob=include_glob,
+                    file_type=file_type,
+                    multiline=multiline,
+                    output_mode=output_mode,
+                )
                 if not matches:
                     return {"success": True, "output": "No matches found", "matches": []}
 
+            # Format output based on output_mode
             lines = []
             total_chars = 0
             max_output_chars = 30_000
             shown = 0
-            for match in matches[:50]:
-                line = f"{match['file']}:{match['line']} - {match['content']}"
-                total_chars += len(line) + 1  # +1 for newline
+
+            for match in matches:
+                if output_mode == "files_with_matches":
+                    line = match["file"]
+                elif output_mode == "count":
+                    line = f"{match['file']}: {match['count']} matches"
+                else:
+                    line = f"{match['file']}:{match['line']} - {match['content']}"
+
+                total_chars += len(line) + 1
                 if total_chars > max_output_chars:
                     lines.append(
                         f"\n... (output truncated at {max_output_chars} chars. "
@@ -341,15 +378,16 @@ class FileToolHandler:
                     break
                 lines.append(line)
                 shown += 1
-            else:
-                if len(matches) > 50:
-                    lines.append(f"\n... and {len(matches) - 50} more matches")
-            output = "\n".join(lines)
 
+            output = "\n".join(lines)
             return {"success": True, "output": output, "matches": matches}
         except FileNotFoundError:
             if search_type == "ast":
-                return {"success": False, "error": "ast-grep (sg) not installed. Install: brew install ast-grep", "output": None}
+                return {
+                    "success": False,
+                    "error": "ast-grep (sg) not installed. Install: brew install ast-grep",
+                    "output": None,
+                }
             return {"success": False, "error": "File or directory not found", "output": None}
         except Exception as exc:  # noqa: BLE001
             error_msg = str(exc)
@@ -458,7 +496,9 @@ class FileToolHandler:
         return mode_manager.needs_approval(operation)
 
     @staticmethod
-    def _run_sync_approval(approval_manager: Any, operation: Operation, preview: str, **extra_kwargs: Any):
+    def _run_sync_approval(
+        approval_manager: Any, operation: Operation, preview: str, **extra_kwargs: Any
+    ):
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -470,7 +510,7 @@ class FileToolHandler:
             )
 
             # If it's already a result object, use it directly
-            if hasattr(approval_result, 'approved'):
+            if hasattr(approval_result, "approved"):
                 return approval_result
             else:
                 # If it's a coroutine, run it

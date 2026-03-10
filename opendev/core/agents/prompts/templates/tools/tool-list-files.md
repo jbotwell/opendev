@@ -1,7 +1,7 @@
 <!--
 name: 'Tool Description: list_files'
 description: List files in a directory or search by glob pattern
-version: 2.0.0
+version: 3.0.0
 -->
 
 Fast file pattern matching tool that works with any codebase size.
@@ -10,7 +10,8 @@ Fast file pattern matching tool that works with any codebase size.
 
 - Supports glob patterns like "**/*.py", "src/**/*.ts", or "*.json"
 - Returns matching file paths sorted by modification time
-- Results are capped at 500 entries to prevent context bloat
+- Results are capped at 500 entries to prevent context bloat (configurable via `max_results`)
+- Control directory traversal depth with `max_depth` (default 2) when listing without a glob pattern
 - Use this tool when you need to find files by name or extension patterns
 - Prefer list_files over run_command with ls or find
 - When doing an open-ended search that may require multiple rounds of globbing and grepping, consider using a subagent instead
