@@ -72,10 +72,12 @@ class AgentExecutor:
         try:
             # Mark session as running
             self.state.set_session_running(session_id)
-            await ws_manager.broadcast({
-                "type": "session_activity",
-                "data": {"session_id": session_id, "status": "running"},
-            })
+            await ws_manager.broadcast(
+                {
+                    "type": "session_activity",
+                    "data": {"session_id": session_id, "status": "running"},
+                }
+            )
 
             # Broadcast message start
             try:
@@ -130,23 +132,28 @@ class AgentExecutor:
 
             logger.error(traceback.format_exc())
             try:
-                await ws_manager.broadcast({
-                    "type": "error",
-                    "data": {"message": str(e), "session_id": session_id},
-                })
+                await ws_manager.broadcast(
+                    {
+                        "type": "error",
+                        "data": {"message": str(e), "session_id": session_id},
+                    }
+                )
             except Exception as broadcast_err:
                 logger.error(f"Failed to broadcast error: {broadcast_err}")
         finally:
             # Clean up ReactExecutor reference
             self._current_react_executors.pop(session_id, None)
-            # Always mark session as idle and clean up injection queue
+            # Always mark session as idle and clean up injection queue + approvals
             self.state.set_session_idle(session_id)
             self.state.clear_injection_queue(session_id)
+            self.state.clear_session_approvals(session_id)
             try:
-                await ws_manager.broadcast({
-                    "type": "session_activity",
-                    "data": {"session_id": session_id, "status": "idle"},
-                })
+                await ws_manager.broadcast(
+                    {
+                        "type": "session_activity",
+                        "data": {"session_id": session_id, "status": "idle"},
+                    }
+                )
             except Exception:
                 pass
 
@@ -255,6 +262,7 @@ class AgentExecutor:
 
         # Set thinking level from web state
         from opendev.core.context_engineering.tools.handlers.thinking_handler import ThinkingLevel
+
         thinking_level_str = self.state.get_thinking_level()
         try:
             thinking_level = ThinkingLevel(thinking_level_str)
@@ -328,6 +336,7 @@ class AgentExecutor:
         except Exception as e:
             logger.error(f"ReactExecutor error: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return {"summary": None, "error": str(e), "latency_ms": 0}
 

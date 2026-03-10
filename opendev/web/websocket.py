@@ -51,6 +51,7 @@ class WebSocketManager:
         # Validate message is JSON-serializable before broadcasting
         try:
             import json
+
             json.dumps(message)
             logger.debug(f"Broadcasting: {message.get('type')}")
         except (TypeError, ValueError) as e:
@@ -60,7 +61,7 @@ class WebSocketManager:
             # Try to send error message instead
             error_message = {
                 "type": "error",
-                "data": {"message": f"Internal serialization error: {str(e)}"}
+                "data": {"message": f"Internal serialization error: {str(e)}"},
             }
             message = error_message
 
@@ -97,7 +98,7 @@ class WebSocketManager:
             logger.warning(f"Unknown message type: {msg_type}")
             await self.send_message(
                 websocket,
-                {"type": "error", "data": {"message": f"Unknown message type: {msg_type}"}}
+                {"type": "error", "data": {"message": f"Unknown message type: {msg_type}"}},
             )
 
     async def _handle_query(self, websocket: WebSocket, data: Dict[str, Any]):
@@ -109,8 +110,7 @@ class WebSocketManager:
 
         if not message:
             await self.send_message(
-                websocket,
-                {"type": "error", "data": {"message": "Missing message field"}}
+                websocket, {"type": "error", "data": {"message": "Missing message field"}}
             )
             return
 
@@ -120,58 +120,69 @@ class WebSocketManager:
         if not session_id:
             session_id = state.get_current_session_id()
         if not session_id:
-            await self.send_message(websocket, {
-                "type": "error", "data": {"message": "No active session"}
-            })
+            await self.send_message(
+                websocket, {"type": "error", "data": {"message": "No active session"}}
+            )
             return
 
         # Bridge mode: route to TUI's message processor instead of AgentExecutor
         if state.is_bridge_mode:
             # Broadcast user message to all WS clients
-            await self.broadcast({
-                "type": "user_message",
-                "data": {
-                    "role": "user",
-                    "content": message,
-                    "session_id": session_id,
-                },
-            })
+            await self.broadcast(
+                {
+                    "type": "user_message",
+                    "data": {
+                        "role": "user",
+                        "content": message,
+                        "session_id": session_id,
+                    },
+                }
+            )
             # Inject into TUI's message processor
             try:
                 state.tui_message_injector(message, session_id)
             except Exception as e:
                 logger.error(f"Bridge mode injection failed: {e}")
-                await self.send_message(websocket, {
-                    "type": "error",
-                    "data": {"message": f"Failed to inject message: {e}"},
-                })
+                await self.send_message(
+                    websocket,
+                    {
+                        "type": "error",
+                        "data": {"message": f"Failed to inject message: {e}"},
+                    },
+                )
             return
 
         # If session is already running, inject message into the agent loop
         if state.is_session_running(session_id):
             injection_queue = state.get_injection_queue(session_id)
             import queue as queue_mod
+
             try:
                 injection_queue.put_nowait(message)
             except queue_mod.Full:
-                await self.send_message(websocket, {
-                    "type": "error",
-                    "data": {
-                        "message": "Injection queue full, message dropped",
-                        "session_id": session_id,
+                await self.send_message(
+                    websocket,
+                    {
+                        "type": "error",
+                        "data": {
+                            "message": "Injection queue full, message dropped",
+                            "session_id": session_id,
+                        },
                     },
-                })
+                )
                 return
             # Broadcast injected user message (EC5: no session persistence here)
-            await self.broadcast({
-                "type": "user_message",
-                "data": {
-                    "role": "user",
-                    "content": message,
-                    "session_id": session_id,
-                    "injected": True,
-                },
-            })
+            await self.broadcast(
+                {
+                    "type": "user_message",
+                    "data": {
+                        "role": "user",
+                        "content": message,
+                        "session_id": session_id,
+                        "injected": True,
+                    },
+                }
+            )
             return
 
         # Load session without mutating current_session
@@ -183,10 +194,13 @@ class WebSocketManager:
             if current and current.id == session_id:
                 session = current
             else:
-                await self.send_message(websocket, {
-                    "type": "error",
-                    "data": {"message": f"Session {session_id} not found"},
-                })
+                await self.send_message(
+                    websocket,
+                    {
+                        "type": "error",
+                        "data": {"message": f"Session {session_id} not found"},
+                    },
+                )
                 return
 
         # Add user message directly to the session object
@@ -195,14 +209,16 @@ class WebSocketManager:
         state.session_manager.save_session(session)
 
         # Broadcast user message with session_id
-        await self.broadcast({
-            "type": "user_message",
-            "data": {
-                "role": "user",
-                "content": message,
-                "session_id": session_id,
+        await self.broadcast(
+            {
+                "type": "user_message",
+                "data": {
+                    "role": "user",
+                    "content": message,
+                    "session_id": session_id,
+                },
             }
-        })
+        )
 
         # Execute query with agent using shared executor (singleton on state)
         from opendev.web.agent_executor import AgentExecutor
@@ -227,36 +243,33 @@ class WebSocketManager:
         if approval_id is None or approved is None:
             logger.error(f"Invalid approval data: {approval_data}")
             await self.send_message(
-                websocket,
-                {"type": "error", "data": {"message": "Invalid approval data"}}
+                websocket, {"type": "error", "data": {"message": "Invalid approval data"}}
             )
             return
 
         # Resolve the approval in shared state
         state = get_state()
-        success = state.resolve_approval(approval_id, approved, auto_approve)
+        resolved = state.resolve_approval(approval_id, approved, auto_approve)
 
-        if not success:
-            logger.error(f"Approval {approval_id} not found in state")
-            await self.send_message(
-                websocket,
-                {"type": "error", "data": {"message": f"Approval {approval_id} not found"}}
+        if not resolved:
+            logger.warning(
+                f"Approval {approval_id} not found (already processed or timed out)"
             )
             return
 
         logger.info(f"✓ Approval {approval_id} resolved successfully")
-        # Retrieve session_id from the pending approval
-        pending = state.get_pending_approval(approval_id)
-        resolved_session_id = pending.get("session_id") if pending else None
+        resolved_session_id = resolved.get("session_id")
         # Broadcast the resolution to all clients
-        await self.broadcast({
-            "type": "approval_resolved",
-            "data": {
-                "approvalId": approval_id,
-                "approved": approved,
-                "session_id": resolved_session_id,
+        await self.broadcast(
+            {
+                "type": "approval_resolved",
+                "data": {
+                    "approvalId": approval_id,
+                    "approved": approved,
+                    "session_id": resolved_session_id,
+                },
             }
-        })
+        )
 
     async def _handle_ask_user_response(self, websocket: WebSocket, data: Dict[str, Any]):
         """Handle an ask-user response from the web UI."""
@@ -269,8 +282,7 @@ class WebSocketManager:
         if not request_id:
             logger.error(f"Invalid ask-user response data: {response_data}")
             await self.send_message(
-                websocket,
-                {"type": "error", "data": {"message": "Invalid ask-user response data"}}
+                websocket, {"type": "error", "data": {"message": "Invalid ask-user response data"}}
             )
             return
 
@@ -281,7 +293,7 @@ class WebSocketManager:
             logger.error(f"Ask-user request {request_id} not found in state")
             await self.send_message(
                 websocket,
-                {"type": "error", "data": {"message": f"Ask-user request {request_id} not found"}}
+                {"type": "error", "data": {"message": f"Ask-user request {request_id} not found"}},
             )
             return
 
@@ -289,14 +301,14 @@ class WebSocketManager:
         # Retrieve session_id from the pending ask-user request
         pending = state.get_pending_ask_user(request_id)
         resolved_session_id = pending.get("session_id") if pending else None
-        await self.broadcast({
-            "type": "ask_user_resolved",
-            "data": {"requestId": request_id, "session_id": resolved_session_id},
-        })
+        await self.broadcast(
+            {
+                "type": "ask_user_resolved",
+                "data": {"requestId": request_id, "session_id": resolved_session_id},
+            }
+        )
 
-    async def _handle_plan_approval_response(
-        self, websocket: WebSocket, data: Dict[str, Any]
-    ):
+    async def _handle_plan_approval_response(self, websocket: WebSocket, data: Dict[str, Any]):
         """Handle a plan approval response from the web UI."""
         logger.info(f"Received plan approval response: {data}")
         response_data = data.get("data", {})
@@ -329,14 +341,16 @@ class WebSocketManager:
         logger.info(f"✓ Plan approval {request_id} resolved: action={action}")
         pending = state.get_pending_plan_approval(request_id)
         resolved_session_id = pending.get("session_id") if pending else None
-        await self.broadcast({
-            "type": "plan_approval_resolved",
-            "data": {
-                "requestId": request_id,
-                "action": action,
-                "session_id": resolved_session_id,
-            },
-        })
+        await self.broadcast(
+            {
+                "type": "plan_approval_resolved",
+                "data": {
+                    "requestId": request_id,
+                    "action": action,
+                    "session_id": resolved_session_id,
+                },
+            }
+        )
 
 
 # Global WebSocket manager instance
@@ -380,5 +394,6 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"❌ WebSocket error: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         ws_manager.disconnect(websocket)

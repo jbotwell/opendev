@@ -18,6 +18,7 @@ from opendev.models.message import ChatMessage
 
 # Type imports
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from opendev.core.context_engineering.mcp.manager import MCPManager
 
@@ -178,18 +179,23 @@ class WebState:
                 "_event": event,
             }
 
-    def resolve_approval(self, approval_id: str, approved: bool, auto_approve: bool = False) -> bool:
-        """Resolve a pending approval request."""
+    def resolve_approval(
+        self, approval_id: str, approved: bool, auto_approve: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve a pending approval request. Returns approval data or None."""
         with self._lock:
             if approval_id in self._pending_approvals:
-                self._pending_approvals[approval_id]["resolved"] = True
-                self._pending_approvals[approval_id]["approved"] = approved
-                self._pending_approvals[approval_id]["auto_approve"] = auto_approve
-                event = self._pending_approvals[approval_id].get("_event")
+                approval = self._pending_approvals[approval_id]
+                approval["resolved"] = True
+                approval["approved"] = approved
+                approval["auto_approve"] = auto_approve
+                # Snapshot data before event.set() wakes the agent thread
+                data = {k: v for k, v in approval.items() if k != "_event"}
+                event = approval.get("_event")
                 if event:
                     event.set()
-                return True
-            return False
+                return data
+            return None
 
     def get_pending_approval(self, approval_id: str) -> Optional[Dict[str, Any]]:
         """Get a pending approval request."""
@@ -201,10 +207,36 @@ class WebState:
         with self._lock:
             self._pending_approvals.pop(approval_id, None)
 
+    def clear_session_approvals(self, session_id: str) -> None:
+        """Clear all pending approvals for a session."""
+        with self._lock:
+            to_remove = [
+                aid
+                for aid, a in self._pending_approvals.items()
+                if a.get("session_id") == session_id
+            ]
+            for aid in to_remove:
+                approval = self._pending_approvals.pop(aid)
+                # Wake any blocked threads so they don't hang
+                if not approval.get("resolved"):
+                    approval["resolved"] = True
+                    approval["approved"] = False
+                    event = approval.get("_event")
+                    if event:
+                        event.set()
+
     def request_interrupt(self) -> None:
         """Request interruption of ongoing task."""
         with self._lock:
             self._interrupt_requested = True
+            # Wake up any threads blocked on approval waits
+            for approval in self._pending_approvals.values():
+                if not approval.get("resolved"):
+                    approval["resolved"] = True
+                    approval["approved"] = False
+                    event = approval.get("_event")
+                    if event:
+                        event.set()
 
     def clear_interrupt(self) -> None:
         """Clear the interrupt flag."""
@@ -347,9 +379,7 @@ class WebState:
                 "_event": event,
             }
 
-    def resolve_plan_approval(
-        self, request_id: str, action: str, feedback: str = ""
-    ) -> bool:
+    def resolve_plan_approval(self, request_id: str, action: str, feedback: str = "") -> bool:
         """Resolve a pending plan approval request."""
         with self._lock:
             if request_id in self._pending_plan_approvals:
@@ -375,12 +405,16 @@ class WebState:
     def get_git_branch(self) -> Optional[str]:
         """Get current git branch for the working directory."""
         import subprocess
+
         try:
             session = self.session_manager.get_current_session()
             cwd = session.working_directory if session else None
             result = subprocess.run(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                capture_output=True, text=True, cwd=cwd, timeout=3,
+                capture_output=True,
+                text=True,
+                cwd=cwd,
+                timeout=3,
             )
             if result.returncode == 0:
                 return result.stdout.strip()
