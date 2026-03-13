@@ -41,6 +41,13 @@ pub enum AppEvent {
     ToolStarted { tool_id: String, tool_name: String },
     /// A tool produced output.
     ToolOutput { tool_id: String, output: String },
+    /// A tool produced its final result.
+    ToolResult {
+        tool_id: String,
+        tool_name: String,
+        output: String,
+        success: bool,
+    },
     /// A tool execution completed.
     ToolFinished { tool_id: String, success: bool },
     /// Tool requires user approval.

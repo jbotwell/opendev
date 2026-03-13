@@ -58,14 +58,28 @@ impl MessageController {
             Role::System => DisplayRole::System,
         };
 
-        let tool_call = msg.tool_calls.first().map(|tc| DisplayToolCall {
-            name: tc.name.clone(),
-            arguments: tc.parameters.clone(),
-            summary: tc.result_summary.clone(),
-            success: tc.approved,
-            collapsed: true,
-            result_lines: Vec::new(),
-            nested_calls: Vec::new(),
+        let tool_call = msg.tool_calls.first().map(|tc| {
+            let result_lines: Vec<String> = tc
+                .result
+                .as_ref()
+                .map(|r| {
+                    let text = match r {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => serde_json::to_string_pretty(other).unwrap_or_default(),
+                    };
+                    text.lines().take(50).map(|l| l.to_string()).collect()
+                })
+                .unwrap_or_default();
+
+            DisplayToolCall {
+                name: tc.name.clone(),
+                arguments: tc.parameters.clone(),
+                summary: tc.result_summary.clone(),
+                success: tc.approved,
+                collapsed: result_lines.len() > 5,
+                result_lines,
+                nested_calls: Vec::new(),
+            }
         });
 
         state.messages.push(DisplayMessage {

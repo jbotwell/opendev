@@ -36,6 +36,15 @@ impl AgentEventCallback for TuiEventCallback {
         });
     }
 
+    fn on_tool_result(&self, tool_id: &str, tool_name: &str, output: &str, success: bool) {
+        let _ = self.tx.send(AppEvent::ToolResult {
+            tool_id: tool_id.to_string(),
+            tool_name: tool_name.to_string(),
+            output: output.to_string(),
+            success,
+        });
+    }
+
     fn on_agent_chunk(&self, text: &str) {
         let _ = self.tx.send(AppEvent::AgentChunk(text.to_string()));
     }

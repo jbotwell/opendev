@@ -365,11 +365,42 @@ fn format_nested_tool_call(tc: &DisplayToolCall, depth: usize) -> Line<'static> 
 impl Widget for ConversationWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let lines = self.build_lines();
-        let paragraph = Paragraph::new(lines)
-            .wrap(Wrap { trim: false })
-            .scroll((self.scroll_offset, 0));
 
-        paragraph.render(area, buf);
+        // Compute total wrapped line count
+        let total_lines: usize = lines.iter().map(|line| {
+            let w = line.width();
+            if w == 0 || area.width == 0 {
+                1
+            } else {
+                w.div_ceil(area.width as usize)
+            }
+        }).sum();
+        let viewport_height = area.height as usize;
+        let max_scroll = total_lines.saturating_sub(viewport_height);
+
+        let paragraph = Paragraph::new(lines)
+            .wrap(Wrap { trim: false });
+
+        // scroll_offset = lines from bottom; convert to lines from top for ratatui
+        let clamped = (self.scroll_offset as usize).min(max_scroll);
+        let actual_scroll = max_scroll.saturating_sub(clamped);
+
+        paragraph
+            .scroll((actual_scroll as u16, 0))
+            .render(area, buf);
+
+        // Scroll position indicator when scrolled up
+        if self.scroll_offset > 0 && max_scroll > 0 {
+            let pct = ((max_scroll - actual_scroll) as f64 / max_scroll as f64 * 100.0) as u16;
+            let indicator = format!(" \u{2191} {}% ", pct);
+            let x = area.right().saturating_sub(indicator.len() as u16);
+            buf.set_string(
+                x,
+                area.y,
+                &indicator,
+                Style::default().fg(style_tokens::SUBTLE),
+            );
+        }
     }
 }
 

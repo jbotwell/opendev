@@ -725,6 +725,20 @@ impl ReactLoop {
                             .await;
 
                         if let Some(cb) = event_callback {
+                            let output_str = if tool_result.success {
+                                tool_result.output.as_deref().unwrap_or("")
+                            } else {
+                                tool_result
+                                    .error
+                                    .as_deref()
+                                    .unwrap_or("Tool execution failed")
+                            };
+                            cb.on_tool_result(
+                                tool_call_id_str,
+                                tool_name,
+                                output_str,
+                                tool_result.success,
+                            );
                             cb.on_tool_finished(tool_call_id_str, tool_result.success);
                         }
 

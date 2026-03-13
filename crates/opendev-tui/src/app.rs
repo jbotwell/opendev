@@ -629,6 +629,35 @@ impl App {
                     tool.output_lines.push(output);
                 }
             }
+            AppEvent::ToolResult {
+                tool_id: _,
+                tool_name,
+                output,
+                success,
+            } => {
+                let result_lines: Vec<String> =
+                    output.lines().take(50).map(|l| l.to_string()).collect();
+                let display_lines = if result_lines.is_empty() && !output.is_empty() {
+                    vec![output.clone()]
+                } else {
+                    result_lines
+                };
+                if !display_lines.is_empty() {
+                    self.state.messages.push(DisplayMessage {
+                        role: DisplayRole::Assistant,
+                        content: String::new(),
+                        tool_call: Some(DisplayToolCall {
+                            name: tool_name,
+                            arguments: std::collections::HashMap::new(),
+                            summary: None,
+                            success,
+                            collapsed: display_lines.len() > 5,
+                            result_lines: display_lines,
+                            nested_calls: Vec::new(),
+                        }),
+                    });
+                }
+            }
             AppEvent::ToolFinished { tool_id, success } => {
                 if let Some(tool) = self.state.active_tools.iter_mut().find(|t| t.id == tool_id) {
                     tool.finished = true;
@@ -745,8 +774,28 @@ impl App {
                 self.state.running = false;
             }
 
-            // Passthrough for unhandled terminal events
-            AppEvent::Terminal(_) | AppEvent::Mouse(_) => {}
+            // Mouse scroll support
+            AppEvent::Mouse(mouse) => {
+                use crossterm::event::MouseEventKind;
+                match mouse.kind {
+                    MouseEventKind::ScrollUp => {
+                        self.state.scroll_offset = self.state.scroll_offset.saturating_add(3);
+                        self.state.user_scrolled = true;
+                    }
+                    MouseEventKind::ScrollDown => {
+                        if self.state.scroll_offset > 0 {
+                            self.state.scroll_offset =
+                                self.state.scroll_offset.saturating_sub(3);
+                        } else {
+                            self.state.user_scrolled = false;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Passthrough for unhandled events
+            _ => {}
         }
     }
 
@@ -1215,6 +1264,48 @@ mod tests {
 
         // One more page down at 0 clears user_scrolled
         app.handle_key(pgdn);
+        assert!(!app.state.user_scrolled);
+    }
+
+    #[test]
+    fn test_mouse_scroll() {
+        let mut app = App::new();
+
+        // Scroll up with mouse wheel (3 lines per tick)
+        let scroll_up = crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::ScrollUp,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        app.handle_event(AppEvent::Mouse(scroll_up));
+        assert_eq!(app.state.scroll_offset, 3);
+        assert!(app.state.user_scrolled);
+
+        // Another scroll up
+        app.handle_event(AppEvent::Mouse(scroll_up));
+        assert_eq!(app.state.scroll_offset, 6);
+
+        // Scroll down with mouse wheel
+        let scroll_down = crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::ScrollDown,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        app.handle_event(AppEvent::Mouse(scroll_down));
+        assert_eq!(app.state.scroll_offset, 3);
+        assert!(app.state.user_scrolled);
+
+        // Scroll down to 0
+        app.handle_event(AppEvent::Mouse(scroll_down));
+        assert_eq!(app.state.scroll_offset, 0);
+        // Still user_scrolled since offset was > 0 before sub
+        assert!(app.state.user_scrolled);
+
+        // One more scroll down at 0 clears user_scrolled
+        app.handle_event(AppEvent::Mouse(scroll_down));
+        assert_eq!(app.state.scroll_offset, 0);
         assert!(!app.state.user_scrolled);
     }
 }
