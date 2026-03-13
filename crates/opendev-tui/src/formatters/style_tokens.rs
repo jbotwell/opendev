@@ -55,4 +55,15 @@ pub const BOX_V: &str = "\u{2502}";
 // Icons
 pub const TOOL_HEADER: &str = "\u{23fa}";
 pub const INLINE_ARROW: &str = "\u{23bf}";
-pub const RESULT_PREFIX: &str = "  \u{23bf}  ";
+pub const RESULT_PREFIX: &str = "\u{23bf}  ";
+
+/// Centralized indentation constants for conversation rendering.
+/// All conversation line prefixes are defined here — never hardcode indent strings elsewhere.
+pub struct Indent;
+
+impl Indent {
+    /// 2-space continuation for wrapped lines under a message (matches icon+space width)
+    pub const CONT: &str = "  ";
+    /// Tool result continuation lines (3 spaces to match "⎿  " visual width)
+    pub const RESULT_CONT: &str = "   ";
+}

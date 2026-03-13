@@ -8,7 +8,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use super::style_tokens;
+use super::style_tokens::{self, RESULT_PREFIX};
 
 /// Strip `<system-reminder>` XML tags and their content from display text.
 ///
@@ -52,7 +52,7 @@ pub fn format_error<'a>(primary: &str, secondary: Option<&str>) -> Vec<Line<'a>>
     let mut lines = Vec::new();
     lines.push(Line::from(vec![
         Span::styled(
-            "  \u{23bf}  ".to_string(),
+            RESULT_PREFIX.to_string(),
             Style::default().fg(style_tokens::ERROR),
         ),
         Span::styled(
@@ -64,7 +64,7 @@ pub fn format_error<'a>(primary: &str, secondary: Option<&str>) -> Vec<Line<'a>>
     if let Some(sec) = secondary {
         lines.push(Line::from(vec![
             Span::styled(
-                "  \u{23bf}  ".to_string(),
+                RESULT_PREFIX.to_string(),
                 Style::default().fg(style_tokens::SUBTLE),
             ),
             Span::styled(sec.to_string(), Style::default().fg(style_tokens::SUBTLE)),
@@ -79,7 +79,7 @@ pub fn format_warning<'a>(primary: &str, secondary: Option<&str>) -> Vec<Line<'a
     let mut lines = Vec::new();
     lines.push(Line::from(vec![
         Span::styled(
-            "  \u{23bf}  ".to_string(),
+            RESULT_PREFIX.to_string(),
             Style::default().fg(style_tokens::WARNING),
         ),
         Span::styled(
@@ -91,7 +91,7 @@ pub fn format_warning<'a>(primary: &str, secondary: Option<&str>) -> Vec<Line<'a
     if let Some(sec) = secondary {
         lines.push(Line::from(vec![
             Span::styled(
-                "  \u{23bf}  ".to_string(),
+                RESULT_PREFIX.to_string(),
                 Style::default().fg(style_tokens::SUBTLE),
             ),
             Span::styled(sec.to_string(), Style::default().fg(style_tokens::SUBTLE)),
@@ -106,7 +106,7 @@ pub fn format_info<'a>(primary: &str, secondary: Option<&str>) -> Vec<Line<'a>> 
     let mut lines = Vec::new();
     lines.push(Line::from(vec![
         Span::styled(
-            "  \u{23bf}  ".to_string(),
+            RESULT_PREFIX.to_string(),
             Style::default().fg(style_tokens::GREY),
         ),
         Span::raw(primary.to_string()),
@@ -115,7 +115,7 @@ pub fn format_info<'a>(primary: &str, secondary: Option<&str>) -> Vec<Line<'a>> 
     if let Some(sec) = secondary {
         lines.push(Line::from(vec![
             Span::styled(
-                "  \u{23bf}  ".to_string(),
+                RESULT_PREFIX.to_string(),
                 Style::default().fg(style_tokens::SUBTLE),
             ),
             Span::styled(sec.to_string(), Style::default().fg(style_tokens::SUBTLE)),

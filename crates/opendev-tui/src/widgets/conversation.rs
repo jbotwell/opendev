@@ -15,7 +15,7 @@ use ratatui::{
 use crate::app::{DisplayMessage, DisplayRole, DisplayToolCall, ToolExecution};
 use crate::formatters::display::strip_system_reminders;
 use crate::formatters::markdown::MarkdownRenderer;
-use crate::formatters::style_tokens;
+use crate::formatters::style_tokens::{self, Indent};
 use crate::formatters::tool_colors::{categorize_tool, format_tool_call_display, tool_color};
 use crate::widgets::progress::TaskProgress;
 use crate::widgets::spinner::{COMPLETED_CHAR, CONTINUATION_CHAR, SPINNER_FRAMES};
@@ -128,7 +128,7 @@ impl<'a> ConversationWidget<'a> {
                             lines.push(Line::from(spans));
                             leading_consumed = true;
                         } else {
-                            let mut spans = vec![Span::raw("  ".to_string())];
+                            let mut spans = vec![Span::raw(Indent::CONT.to_string())];
                             spans.extend(md_line.spans);
                             lines.push(Line::from(spans));
                         }
@@ -152,7 +152,7 @@ impl<'a> ConversationWidget<'a> {
                             ]));
                         } else {
                             lines.push(Line::from(vec![
-                                Span::raw("  ".to_string()),
+                                Span::raw(Indent::CONT.to_string()),
                                 Span::styled(
                                     content_line.to_string(),
                                     Style::default().fg(style_tokens::PRIMARY),
@@ -179,7 +179,7 @@ impl<'a> ConversationWidget<'a> {
                             ]));
                         } else {
                             lines.push(Line::from(vec![
-                                Span::raw("  ".to_string()),
+                                Span::raw(Indent::CONT.to_string()),
                                 Span::styled(
                                     content_line.to_string(),
                                     Style::default().fg(style_tokens::SUBTLE),
@@ -207,7 +207,7 @@ impl<'a> ConversationWidget<'a> {
                         } else {
                             // Continuation: 2-char indent matching other roles
                             lines.push(Line::from(vec![
-                                Span::raw("  ".to_string()),
+                                Span::raw(Indent::CONT.to_string()),
                                 Span::styled(
                                     content_line.to_string(),
                                     Style::default()
@@ -229,9 +229,9 @@ impl<'a> ConversationWidget<'a> {
                 if !tc.collapsed && !tc.result_lines.is_empty() {
                     for (i, result_line) in tc.result_lines.iter().enumerate() {
                         let prefix_char = if i == 0 {
-                            format!("  {}  ", CONTINUATION_CHAR)
+                            format!("{}  ", CONTINUATION_CHAR)
                         } else {
-                            "     ".to_string()
+                            Indent::RESULT_CONT.to_string()
                         };
                         lines.push(Line::from(vec![
                             Span::styled(prefix_char, Style::default().fg(style_tokens::SUBTLE)),
@@ -246,7 +246,7 @@ impl<'a> ConversationWidget<'a> {
                     let count = tc.result_lines.len();
                     lines.push(Line::from(Span::styled(
                         format!(
-                            "  {}  ({count} lines collapsed, press Ctrl+O to expand)",
+                            "{}  ({count} lines collapsed, press Ctrl+O to expand)",
                             CONTINUATION_CHAR
                         ),
                         Style::default()
@@ -312,6 +312,10 @@ impl<'a> ConversationWidget<'a> {
             ]));
         }
 
+        // Bottom padding — breathing room before the input separator
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+
         lines
     }
 }
@@ -330,7 +334,7 @@ fn format_tool_call(tc: &DisplayToolCall) -> Line<'static> {
     let display = format_tool_call_display(&tc.name, &tc.arguments);
 
     Line::from(vec![
-        Span::styled(format!("  {icon} "), Style::default().fg(icon_color)),
+        Span::styled(format!("{icon} "), Style::default().fg(icon_color)),
         Span::styled(
             display,
             Style::default().fg(color).add_modifier(Modifier::BOLD),
@@ -340,7 +344,7 @@ fn format_tool_call(tc: &DisplayToolCall) -> Line<'static> {
 
 /// Format a nested tool call with tree indent.
 fn format_nested_tool_call(tc: &DisplayToolCall, depth: usize) -> Line<'static> {
-    let indent = "  ".repeat(depth + 1);
+    let indent = Indent::CONT.repeat(depth);
     let category = categorize_tool(&tc.name);
     let color = tool_color(category);
 
@@ -600,8 +604,8 @@ mod tests {
         }];
         let widget = ConversationWidget::new(&msgs, 0);
         let lines = widget.build_lines();
-        // Only message line + blank line, no spinner
-        assert_eq!(lines.len(), 2);
+        // Message line + blank line + 2 bottom padding lines, no spinner
+        assert_eq!(lines.len(), 4);
     }
 
     #[test]
