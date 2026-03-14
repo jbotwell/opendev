@@ -1024,6 +1024,169 @@ fn prompt_loader_resolution_order() {
     assert_eq!(result.unwrap(), "fallback text");
 }
 
+// ========================================================================
+// Mock LLM integration test: tool call dispatch through the agent loop
+// ========================================================================
+
+/// Simulate a full agent iteration with a mock LLM response that contains
+/// a tool call. Verify that process_iteration correctly identifies the tool
+/// call and returns a ToolCall result, proving the dispatch pipeline works
+/// end-to-end without a real LLM.
+#[test]
+fn mock_llm_tool_call_dispatch() {
+    let rl = make_loop();
+
+    // Simulate a user message in history
+    let mut messages: Vec<serde_json::Value> =
+        vec![serde_json::json!({"role": "user", "content": "Read the file src/main.rs"})];
+
+    // Simulate the LLM response containing a tool call
+    let llm_message = serde_json::json!({
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [{
+            "id": "tc-mock-001",
+            "function": {
+                "name": "read_file",
+                "arguments": "{\"file_path\": \"src/main.rs\"}"
+            }
+        }]
+    });
+    let llm_response = LlmResponse::ok(None, llm_message);
+
+    // Process the iteration
+    let mut no_tool_count = 0;
+    let result = rl
+        .process_iteration(&llm_response, &mut messages, 1, &mut no_tool_count)
+        .unwrap();
+
+    // Verify the result is a ToolCall
+    match result {
+        TurnResult::ToolCall { ref tool_calls } => {
+            assert_eq!(tool_calls.len(), 1);
+            let tc = &tool_calls[0];
+            assert_eq!(
+                tc.get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str()),
+                Some("read_file")
+            );
+            assert_eq!(tc.get("id").and_then(|v| v.as_str()), Some("tc-mock-001"));
+        }
+        other => panic!("Expected ToolCall, got {:?}", other),
+    }
+
+    // Verify the assistant message was appended to history
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[1]["role"], "assistant");
+
+    // Verify no-tool counter was reset (tool was dispatched)
+    assert_eq!(no_tool_count, 0);
+
+    // Now simulate the tool result being added and a completion response
+    messages.push(serde_json::json!({
+        "role": "tool",
+        "tool_call_id": "tc-mock-001",
+        "content": "fn main() { println!(\"Hello!\"); }"
+    }));
+
+    let completion_msg = serde_json::json!({
+        "role": "assistant",
+        "content": "The file contains a simple Hello World program."
+    });
+    let completion_response = LlmResponse::ok(
+        Some("The file contains a simple Hello World program.".into()),
+        completion_msg,
+    );
+
+    let result2 = rl
+        .process_iteration(&completion_response, &mut messages, 2, &mut no_tool_count)
+        .unwrap();
+
+    // Should be Complete
+    match result2 {
+        TurnResult::Complete { content, .. } => {
+            assert!(content.contains("Hello World"));
+        }
+        other => panic!("Expected Complete, got {:?}", other),
+    }
+    assert_eq!(no_tool_count, 1);
+}
+
+/// Simulate a mock LLM producing a task_complete tool call.
+/// Verifies the full flow from LLM response through to tool dispatch
+/// and extraction of summary/status.
+#[test]
+fn mock_llm_task_complete_flow() {
+    let rl = make_loop();
+
+    let llm_message = serde_json::json!({
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [{
+            "id": "tc-done",
+            "function": {
+                "name": "task_complete",
+                "arguments": "{\"summary\": \"Fixed all tests\", \"status\": \"success\"}"
+            }
+        }]
+    });
+    let llm_response = LlmResponse::ok(None, llm_message);
+
+    let mut messages = vec![serde_json::json!({"role": "user", "content": "Fix the tests"})];
+    let mut no_tool_count = 0;
+
+    let result = rl
+        .process_iteration(&llm_response, &mut messages, 1, &mut no_tool_count)
+        .unwrap();
+
+    // process_iteration returns ToolCall; the caller detects task_complete
+    match result {
+        TurnResult::ToolCall { ref tool_calls } => {
+            assert_eq!(tool_calls.len(), 1);
+            assert!(ReactLoop::is_task_complete(&tool_calls[0]));
+
+            let (summary, status) = ReactLoop::extract_task_complete_args(&tool_calls[0]);
+            assert_eq!(summary, "Fixed all tests");
+            assert_eq!(status, "success");
+        }
+        other => panic!("Expected ToolCall with task_complete, got {:?}", other),
+    }
+}
+
+/// Simulate multiple mock tool calls in parallel (read-only tools).
+#[test]
+fn mock_llm_parallel_tool_calls() {
+    let rl = make_loop();
+
+    let llm_message = serde_json::json!({
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+            {"id": "tc-1", "function": {"name": "read_file", "arguments": "{\"file_path\": \"a.rs\"}"}},
+            {"id": "tc-2", "function": {"name": "search", "arguments": "{\"pattern\": \"TODO\"}"}},
+            {"id": "tc-3", "function": {"name": "list_files", "arguments": "{\"path\": \"src/\"}"}}
+        ]
+    });
+
+    let llm_response = LlmResponse::ok(None, llm_message);
+    let mut messages = vec![serde_json::json!({"role": "user", "content": "explore"})];
+    let mut no_tool_count = 0;
+
+    let result = rl
+        .process_iteration(&llm_response, &mut messages, 1, &mut no_tool_count)
+        .unwrap();
+
+    match result {
+        TurnResult::ToolCall { ref tool_calls } => {
+            assert_eq!(tool_calls.len(), 3);
+            // All read-only tools should be parallelizable
+            assert!(rl.all_parallelizable(tool_calls));
+        }
+        other => panic!("Expected ToolCall, got {:?}", other),
+    }
+}
+
 /// PromptLoader prefers .md over .txt files.
 #[test]
 fn prompt_loader_md_preferred_over_txt() {

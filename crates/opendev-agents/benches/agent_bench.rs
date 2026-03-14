@@ -75,6 +75,35 @@ fn bench_doom_loop_check(c: &mut Criterion) {
         });
     });
 
+    // 3-step cycle pattern (read -> edit -> test)
+    group.bench_function("three_step_cycle_18_calls", |b| {
+        let read = make_tool_call("read_file", "{\"path\": \"a.rs\"}");
+        let edit = make_tool_call(
+            "edit_file",
+            "{\"path\": \"a.rs\", \"old\": \"x\", \"new\": \"y\"}",
+        );
+        let test = make_tool_call("bash", "{\"command\": \"cargo test\"}");
+        b.iter(|| {
+            let mut det = DoomLoopDetector::new();
+            for _ in 0..6 {
+                det.check(black_box(&[read.clone()]));
+                det.check(black_box(&[edit.clone()]));
+                det.check(black_box(&[test.clone()]));
+            }
+        });
+    });
+
+    // Single-step cycle with rapid detection (1-step cycle)
+    group.bench_function("single_step_cycle_20_calls", |b| {
+        let tc = make_tool_call("search", "{\"query\": \"TODO\"}");
+        b.iter(|| {
+            let mut det = DoomLoopDetector::new();
+            for _ in 0..20 {
+                det.check(black_box(&[tc.clone()]));
+            }
+        });
+    });
+
     group.finish();
 }
 
