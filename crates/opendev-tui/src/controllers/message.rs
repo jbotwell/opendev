@@ -78,7 +78,8 @@ impl MessageController {
                 arguments: tc.parameters.clone(),
                 summary: tc.result_summary.clone(),
                 success: tc.approved,
-                collapsed: result_lines.len() > 5,
+                collapsed: result_lines.len() > 5
+                    && !crate::widgets::conversation::is_diff_tool(&tc.name),
                 result_lines,
                 nested_calls: Vec::new(),
             }

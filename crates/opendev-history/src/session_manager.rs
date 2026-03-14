@@ -244,15 +244,20 @@ impl SessionManager {
     /// Updates the title in metadata, regenerates the slug, and persists.
     /// If it's the current session, updates in-memory; otherwise loads from disk.
     pub fn set_title(&mut self, session_id: &str, title: &str) -> std::io::Result<()> {
-        let title = if title.len() > 50 { &title[..50] } else { title };
+        let title = if title.len() > 50 {
+            &title[..50]
+        } else {
+            title
+        };
 
         // Update in-memory if it's the current session
         if let Some(session) = &mut self.current_session
             && session.id == session_id
         {
-            session
-                .metadata
-                .insert("title".to_string(), serde_json::Value::String(title.to_string()));
+            session.metadata.insert(
+                "title".to_string(),
+                serde_json::Value::String(title.to_string()),
+            );
             session.slug = Some(session.generate_slug(Some(title)));
             let session_clone = session.clone();
             self.save_session(&session_clone)?;
@@ -262,9 +267,10 @@ impl SessionManager {
 
         // Otherwise load, update, save on disk
         let mut session = self.load_session(session_id)?;
-        session
-            .metadata
-            .insert("title".to_string(), serde_json::Value::String(title.to_string()));
+        session.metadata.insert(
+            "title".to_string(),
+            serde_json::Value::String(title.to_string()),
+        );
         session.slug = Some(session.generate_slug(Some(title)));
         self.save_session(&session)?;
         info!(session_id, title, "Updated session title (on-disk)");

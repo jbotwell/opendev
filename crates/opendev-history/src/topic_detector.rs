@@ -26,7 +26,10 @@ const MAX_TITLE_LEN: usize = 50;
 const CHEAP_MODELS: &[(&str, &str)] = &[
     ("openai", "gpt-4o-mini"),
     ("anthropic", "claude-3-5-haiku-20241022"),
-    ("fireworks", "accounts/fireworks/models/llama-v3p1-8b-instruct"),
+    (
+        "fireworks",
+        "accounts/fireworks/models/llama-v3p1-8b-instruct",
+    ),
 ];
 
 /// Env var names per provider.
@@ -150,9 +153,16 @@ impl TopicDetector {
         let client = self.client.clone();
 
         tokio::spawn(async move {
-            if let Err(e) =
-                detect_and_update(&client, &provider, &model, &api_key, session_manager, &session_id, &recent)
-                    .await
+            if let Err(e) = detect_and_update(
+                &client,
+                &provider,
+                &model,
+                &api_key,
+                session_manager,
+                &session_id,
+                &recent,
+            )
+            .await
             {
                 debug!("Topic detection failed: {e}");
             }

@@ -19,12 +19,7 @@ pub struct InputWidget<'a> {
 }
 
 impl<'a> InputWidget<'a> {
-    pub fn new(
-        buffer: &'a str,
-        cursor: usize,
-        mode: &'a str,
-        pending_count: usize,
-    ) -> Self {
+    pub fn new(buffer: &'a str, cursor: usize, mode: &'a str, pending_count: usize) -> Self {
         Self {
             buffer,
             cursor,

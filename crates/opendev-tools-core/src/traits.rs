@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use tokio_util::sync::CancellationToken;
 
 /// Errors that can occur during tool execution.
 #[derive(Debug, thiserror::Error)]
@@ -147,6 +148,8 @@ pub struct ToolContext {
     pub values: HashMap<String, serde_json::Value>,
     /// Optional per-tool timeout overrides.
     pub timeout_config: Option<ToolTimeoutConfig>,
+    /// Cancellation token for cooperative interrupt from the UI.
+    pub cancel_token: Option<CancellationToken>,
 }
 
 impl ToolContext {
@@ -158,7 +161,14 @@ impl ToolContext {
             session_id: None,
             values: HashMap::new(),
             timeout_config: None,
+            cancel_token: None,
         }
+    }
+
+    /// Set a cancellation token for cooperative interrupt.
+    pub fn with_cancel_token(mut self, token: CancellationToken) -> Self {
+        self.cancel_token = Some(token);
+        self
     }
 
     /// Set the subagent flag.
@@ -188,7 +198,14 @@ impl ToolContext {
 
 impl Default for ToolContext {
     fn default() -> Self {
-        Self::new(std::env::current_dir().unwrap_or_default())
+        Self {
+            working_dir: std::env::current_dir().unwrap_or_default(),
+            is_subagent: false,
+            session_id: None,
+            values: HashMap::new(),
+            timeout_config: None,
+            cancel_token: None,
+        }
     }
 }
 

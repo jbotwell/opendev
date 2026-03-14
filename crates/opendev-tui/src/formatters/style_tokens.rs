@@ -301,6 +301,10 @@ pub const PHASE_THINKING: Color = Color::Rgb(90, 94, 102);
 pub const PHASE_CRITIQUE: Color = Color::Rgb(255, 179, 71);
 pub const PHASE_REFINEMENT: Color = Color::Rgb(0, 191, 255);
 
+// Diff background colors (full-line highlight like GitHub)
+pub const DIFF_ADD_BG: Color = Color::Rgb(0, 40, 0);
+pub const DIFF_DEL_BG: Color = Color::Rgb(40, 0, 0);
+
 // Markdown heading colors
 pub const HEADING_1: Color = Color::Rgb(200, 130, 255);
 pub const HEADING_2: Color = Color::Rgb(0, 191, 255);

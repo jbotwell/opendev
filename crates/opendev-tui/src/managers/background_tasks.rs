@@ -125,12 +125,7 @@ impl BackgroundTaskManager {
     ///
     /// Spawns the command via `sh -c`, streams stdout/stderr to a file,
     /// and monitors the process lifecycle.
-    pub fn register_task(
-        &mut self,
-        command: &str,
-        child: Child,
-        initial_output: &str,
-    ) -> String {
+    pub fn register_task(&mut self, command: &str, child: Child, initial_output: &str) -> String {
         let task_id = uuid::Uuid::new_v4().to_string()[..7].to_string();
         let output_file = self.output_dir.join(format!("{task_id}.output"));
         let pid = child.id();
@@ -287,15 +282,11 @@ impl BackgroundTaskManager {
         }
 
         // Wait for exit
-        let exit_status = match tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            child.wait(),
-        )
-        .await
-        {
-            Ok(Ok(status)) => status.code(),
-            _ => None,
-        };
+        let exit_status =
+            match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await {
+                Ok(Ok(status)) => status.code(),
+                _ => None,
+            };
 
         drop(handle);
 
@@ -373,7 +364,11 @@ impl BackgroundTaskManager {
     ///
     /// Called by the streaming task when a child process exits, or
     /// externally when process exit is detected by polling.
-    pub fn mark_completed(tasks: &mut HashMap<String, TaskStatus>, task_id: &str, exit_code: Option<i32>) {
+    pub fn mark_completed(
+        tasks: &mut HashMap<String, TaskStatus>,
+        task_id: &str,
+        exit_code: Option<i32>,
+    ) {
         if let Some(task) = tasks.get_mut(task_id) {
             task.exit_code = exit_code;
             task.completed_at = Some(Instant::now());

@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use opendev_runtime::{PlanApprovalRequest, PlanApprovalSender, PlanIndex, TodoManager, parse_plan_steps};
+use opendev_runtime::{
+    PlanApprovalRequest, PlanApprovalSender, PlanIndex, TodoManager, parse_plan_steps,
+};
 use opendev_tools_core::{BaseTool, ToolContext, ToolResult};
 
 /// Minimum plan length in characters to be considered valid.
@@ -250,16 +252,11 @@ impl BaseTool for PresentPlanTool {
                         _ => {
                             // "modify" — user wants revisions
                             let mut metadata = HashMap::new();
+                            metadata.insert("plan_approved".into(), serde_json::json!(false));
                             metadata
-                                .insert("plan_approved".into(), serde_json::json!(false));
-                            metadata.insert(
-                                "requires_modification".into(),
-                                serde_json::json!(true),
-                            );
-                            metadata.insert(
-                                "plan_file_path".into(),
-                                serde_json::json!(plan_file_path),
-                            );
+                                .insert("requires_modification".into(), serde_json::json!(true));
+                            metadata
+                                .insert("plan_file_path".into(), serde_json::json!(plan_file_path));
                             if !decision.feedback.is_empty() {
                                 metadata.insert(
                                     "feedback".into(),

@@ -323,11 +323,7 @@ fn git_push(cwd: &str, remote: &str, branch: Option<&str>, force: bool) -> ToolR
         } else {
             // Resolve current branch via git rev-parse
             let (ok, current) = run_git(&["rev-parse", "--abbrev-ref", "HEAD"], cwd);
-            if ok {
-                current
-            } else {
-                String::new()
-            }
+            if ok { current } else { String::new() }
         };
         if PROTECTED_BRANCHES.contains(&target.as_str()) {
             return ToolResult::fail(format!(

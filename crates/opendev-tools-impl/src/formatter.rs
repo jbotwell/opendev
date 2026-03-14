@@ -51,8 +51,7 @@ const FORMATTERS: &[FormatterDef] = &[
         command: "prettier",
         args: &["--write", "{file}"],
         extensions: &[
-            ".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".html", ".json", ".md", ".yaml",
-            ".yml",
+            ".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".html", ".json", ".md", ".yaml", ".yml",
         ],
     },
     FormatterDef {
@@ -304,7 +303,11 @@ mod tests {
     #[test]
     fn test_formatter_extensions_coverage() {
         // Verify common extensions are covered
-        let all_exts: Vec<&str> = FORMATTERS.iter().flat_map(|f| f.extensions.iter()).copied().collect();
+        let all_exts: Vec<&str> = FORMATTERS
+            .iter()
+            .flat_map(|f| f.extensions.iter())
+            .copied()
+            .collect();
         assert!(all_exts.contains(&".rs"));
         assert!(all_exts.contains(&".py"));
         assert!(all_exts.contains(&".js"));

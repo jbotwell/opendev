@@ -11,7 +11,9 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget, Wrap},
+    widgets::{
+        Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget, Wrap,
+    },
 };
 
 use crate::app::{DisplayMessage, DisplayRole, DisplayToolCall, RoleStyle, ToolExecution};
@@ -27,43 +29,181 @@ pub fn is_diff_tool(name: &str) -> bool {
     matches!(name, "edit_file" | "write_file")
 }
 
-/// Render a single diff result line with appropriate styling.
-/// Returns a `Line` with the prefix span and a colored content span.
-/// `line_idx` is 0-based within the result_lines; the first line (summary) uses SUBTLE.
-pub fn render_diff_line<'a>(
-    result_line: &str,
-    line_idx: usize,
-    prefix: Cow<'a, str>,
-) -> Line<'a> {
-    let (content, color) = if line_idx == 0 {
-        // Summary line
-        (result_line.to_string(), style_tokens::SUBTLE)
-    } else if result_line.starts_with("@@") {
-        // Hunk header — parse line numbers if possible
-        (result_line.to_string(), style_tokens::CYAN)
-    } else if result_line.starts_with("---") || result_line.starts_with("+++") {
-        // File headers — skip rendering
-        return Line::from(Span::raw(""));
-    } else if result_line.starts_with('+') {
-        (result_line.to_string(), style_tokens::SUCCESS)
-    } else if result_line.starts_with('-') {
-        (result_line.to_string(), style_tokens::ERROR)
-    } else {
-        // Context line or anything else
-        (result_line.to_string(), style_tokens::GREY)
-    };
+/// Type of a parsed diff entry.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DiffEntryType {
+    Add,
+    Del,
+    Ctx,
+}
 
-    Line::from(vec![
-        Span::styled(prefix, Style::default().fg(style_tokens::SUBTLE)),
-        Span::styled(content, Style::default().fg(color)),
-    ])
+/// A single parsed diff entry with line number and content.
+#[derive(Debug, Clone)]
+pub struct DiffEntry {
+    pub entry_type: DiffEntryType,
+    pub line_no: Option<usize>,
+    pub content: String,
+}
+
+/// Reformat the summary line from the edit tool output.
+///
+/// Transforms e.g. `"Edited file.rs: 1 replacement(s), 2 addition(s) and 1 removal(s)"`
+/// into `"Added 2 lines, removed 1 line"`.
+fn reformat_summary(summary: &str) -> String {
+    // Try to extract addition/removal counts from the summary
+    let additions = extract_count(summary, "addition");
+    let removals = extract_count(summary, "removal");
+
+    if additions.is_none() && removals.is_none() {
+        return summary.to_string();
+    }
+
+    let mut parts = Vec::new();
+    if let Some(a) = additions.filter(|&a| a > 0) {
+        let word = if a == 1 { "line" } else { "lines" };
+        parts.push(format!("Added {a} {word}"));
+    }
+    if let Some(r) = removals.filter(|&r| r > 0) {
+        let word = if r == 1 { "line" } else { "lines" };
+        parts.push(format!("removed {r} {word}"));
+    }
+    if parts.is_empty() {
+        return summary.to_string();
+    }
+    parts.join(", ")
+}
+
+/// Extract a count preceding a keyword like "addition" or "removal" from text.
+fn extract_count(text: &str, keyword: &str) -> Option<usize> {
+    let idx = text.find(keyword)?;
+    let before = text[..idx].trim_end();
+    before
+        .rsplit_once(|c: char| !c.is_ascii_digit())
+        .map(|(_, n)| n)
+        .or(Some(before))
+        .and_then(|n| n.parse().ok())
+}
+
+/// Parse unified diff text into structured entries with line numbers.
+///
+/// Returns (summary, entries) where summary is the first line (reformatted)
+/// and entries are the parsed diff lines with line numbers.
+pub fn parse_unified_diff(result_lines: &[String]) -> (String, Vec<DiffEntry>) {
+    let mut entries = Vec::new();
+    let mut summary = String::new();
+    let mut old_line: usize = 0;
+    let mut new_line: usize = 0;
+    let mut seen_header = false;
+
+    for (i, line) in result_lines.iter().enumerate() {
+        if i == 0 {
+            // First line is the summary
+            summary = reformat_summary(line);
+            continue;
+        }
+
+        // Skip file headers
+        if line.starts_with("--- ") || line.starts_with("+++ ") {
+            continue;
+        }
+
+        // Parse hunk header
+        if line.starts_with("@@") {
+            seen_header = true;
+            // Parse @@ -X,N +Y,M @@
+            if let Some(rest) = line.strip_prefix("@@ -") {
+                let parts: Vec<&str> = rest.splitn(2, '+').collect();
+                if parts.len() == 2 {
+                    // Parse old line number
+                    if let Some(num_str) = parts[0].split(',').next() {
+                        old_line = num_str.trim().parse().unwrap_or(1);
+                    }
+                    // Parse new line number
+                    if let Some(num_part) = parts[1].split("@@").next()
+                        && let Some(num_str) = num_part.split(',').next()
+                    {
+                        new_line = num_str.trim().parse().unwrap_or(1);
+                    }
+                }
+            }
+            continue;
+        }
+
+        if !seen_header {
+            continue;
+        }
+
+        if let Some(content) = line.strip_prefix('+') {
+            entries.push(DiffEntry {
+                entry_type: DiffEntryType::Add,
+                line_no: Some(new_line),
+                content: content.to_string(),
+            });
+            new_line += 1;
+        } else if let Some(content) = line.strip_prefix('-') {
+            entries.push(DiffEntry {
+                entry_type: DiffEntryType::Del,
+                line_no: Some(old_line),
+                content: content.to_string(),
+            });
+            old_line += 1;
+        } else {
+            // Context line — strip leading space if present
+            let content = line.strip_prefix(' ').unwrap_or(line);
+            entries.push(DiffEntry {
+                entry_type: DiffEntryType::Ctx,
+                line_no: Some(old_line),
+                content: content.to_string(),
+            });
+            old_line += 1;
+            new_line += 1;
+        }
+    }
+
+    (summary, entries)
+}
+
+/// Render parsed diff entries as styled lines with right-aligned line numbers.
+///
+/// Add/del lines get a background color (green for additions, red for deletions).
+/// The background is extended to fill the full row width by a post-render buffer
+/// scan in `Widget::render()`.
+pub fn render_diff_entries(entries: &[DiffEntry], lines: &mut Vec<Line<'_>>) {
+    for entry in entries {
+        let line_no_str = match entry.line_no {
+            Some(n) => format!("{n:>4} "),
+            None => "     ".to_string(),
+        };
+        let content = entry.content.replace('\t', "    ");
+
+        let (operator, color, bg) = match entry.entry_type {
+            DiffEntryType::Add => ("+ ", style_tokens::SUCCESS, Some(style_tokens::DIFF_ADD_BG)),
+            DiffEntryType::Del => ("- ", style_tokens::ERROR, Some(style_tokens::DIFF_DEL_BG)),
+            DiffEntryType::Ctx => ("  ", style_tokens::SUBTLE, None),
+        };
+
+        let content_str = format!("{operator}{content}");
+
+        let line_no_style = match bg {
+            Some(c) => Style::default().fg(style_tokens::SUBTLE).bg(c),
+            None => Style::default().fg(style_tokens::SUBTLE),
+        };
+        let content_style = match bg {
+            Some(c) => Style::default().fg(color).bg(c),
+            None => Style::default().fg(color),
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(line_no_str, line_no_style),
+            Span::styled(content_str, content_style),
+        ]));
+    }
 }
 
 /// Widget that renders the conversation log.
 pub struct ConversationWidget<'a> {
     messages: &'a [DisplayMessage],
     scroll_offset: u16,
-    terminal_width: u16,
     version: &'a str,
     working_dir: &'a str,
     mode: &'a str,
@@ -82,7 +222,6 @@ impl<'a> ConversationWidget<'a> {
         Self {
             messages,
             scroll_offset,
-            terminal_width: 80,
             version: "0.1.0",
             working_dir: ".",
             mode: "NORMAL",
@@ -91,11 +230,6 @@ impl<'a> ConversationWidget<'a> {
             spinner_char: SPINNER_FRAMES[0],
             cached_lines: None,
         }
-    }
-
-    pub fn terminal_width(mut self, width: u16) -> Self {
-        self.terminal_width = width;
-        self
     }
 
     pub fn version(mut self, version: &'a str) -> Self {
@@ -259,23 +393,30 @@ impl<'a> ConversationWidget<'a> {
                 let tool_line = format_tool_call(tc);
                 lines.push(tool_line);
 
-                // Collapsible result lines
-                if !tc.collapsed && !tc.result_lines.is_empty() {
+                // Collapsible result lines (diff tools are never collapsed)
+                let effective_collapsed = tc.collapsed && !is_diff_tool(&tc.name);
+                if !effective_collapsed && !tc.result_lines.is_empty() {
                     let use_diff = is_diff_tool(&tc.name);
-                    for (i, result_line) in tc.result_lines.iter().enumerate() {
-                        let prefix_char: Cow<'static, str> = if i == 0 {
-                            format!("  {}  ", CONTINUATION_CHAR).into()
-                        } else {
-                            Cow::Borrowed(Indent::RESULT_CONT)
-                        };
-                        if use_diff {
-                            let line = render_diff_line(result_line, i, prefix_char);
-                            if !(line.spans.is_empty()
-                                || line.spans.len() == 1 && line.spans[0].content.is_empty())
-                            {
-                                lines.push(line);
-                            }
-                        } else {
+                    if use_diff {
+                        let (summary, entries) = parse_unified_diff(&tc.result_lines);
+                        // Summary line with ⎿ prefix
+                        if !summary.is_empty() {
+                            lines.push(Line::from(vec![
+                                Span::styled(
+                                    format!("  {}  ", CONTINUATION_CHAR),
+                                    Style::default().fg(style_tokens::GREY),
+                                ),
+                                Span::styled(summary, Style::default().fg(style_tokens::SUBTLE)),
+                            ]));
+                        }
+                        render_diff_entries(&entries, &mut lines);
+                    } else {
+                        for (i, result_line) in tc.result_lines.iter().enumerate() {
+                            let prefix_char: Cow<'static, str> = if i == 0 {
+                                format!("  {}  ", CONTINUATION_CHAR).into()
+                            } else {
+                                Cow::Borrowed(Indent::RESULT_CONT)
+                            };
                             lines.push(Line::from(vec![
                                 Span::styled(
                                     prefix_char,
@@ -288,7 +429,7 @@ impl<'a> ConversationWidget<'a> {
                             ]));
                         }
                     }
-                } else if tc.collapsed && !tc.result_lines.is_empty() {
+                } else if effective_collapsed && !tc.result_lines.is_empty() {
                     // Show collapsed indicator
                     let count = tc.result_lines.len();
                     lines.push(Line::from(Span::styled(
@@ -484,6 +625,30 @@ impl Widget for ConversationWidget<'_> {
         paragraph
             .scroll((actual_scroll as u16, 0))
             .render(content_area, buf);
+
+        // Extend diff background colors to fill entire row width.
+        // After rendering, scan each row — if any cell has a diff bg color,
+        // fill all cells in that row with that background. This is resize-safe
+        // since it operates on the actual rendered buffer dimensions.
+        for y in content_area.y..content_area.y.saturating_add(content_area.height) {
+            let mut diff_bg = None;
+            for x in content_area.x..content_area.x.saturating_add(content_area.width) {
+                if let Some(cell) = buf.cell(ratatui::layout::Position::new(x, y))
+                    && (cell.bg == style_tokens::DIFF_ADD_BG
+                        || cell.bg == style_tokens::DIFF_DEL_BG)
+                {
+                    diff_bg = Some(cell.bg);
+                    break;
+                }
+            }
+            if let Some(bg) = diff_bg {
+                for x in content_area.x..content_area.x.saturating_add(content_area.width) {
+                    if let Some(cell) = buf.cell_mut(ratatui::layout::Position::new(x, y)) {
+                        cell.set_bg(bg);
+                    }
+                }
+            }
+        }
 
         // Render spinner lines below the scroll area.
         // Short conversation: position right after messages.
@@ -1102,6 +1267,153 @@ mod tests {
         assert!(
             !text.contains("Ctrl+O"),
             "Expanded thinking should not show Ctrl+O hint"
+        );
+    }
+
+    #[test]
+    fn test_parse_unified_diff_line_numbers() {
+        let result_lines = vec![
+            "Edited file.rs: 1 replacement(s), 2 addition(s) and 1 removal(s)".to_string(),
+            "--- a/file.rs".to_string(),
+            "+++ b/file.rs".to_string(),
+            "@@ -201,5 +201,6 @@".to_string(),
+            " context line".to_string(),
+            "-old line".to_string(),
+            "+new line 1".to_string(),
+            "+new line 2".to_string(),
+            " trailing context".to_string(),
+        ];
+        let (summary, entries) = parse_unified_diff(&result_lines);
+
+        assert_eq!(summary, "Added 2 lines, removed 1 line");
+        assert_eq!(entries.len(), 5);
+
+        // Context line at 201
+        assert_eq!(entries[0].entry_type, DiffEntryType::Ctx);
+        assert_eq!(entries[0].line_no, Some(201));
+        assert_eq!(entries[0].content, "context line");
+
+        // Deletion at 202
+        assert_eq!(entries[1].entry_type, DiffEntryType::Del);
+        assert_eq!(entries[1].line_no, Some(202));
+        assert_eq!(entries[1].content, "old line");
+
+        // Additions at 202, 203
+        assert_eq!(entries[2].entry_type, DiffEntryType::Add);
+        assert_eq!(entries[2].line_no, Some(202));
+        assert_eq!(entries[3].entry_type, DiffEntryType::Add);
+        assert_eq!(entries[3].line_no, Some(203));
+
+        // Trailing context at 203 (old), 204 (new)
+        assert_eq!(entries[4].entry_type, DiffEntryType::Ctx);
+        assert_eq!(entries[4].line_no, Some(203));
+    }
+
+    #[test]
+    fn test_diff_rendering_with_line_numbers() {
+        let msgs = vec![DisplayMessage {
+            role: DisplayRole::Assistant,
+            content: "".into(),
+            tool_call: Some(DisplayToolCall {
+                name: "edit_file".into(),
+                arguments: std::collections::HashMap::new(),
+                summary: None,
+                success: true,
+                collapsed: false,
+                result_lines: vec![
+                    "Edited file.rs: 1 replacement(s), 1 addition(s) and 1 removal(s)".into(),
+                    "--- a/file.rs".into(),
+                    "+++ b/file.rs".into(),
+                    "@@ -10,3 +10,3 @@".into(),
+                    " context".into(),
+                    "-old".into(),
+                    "+new".into(),
+                ],
+                nested_calls: vec![],
+            }),
+            collapsed: false,
+        }];
+        let widget = ConversationWidget::new(&msgs, 0);
+        let lines = widget.build_lines();
+        let text: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .map(|s| s.content.to_string())
+            .collect();
+
+        // Should contain right-aligned line numbers
+        assert!(text.contains("  10 "), "Should contain line number 10");
+        assert!(text.contains("  11 "), "Should contain line number 11");
+        // Should contain operators
+        assert!(text.contains("+ new"), "Should contain '+ new'");
+        assert!(text.contains("- old"), "Should contain '- old'");
+        // Should contain reformatted summary
+        assert!(
+            text.contains("Added 1 line, removed 1 line"),
+            "Should contain reformatted summary, got: {text}"
+        );
+        // Should NOT contain raw diff markers
+        assert!(!text.contains("@@"), "Should not contain @@ hunk headers");
+        assert!(!text.contains("--- a/"), "Should not contain file headers");
+    }
+
+    #[test]
+    fn test_edit_tool_never_collapsed() {
+        let msgs = vec![DisplayMessage {
+            role: DisplayRole::Assistant,
+            content: "".into(),
+            tool_call: Some(DisplayToolCall {
+                name: "edit_file".into(),
+                arguments: std::collections::HashMap::new(),
+                summary: None,
+                success: true,
+                collapsed: true, // Explicitly set collapsed
+                result_lines: vec![
+                    "Edited file.rs: 1 replacement(s), 1 addition(s) and 0 removal(s)".into(),
+                    "--- a/file.rs".into(),
+                    "+++ b/file.rs".into(),
+                    "@@ -1,3 +1,4 @@".into(),
+                    " line1".into(),
+                    " line2".into(),
+                    "+new line".into(),
+                    " line3".into(),
+                ],
+                nested_calls: vec![],
+            }),
+            collapsed: false,
+        }];
+        let widget = ConversationWidget::new(&msgs, 0);
+        let lines = widget.build_lines();
+        let text: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .map(|s| s.content.to_string())
+            .collect();
+
+        // Even though collapsed=true, edit_file should always show expanded
+        assert!(
+            !text.contains("collapsed"),
+            "edit_file should never show collapsed indicator"
+        );
+        assert!(
+            text.contains("+ new line"),
+            "edit_file should show diff content even when collapsed=true"
+        );
+    }
+
+    #[test]
+    fn test_reformat_summary() {
+        assert_eq!(
+            reformat_summary("Edited file.rs: 1 replacement(s), 2 addition(s) and 1 removal(s)"),
+            "Added 2 lines, removed 1 line"
+        );
+        assert_eq!(
+            reformat_summary("Edited file.rs: 1 replacement(s), 0 addition(s) and 3 removal(s)"),
+            "removed 3 lines"
+        );
+        assert_eq!(
+            reformat_summary("Some unknown format"),
+            "Some unknown format"
         );
     }
 }

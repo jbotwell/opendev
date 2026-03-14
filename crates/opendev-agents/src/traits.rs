@@ -254,6 +254,13 @@ impl Default for AgentDeps {
     }
 }
 
+// Allow InterruptToken to be used directly as a TaskMonitor.
+impl TaskMonitor for opendev_runtime::InterruptToken {
+    fn should_interrupt(&self) -> bool {
+        self.is_requested()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

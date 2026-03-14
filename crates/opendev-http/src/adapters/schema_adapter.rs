@@ -307,14 +307,8 @@ mod tests {
     #[test]
     fn test_xai_filters_web_search() {
         let schemas = vec![
-            make_tool_schema(
-                "web_search",
-                json!({"type": "object", "properties": {}}),
-            ),
-            make_tool_schema(
-                "read_file",
-                json!({"type": "object", "properties": {}}),
-            ),
+            make_tool_schema("web_search", json!({"type": "object", "properties": {}})),
+            make_tool_schema("read_file", json!({"type": "object", "properties": {}})),
         ];
         let result = adapt_for_provider(&schemas, "xai");
         assert_eq!(result.len(), 1);

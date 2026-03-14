@@ -687,7 +687,10 @@ async fn run_non_interactive(working_dir: &std::path::Path, prompt: &str) {
         }
     };
 
-    match agent_runtime.run_query(prompt, &system_prompt, None).await {
+    match agent_runtime
+        .run_query(prompt, &system_prompt, None, None)
+        .await
+    {
         Ok(result) => {
             println!("{}", result.content);
             if !result.success {
@@ -898,6 +901,7 @@ async fn run_interactive(
                         role: opendev_tui::app::DisplayRole::User,
                         content: msg.content.clone(),
                         tool_call: None,
+                        collapsed: false,
                     });
                 }
                 opendev_models::Role::Assistant => {
@@ -907,6 +911,7 @@ async fn run_interactive(
                             role: opendev_tui::app::DisplayRole::Thinking,
                             content: trace.clone(),
                             tool_call: None,
+                            collapsed: false,
                         });
                     }
                     // Add assistant text
@@ -915,6 +920,7 @@ async fn run_interactive(
                             role: opendev_tui::app::DisplayRole::Assistant,
                             content: msg.content.clone(),
                             tool_call: None,
+                            collapsed: false,
                         });
                     }
                     // Add tool calls
@@ -931,6 +937,7 @@ async fn run_interactive(
                                 result_lines: Vec::new(),
                                 nested_calls: Vec::new(),
                             }),
+                            collapsed: false,
                         });
                     }
                 }
@@ -945,6 +952,7 @@ async fn run_interactive(
             role: opendev_tui::app::DisplayRole::User,
             content: msg.clone(),
             tool_call: None,
+            collapsed: false,
         });
     }
 
