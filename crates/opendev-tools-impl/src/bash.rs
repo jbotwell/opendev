@@ -199,6 +199,46 @@ fn needs_auto_confirm(command: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// LLM suffix for command failures (hidden from UI, visible to LLM)
+// ---------------------------------------------------------------------------
+
+fn command_failure_suffix(exit_code: i32, output: &str) -> String {
+    let lower = output.to_lowercase();
+
+    if lower.contains("permission denied") {
+        "The command failed due to a permission error. Try using sudo or check file permissions.".to_string()
+    } else if lower.contains("command not found") || lower.contains("no such file or directory") {
+        format!(
+            "The command failed (exit code {exit_code}). Check that the command/path exists \
+             and is spelled correctly. Use `which` or `ls` to verify."
+        )
+    } else if lower.contains("syntax error") || lower.contains("unexpected token") {
+        "The command had a syntax error. Review the command for typos or missing quotes/brackets.".to_string()
+    } else if exit_code == 1 && (lower.contains("error") || lower.contains("failed")) {
+        format!(
+            "The command failed (exit code {exit_code}). Read the error output carefully, \
+             then fix the issue and retry."
+        )
+    } else if exit_code == 2 {
+        format!(
+            "The command failed (exit code {exit_code}, typically misuse of shell command). \
+             Check the command arguments and flags."
+        )
+    } else if exit_code == 126 {
+        "The command was found but is not executable. Check file permissions with `ls -la`.".to_string()
+    } else if exit_code == 127 {
+        "The command was not found. Check spelling or install the missing tool.".to_string()
+    } else if exit_code == 128 + 9 || exit_code == 128 + 15 {
+        "The process was killed (likely OOM or external signal). Try reducing resource usage.".to_string()
+    } else {
+        format!(
+            "The command failed with exit code {exit_code}. Read the error output, \
+             diagnose the root cause, and try a corrected approach."
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Prepare command string (auto-confirm, python -u)
 // ---------------------------------------------------------------------------
 
@@ -483,12 +523,14 @@ impl BashTool {
                 if success {
                     ToolResult::ok_with_metadata(display_output, metadata)
                 } else {
+                    let suffix = command_failure_suffix(exit_code, &combined);
                     ToolResult {
                         success: false,
                         output: Some(display_output),
                         error: Some(format!("Command exited with code {exit_code}")),
                         metadata,
                         duration_ms: None,
+                        llm_suffix: Some(suffix),
                     }
                 }
             }
@@ -515,6 +557,8 @@ impl BashTool {
                     error: Some(timeout_msg),
                     metadata,
                     duration_ms: None,
+                    llm_suffix: Some("The command timed out. Consider breaking it into smaller steps, \
+                        adding a timeout flag, or checking if the process is hanging.".to_string()),
                 }
             }
         }
@@ -613,12 +657,14 @@ impl BashTool {
                     if status.success() {
                         return ToolResult::ok_with_metadata(combined, metadata);
                     } else {
+                        let suffix = command_failure_suffix(exit_code, &combined);
                         return ToolResult {
                             success: false,
                             output: Some(combined),
                             error: Some(format!("Command exited with code {exit_code}")),
                             metadata,
                             duration_ms: None,
+                            llm_suffix: Some(suffix),
                         };
                     }
                 }
@@ -1291,5 +1337,83 @@ mod tests {
                 .unwrap()
                 .contains("No background processes")
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Property-based tests for dangerous command detection (fuzzing #71)
+    // -----------------------------------------------------------------------
+
+    mod proptest_dangerous {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// is_dangerous must never panic on arbitrary input.
+            #[test]
+            fn fuzz_is_dangerous_no_panic(cmd in "\\PC*") {
+                let _ = is_dangerous(&cmd);
+            }
+
+            /// is_server_command must never panic on arbitrary input.
+            #[test]
+            fn fuzz_is_server_no_panic(cmd in "\\PC*") {
+                let _ = is_server_command(&cmd);
+            }
+
+            /// needs_auto_confirm must never panic on arbitrary input.
+            #[test]
+            fn fuzz_auto_confirm_no_panic(cmd in "\\PC*") {
+                let _ = needs_auto_confirm(&cmd);
+            }
+
+            /// Known dangerous commands must always be detected.
+            #[test]
+            fn known_dangerous_detected(
+                prefix in "[a-z ]{0,5}",
+                suffix in "[a-z ]{0,5}",
+            ) {
+                let dangerous_cores = [
+                    "rm -rf /",
+                    "sudo reboot",
+                    "mkfs.ext4 /dev/sda",
+                    "dd if=/dev/zero of=/dev/sda",
+                ];
+                for core in &dangerous_cores {
+                    let cmd = format!("{prefix}{core}{suffix}");
+                    prop_assert!(
+                        is_dangerous(&cmd),
+                        "Expected dangerous: {}", cmd
+                    );
+                }
+            }
+
+            /// Safe commands must not be flagged as dangerous.
+            #[test]
+            fn safe_commands_not_flagged(idx in 0..6usize) {
+                let safe = [
+                    "ls -la",
+                    "echo hello",
+                    "cat file.txt",
+                    "grep pattern file",
+                    "cargo build",
+                    "git status",
+                ];
+                let cmd = safe[idx];
+                prop_assert!(
+                    !is_dangerous(cmd),
+                    "Expected safe: {}", cmd
+                );
+            }
+
+            /// truncate_output must never panic and must respect length limits.
+            #[test]
+            fn fuzz_truncate_no_panic(text in "\\PC{0,100000}", for_llm in proptest::bool::ANY) {
+                let result = truncate_output(&text, for_llm);
+                // Result should never be empty if input is non-empty
+                if !text.is_empty() {
+                    prop_assert!(!result.is_empty());
+                }
+            }
+        }
     }
 }

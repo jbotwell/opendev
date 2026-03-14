@@ -44,6 +44,8 @@ pub struct AgentResult {
     pub completion_status: Option<String>,
     /// The full message history after the run.
     pub messages: Vec<Value>,
+    /// Partial result preserved when the agent was interrupted mid-execution.
+    pub partial_result: Option<crate::agent_types::PartialResult>,
 }
 
 impl AgentResult {
@@ -55,6 +57,7 @@ impl AgentResult {
             interrupted: false,
             completion_status: None,
             messages,
+            partial_result: None,
         }
     }
 
@@ -66,6 +69,7 @@ impl AgentResult {
             interrupted: false,
             completion_status: None,
             messages,
+            partial_result: None,
         }
     }
 
@@ -77,6 +81,7 @@ impl AgentResult {
             interrupted: true,
             completion_status: None,
             messages,
+            partial_result: None,
         }
     }
 }
@@ -214,6 +219,8 @@ pub trait AgentEventCallback: Send + Sync {
     fn on_thinking_refined(&self, content: &str);
     /// A tool produced its final result with output content.
     fn on_tool_result(&self, _tool_id: &str, _tool_name: &str, _output: &str, _success: bool) {}
+    /// Context window usage percentage updated (0.0–100.0).
+    fn on_context_usage(&self, _pct: f64) {}
 }
 
 /// Dependencies injected into agent runs.

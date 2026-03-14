@@ -13,6 +13,7 @@ pub mod autocomplete;
 pub mod controllers;
 pub mod event;
 pub mod formatters;
+pub mod history;
 pub mod managers;
 pub mod widgets;
 
@@ -21,6 +22,9 @@ pub use controllers::{
     ApprovalController, BUILTIN_COMMANDS, SlashCommand, find_matching_commands, is_command,
 };
 pub use event::{AppEvent, EventHandler};
+pub use formatters::style_tokens::{
+    TerminalBackground, Theme, ThemeName, auto_detect_theme, detect_terminal_background,
+};
 pub use formatters::{
     ToolCategory, categorize_tool, format_error, format_info, format_tool_call_display,
     format_warning, strip_system_reminders, tool_color, truncate_output,

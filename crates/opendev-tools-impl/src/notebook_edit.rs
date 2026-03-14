@@ -201,6 +201,7 @@ fn save_notebook(path: &PathBuf, notebook: &serde_json::Value) -> Result<(), Str
 }
 
 /// Replace an existing cell's content. Returns (updated_cells, ToolResult) on success.
+#[allow(clippy::result_large_err)]
 fn replace_cell(
     mut cells: Vec<serde_json::Value>,
     new_source: &str,
@@ -254,6 +255,7 @@ fn replace_cell(
 }
 
 /// Insert a new cell. Returns (updated_cells, ToolResult) on success.
+#[allow(clippy::result_large_err)]
 fn insert_cell(
     mut cells: Vec<serde_json::Value>,
     new_source: &str,
@@ -308,6 +310,7 @@ fn insert_cell(
 }
 
 /// Delete a cell. Returns (updated_cells, ToolResult) on success.
+#[allow(clippy::result_large_err)]
 fn delete_cell(
     mut cells: Vec<serde_json::Value>,
     cell_id: Option<&str>,

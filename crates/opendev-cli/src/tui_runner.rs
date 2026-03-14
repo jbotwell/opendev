@@ -70,6 +70,10 @@ impl AgentEventCallback for TuiEventCallback {
             .tx
             .send(AppEvent::RefinedThinkingTrace(content.to_string()));
     }
+
+    fn on_context_usage(&self, pct: f64) {
+        let _ = self.tx.send(AppEvent::ContextUsage(pct));
+    }
 }
 
 /// Bridges the TUI event loop with the AgentRuntime.

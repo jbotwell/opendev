@@ -8,12 +8,16 @@
 
 pub mod compaction;
 pub mod context_picker;
+pub mod environment;
 pub mod pair_validator;
 pub mod retrieval;
 pub mod validated_list;
 pub mod worktree;
 
-pub use compaction::{ArtifactIndex, ContextCompactor, OptimizationLevel};
+pub use compaction::{
+    ArtifactIndex, CompactionPreview, ContextCompactor, OptimizationLevel, StagePreview,
+    compact_preview, count_tokens,
+};
 pub use context_picker::{AssembledContext, ContextCategory, ContextPiece, ContextReason};
 pub use pair_validator::{MessagePairValidator, ValidationResult, ViolationType};
 pub use retrieval::{
@@ -21,4 +25,5 @@ pub use retrieval::{
     RetrievalContext,
 };
 pub use validated_list::ValidatedMessageList;
+pub use environment::EnvironmentContext;
 pub use worktree::{WorktreeInfo, WorktreeManager};

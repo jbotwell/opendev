@@ -89,6 +89,31 @@ fn bench_conversation_render(c: &mut Criterion) {
 }
 
 // ---------------------------------------------------------------------------
+// build_lines benchmarks (line generation without full render)
+// ---------------------------------------------------------------------------
+
+fn bench_build_lines(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ConversationWidget::build_lines");
+
+    for count in [100, 1000] {
+        let messages = make_conversation(count);
+
+        group.bench_function(format!("{count}_messages"), |b| {
+            b.iter(|| {
+                let widget = ConversationWidget::new(black_box(&messages), 0).terminal_width(120);
+                // build_lines is called internally during render; we exercise it
+                // via a full render but into a minimal buffer to isolate line building cost.
+                let area = Rect::new(0, 0, 120, 1);
+                let mut buf = Buffer::empty(area);
+                widget.render(area, &mut buf);
+            });
+        });
+    }
+
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
 // MarkdownRenderer benchmarks
 // ---------------------------------------------------------------------------
 
@@ -124,5 +149,10 @@ fn bench_markdown_render(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_conversation_render, bench_markdown_render);
+criterion_group!(
+    benches,
+    bench_conversation_render,
+    bench_build_lines,
+    bench_markdown_render
+);
 criterion_main!(benches);

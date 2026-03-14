@@ -16,6 +16,9 @@ pub struct MarkdownRenderer;
 
 impl MarkdownRenderer {
     /// Render markdown text into a vector of styled lines.
+    ///
+    /// Span content uses `Cow<'static, str>` where possible to reduce
+    /// intermediate string allocations through the parsing pipeline.
     pub fn render(text: &str) -> Vec<Line<'static>> {
         let mut lines = Vec::new();
         let mut in_code_block = false;
@@ -27,8 +30,9 @@ impl MarkdownRenderer {
                     // Code block start — show language hint if present
                     let lang = raw_line.trim_start_matches('`').trim();
                     if !lang.is_empty() {
+                        let hint: Cow<'static, str> = Cow::Owned(format!("--- {lang} ---"));
                         lines.push(Line::from(Span::styled(
-                            format!("--- {lang} ---"),
+                            hint,
                             Style::default().fg(style_tokens::GREY),
                         )));
                     }
@@ -37,8 +41,9 @@ impl MarkdownRenderer {
             }
 
             if in_code_block {
+                let code: Cow<'static, str> = Cow::Owned(raw_line.to_string());
                 lines.push(Line::from(Span::styled(
-                    raw_line.to_string(),
+                    code,
                     Style::default()
                         .fg(style_tokens::CODE_FG)
                         .bg(style_tokens::CODE_BG),
@@ -48,22 +53,25 @@ impl MarkdownRenderer {
 
             // Headers
             if let Some(header) = raw_line.strip_prefix("### ") {
+                let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
-                    header.to_string(),
+                    h,
                     Style::default()
                         .fg(style_tokens::HEADING_3)
                         .add_modifier(Modifier::BOLD),
                 )));
             } else if let Some(header) = raw_line.strip_prefix("## ") {
+                let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
-                    header.to_string(),
+                    h,
                     Style::default()
                         .fg(style_tokens::HEADING_2)
                         .add_modifier(Modifier::BOLD),
                 )));
             } else if let Some(header) = raw_line.strip_prefix("# ") {
+                let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
-                    header.to_string(),
+                    h,
                     Style::default()
                         .fg(style_tokens::HEADING_1)
                         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
@@ -74,10 +82,10 @@ impl MarkdownRenderer {
                 let indent_len = raw_line.len() - trimmed.len();
                 let indent_level = indent_len / 2;
                 let content = &trimmed[2..];
-                let prefix = if indent_level == 0 {
-                    "  - ".to_string()
+                let prefix: Cow<'static, str> = if indent_level == 0 {
+                    Cow::Borrowed("  - ")
                 } else {
-                    format!("{}  - ", "  ".repeat(indent_level))
+                    Cow::Owned(format!("{}  - ", "  ".repeat(indent_level)))
                 };
                 let mut spans = vec![Span::styled(
                     prefix,
@@ -93,7 +101,8 @@ impl MarkdownRenderer {
                 let dot_pos = trimmed.find(". ").unwrap();
                 let number = &trimmed[..dot_pos];
                 let content = &trimmed[dot_pos + 2..];
-                let prefix = format!("{}  {}. ", "  ".repeat(indent_level), number);
+                let prefix: Cow<'static, str> =
+                    Cow::Owned(format!("{}  {}. ", "  ".repeat(indent_level), number));
                 let mut spans = vec![Span::styled(
                     prefix,
                     Style::default().fg(style_tokens::BULLET),
@@ -181,6 +190,8 @@ fn parse_inline_spans(text: &str) -> Vec<Span<'static>> {
 }
 
 /// Parse bold markers (**text**) within a segment of text.
+///
+/// Uses `Cow<'static, str>` for span content to make allocation points explicit.
 fn parse_bold_spans(text: &str) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let mut remaining = text;
@@ -188,22 +199,25 @@ fn parse_bold_spans(text: &str) -> Vec<Span<'static>> {
     while !remaining.is_empty() {
         if let Some(bold_start) = remaining.find("**") {
             if bold_start > 0 {
-                spans.push(Span::raw(remaining[..bold_start].to_string()));
+                let plain: Cow<'static, str> = Cow::Owned(remaining[..bold_start].to_string());
+                spans.push(Span::raw(plain));
             }
             let after_start = &remaining[bold_start + 2..];
             if let Some(bold_end) = after_start.find("**") {
-                let bold_text = &after_start[..bold_end];
+                let bold_text: Cow<'static, str> = Cow::Owned(after_start[..bold_end].to_string());
                 spans.push(Span::styled(
-                    bold_text.to_string(),
+                    bold_text,
                     Style::default().add_modifier(Modifier::BOLD),
                 ));
                 remaining = &after_start[bold_end + 2..];
             } else {
-                spans.push(Span::raw(remaining.to_string()));
+                let rest: Cow<'static, str> = Cow::Owned(remaining.to_string());
+                spans.push(Span::raw(rest));
                 break;
             }
         } else {
-            spans.push(Span::raw(remaining.to_string()));
+            let rest: Cow<'static, str> = Cow::Owned(remaining.to_string());
+            spans.push(Span::raw(rest));
             break;
         }
     }

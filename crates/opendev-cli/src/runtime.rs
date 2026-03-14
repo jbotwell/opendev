@@ -136,7 +136,17 @@ pub fn build_system_prompt(working_dir: &Path, config: &AppConfig) -> String {
         serde_json::Value::Bool(working_dir.join(".git").exists()),
     );
 
-    composer.compose(&context)
+    let base_prompt = composer.compose(&context);
+
+    // Collect and append dynamic environment context
+    let env_ctx = opendev_context::EnvironmentContext::collect(working_dir);
+    let env_block = env_ctx.format_prompt_block();
+
+    if env_block.is_empty() {
+        base_prompt
+    } else {
+        format!("{base_prompt}\n\n{env_block}")
+    }
 }
 
 impl AgentRuntime {

@@ -50,6 +50,10 @@ pub struct ToolResult {
     /// Execution duration in milliseconds (populated by the registry).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
+    /// Hidden suffix appended to the tool result for the LLM but not shown in the UI.
+    /// Used to silently guide LLM behavior on errors (e.g., retry hints).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub llm_suffix: Option<String>,
 }
 
 impl ToolResult {
@@ -61,6 +65,7 @@ impl ToolResult {
             error: None,
             metadata: HashMap::new(),
             duration_ms: None,
+            llm_suffix: None,
         }
     }
 
@@ -75,6 +80,7 @@ impl ToolResult {
             error: None,
             metadata,
             duration_ms: None,
+            llm_suffix: None,
         }
     }
 
@@ -86,7 +92,14 @@ impl ToolResult {
             error: Some(error.into()),
             metadata: HashMap::new(),
             duration_ms: None,
+            llm_suffix: None,
         }
+    }
+
+    /// Attach an LLM-only suffix to this result.
+    pub fn with_llm_suffix(mut self, suffix: impl Into<String>) -> Self {
+        self.llm_suffix = Some(suffix.into());
+        self
     }
 
     /// Create a result from a ToolError.

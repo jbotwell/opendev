@@ -103,6 +103,7 @@ impl BaseTool for PresentPlanTool {
                 error: Some(format!("Plan file not found: {plan_file_path}")),
                 metadata: HashMap::new(),
                 duration_ms: None,
+                llm_suffix: None,
             };
         }
 
@@ -125,6 +126,7 @@ impl BaseTool for PresentPlanTool {
                 error: Some(format!("Plan file is empty: {plan_file_path}")),
                 metadata: HashMap::new(),
                 duration_ms: None,
+                llm_suffix: None,
             };
         }
 
@@ -144,6 +146,7 @@ impl BaseTool for PresentPlanTool {
                 )),
                 metadata: HashMap::new(),
                 duration_ms: None,
+                llm_suffix: None,
             };
         }
 
@@ -160,6 +163,7 @@ impl BaseTool for PresentPlanTool {
                 error: Some("Plan is missing the required ---BEGIN PLAN--- delimiter.".to_string()),
                 metadata: HashMap::new(),
                 duration_ms: None,
+                llm_suffix: None,
             };
         }
 
@@ -179,6 +183,7 @@ impl BaseTool for PresentPlanTool {
                 error: Some("Plan has no parseable implementation steps.".to_string()),
                 metadata: HashMap::new(),
                 duration_ms: None,
+                llm_suffix: None,
             };
         }
 
@@ -199,6 +204,7 @@ impl BaseTool for PresentPlanTool {
                 error: Some("Plan verification section is missing or too brief.".to_string()),
                 metadata: HashMap::new(),
                 duration_ms: None,
+                llm_suffix: None,
             };
         }
 

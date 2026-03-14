@@ -17,7 +17,7 @@ use crate::response::ResponseCleaner;
 use crate::traits::{AgentError, AgentResult, LlmResponse, TaskMonitor};
 use opendev_http::adapted_client::AdaptedClient;
 use opendev_context::{ArtifactIndex, ContextCompactor, OptimizationLevel};
-use opendev_runtime::{CostTracker, TokenUsage, play_finish_sound, ThinkingLevel};
+use opendev_runtime::{CostTracker, TokenUsage, play_finish_sound, ThinkingLevel, summarize_tool_result};
 use opendev_tools_core::{ToolContext, ToolRegistry, ToolResult};
 
 /// Metrics for a single tool call execution.
@@ -335,7 +335,7 @@ impl ReactLoop {
             .and_then(|s| s.as_bool())
             .unwrap_or(false);
 
-        if success {
+        let base = if success {
             let output = result
                 .get("separate_response")
                 .or_else(|| result.get("output"))
@@ -355,6 +355,13 @@ impl ReactLoop {
                 .and_then(|e| e.as_str())
                 .unwrap_or("Tool execution failed");
             format!("Error in {tool_name}: {error}")
+        };
+
+        // Append LLM-only suffix if present (hidden from UI, visible to LLM)
+        if let Some(suffix) = result.get("llm_suffix").and_then(|s| s.as_str()) {
+            format!("{base}\n\n{suffix}")
+        } else {
+            base
         }
     }
 
@@ -759,6 +766,9 @@ impl ReactLoop {
                 && let Ok(mut c) = comp.lock()
             {
                 c.update_from_api_usage(input_tokens, messages.len());
+                if let Some(cb) = event_callback {
+                    cb.on_context_usage(c.usage_pct());
+                }
             }
 
             // Initialize per-iteration metrics
@@ -947,8 +957,20 @@ impl ReactLoop {
                             cb.on_tool_finished(tool_call_id_str, tool_result.success);
                         }
 
+                        // Generate concise summary for session persistence / context
+                        let _result_summary = summarize_tool_result(
+                            tool_name,
+                            tool_result.output.as_deref(),
+                            if tool_result.success {
+                                None
+                            } else {
+                                tool_result.error.as_deref()
+                            },
+                        );
+                        debug!(tool = tool_name, summary = %_result_summary, "Tool result summary");
+
                         // Convert ToolResult to the Value format expected by format_tool_result
-                        let result_value = if tool_result.success {
+                        let mut result_value = if tool_result.success {
                             serde_json::json!({
                                 "success": true,
                                 "output": tool_result.output.as_deref().unwrap_or(""),
@@ -959,6 +981,9 @@ impl ReactLoop {
                                 "error": tool_result.error.as_deref().unwrap_or("Tool execution failed"),
                             })
                         };
+                        if let Some(ref suffix) = tool_result.llm_suffix {
+                            result_value["llm_suffix"] = serde_json::json!(suffix);
+                        }
 
                         let formatted = Self::format_tool_result(tool_name, &result_value);
 

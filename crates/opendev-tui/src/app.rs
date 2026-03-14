@@ -1013,6 +1013,12 @@ impl App {
                 self.state.message_generation += 1;
             }
 
+            // Context usage events
+            AppEvent::ContextUsage(pct) => {
+                self.state.context_usage_pct = pct;
+                self.state.dirty = true;
+            }
+
             // Agent events
             AppEvent::AgentStarted => {
                 self.state.agent_active = true;

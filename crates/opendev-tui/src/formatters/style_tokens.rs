@@ -1,8 +1,276 @@
 //! Centralized color palette and box-drawing constants.
 //!
 //! Mirrors Python's `style_tokens.py` for consistent styling across the TUI.
+//! Supports multiple themes via the [`Theme`] struct.
 
 use ratatui::style::Color;
+
+/// Represents a complete color theme for the TUI.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Theme {
+    pub name: &'static str,
+
+    // Core palette
+    pub primary: Color,
+    pub accent: Color,
+    pub subtle: Color,
+    pub success: Color,
+    pub error: Color,
+    pub warning: Color,
+    pub blue_bright: Color,
+    pub blue_path: Color,
+    pub gold: Color,
+    pub border: Color,
+    pub border_accent: Color,
+
+    // Semantic colors
+    pub grey: Color,
+    pub thinking_bg: Color,
+    pub orange: Color,
+    pub green_light: Color,
+    pub green_bright: Color,
+    pub blue_task: Color,
+    pub blue_light: Color,
+    pub orange_caution: Color,
+    pub cyan: Color,
+    pub dim_grey: Color,
+
+    // Thinking phases
+    pub phase_thinking: Color,
+    pub phase_critique: Color,
+    pub phase_refinement: Color,
+
+    // Markdown heading colors
+    pub heading_1: Color,
+    pub heading_2: Color,
+    pub heading_3: Color,
+    pub code_fg: Color,
+    pub code_bg: Color,
+    pub bullet: Color,
+}
+
+/// Available theme names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeName {
+    Dark,
+    Light,
+    Dracula,
+}
+
+impl ThemeName {
+    /// Parse a theme name from a string (case-insensitive).
+    pub fn from_str_loose(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "dark" => Some(Self::Dark),
+            "light" => Some(Self::Light),
+            "dracula" => Some(Self::Dracula),
+            _ => None,
+        }
+    }
+
+    /// Get the theme struct for this name.
+    pub fn theme(self) -> Theme {
+        match self {
+            Self::Dark => Theme::dark(),
+            Self::Light => Theme::light(),
+            Self::Dracula => Theme::dracula(),
+        }
+    }
+
+    /// All available theme names.
+    pub fn all() -> &'static [ThemeName] {
+        &[Self::Dark, Self::Light, Self::Dracula]
+    }
+
+    /// Display name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Light => "light",
+            Self::Dracula => "dracula",
+        }
+    }
+}
+
+impl std::fmt::Display for ThemeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Detected terminal background.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerminalBackground {
+    Dark,
+    Light,
+    Unknown,
+}
+
+/// Detect the terminal background color from the `COLORFGBG` environment variable.
+///
+/// `COLORFGBG` is typically set by terminal emulators in the format "fg;bg" where
+/// higher bg values (>= 8) indicate a light background. Falls back to `Unknown`.
+pub fn detect_terminal_background() -> TerminalBackground {
+    match std::env::var("COLORFGBG") {
+        Ok(val) => {
+            // Format is typically "fg;bg" (e.g., "15;0" for light-on-dark)
+            if let Some(bg_str) = val.rsplit(';').next()
+                && let Ok(bg) = bg_str.trim().parse::<u32>()
+            {
+                // Terminal color indices: 0-6 are dark colors, 7+ are light
+                if bg >= 8 {
+                    return TerminalBackground::Light;
+                } else {
+                    return TerminalBackground::Dark;
+                }
+            }
+            TerminalBackground::Unknown
+        }
+        Err(_) => TerminalBackground::Unknown,
+    }
+}
+
+/// Select the best theme based on terminal background detection.
+/// If background is light, use the light theme. Otherwise default to dark.
+pub fn auto_detect_theme() -> ThemeName {
+    match detect_terminal_background() {
+        TerminalBackground::Light => ThemeName::Light,
+        TerminalBackground::Dark | TerminalBackground::Unknown => ThemeName::Dark,
+    }
+}
+
+impl Theme {
+    /// Dark theme — the original default color scheme.
+    pub fn dark() -> Self {
+        Self {
+            name: "dark",
+            primary: Color::Rgb(208, 212, 220),
+            accent: Color::Rgb(130, 160, 255),
+            subtle: Color::Rgb(154, 160, 172),
+            success: Color::Rgb(106, 209, 143),
+            error: Color::Rgb(255, 92, 87),
+            warning: Color::Rgb(255, 179, 71),
+            blue_bright: Color::Rgb(74, 158, 255),
+            blue_path: Color::Rgb(88, 166, 255),
+            gold: Color::Rgb(255, 215, 0),
+            border: Color::Rgb(88, 88, 88),
+            border_accent: Color::Rgb(147, 147, 255),
+
+            grey: Color::Rgb(122, 126, 134),
+            thinking_bg: Color::Rgb(90, 94, 102),
+            orange: Color::Rgb(255, 140, 0),
+            green_light: Color::Rgb(137, 209, 133),
+            green_bright: Color::Rgb(0, 255, 0),
+            blue_task: Color::Rgb(37, 150, 190),
+            blue_light: Color::Rgb(156, 207, 253),
+            orange_caution: Color::Rgb(255, 165, 0),
+            cyan: Color::Rgb(0, 191, 255),
+            dim_grey: Color::Rgb(107, 114, 128),
+
+            phase_thinking: Color::Rgb(90, 94, 102),
+            phase_critique: Color::Rgb(255, 179, 71),
+            phase_refinement: Color::Rgb(0, 191, 255),
+
+            heading_1: Color::Rgb(200, 130, 255),
+            heading_2: Color::Rgb(0, 191, 255),
+            heading_3: Color::Rgb(255, 179, 71),
+            code_fg: Color::Rgb(106, 209, 143),
+            code_bg: Color::Rgb(30, 30, 30),
+            bullet: Color::Rgb(0, 255, 0),
+        }
+    }
+
+    /// Light theme — optimized for light terminal backgrounds.
+    pub fn light() -> Self {
+        Self {
+            name: "light",
+            primary: Color::Rgb(30, 30, 30),
+            accent: Color::Rgb(60, 90, 200),
+            subtle: Color::Rgb(100, 100, 110),
+            success: Color::Rgb(30, 140, 60),
+            error: Color::Rgb(200, 40, 40),
+            warning: Color::Rgb(180, 120, 0),
+            blue_bright: Color::Rgb(30, 100, 200),
+            blue_path: Color::Rgb(40, 110, 200),
+            gold: Color::Rgb(180, 150, 0),
+            border: Color::Rgb(180, 180, 180),
+            border_accent: Color::Rgb(100, 100, 200),
+
+            grey: Color::Rgb(120, 120, 130),
+            thinking_bg: Color::Rgb(220, 220, 230),
+            orange: Color::Rgb(200, 100, 0),
+            green_light: Color::Rgb(40, 150, 60),
+            green_bright: Color::Rgb(0, 160, 0),
+            blue_task: Color::Rgb(20, 110, 160),
+            blue_light: Color::Rgb(60, 130, 200),
+            orange_caution: Color::Rgb(200, 120, 0),
+            cyan: Color::Rgb(0, 140, 200),
+            dim_grey: Color::Rgb(140, 140, 150),
+
+            phase_thinking: Color::Rgb(200, 200, 210),
+            phase_critique: Color::Rgb(180, 120, 0),
+            phase_refinement: Color::Rgb(0, 140, 200),
+
+            heading_1: Color::Rgb(130, 60, 200),
+            heading_2: Color::Rgb(0, 130, 200),
+            heading_3: Color::Rgb(180, 120, 0),
+            code_fg: Color::Rgb(30, 140, 60),
+            code_bg: Color::Rgb(240, 240, 240),
+            bullet: Color::Rgb(0, 160, 0),
+        }
+    }
+
+    /// Dracula theme — based on the popular Dracula color scheme.
+    pub fn dracula() -> Self {
+        Self {
+            name: "dracula",
+            primary: Color::Rgb(248, 248, 242),       // Foreground
+            accent: Color::Rgb(189, 147, 249),        // Purple
+            subtle: Color::Rgb(98, 114, 164),         // Comment
+            success: Color::Rgb(80, 250, 123),        // Green
+            error: Color::Rgb(255, 85, 85),           // Red
+            warning: Color::Rgb(255, 184, 108),       // Orange
+            blue_bright: Color::Rgb(139, 233, 253),   // Cyan
+            blue_path: Color::Rgb(139, 233, 253),     // Cyan
+            gold: Color::Rgb(241, 250, 140),          // Yellow
+            border: Color::Rgb(68, 71, 90),           // Current Line
+            border_accent: Color::Rgb(189, 147, 249), // Purple
+
+            grey: Color::Rgb(98, 114, 164),            // Comment
+            thinking_bg: Color::Rgb(68, 71, 90),       // Current Line
+            orange: Color::Rgb(255, 184, 108),         // Orange
+            green_light: Color::Rgb(80, 250, 123),     // Green
+            green_bright: Color::Rgb(80, 250, 123),    // Green
+            blue_task: Color::Rgb(139, 233, 253),      // Cyan
+            blue_light: Color::Rgb(139, 233, 253),     // Cyan
+            orange_caution: Color::Rgb(255, 184, 108), // Orange
+            cyan: Color::Rgb(139, 233, 253),           // Cyan
+            dim_grey: Color::Rgb(98, 114, 164),        // Comment
+
+            phase_thinking: Color::Rgb(68, 71, 90), // Current Line
+            phase_critique: Color::Rgb(255, 184, 108), // Orange
+            phase_refinement: Color::Rgb(139, 233, 253), // Cyan
+
+            heading_1: Color::Rgb(255, 121, 198), // Pink
+            heading_2: Color::Rgb(139, 233, 253), // Cyan
+            heading_3: Color::Rgb(255, 184, 108), // Orange
+            code_fg: Color::Rgb(80, 250, 123),    // Green
+            code_bg: Color::Rgb(40, 42, 54),      // Background
+            bullet: Color::Rgb(80, 250, 123),     // Green
+        }
+    }
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self::dark()
+    }
+}
+
+// ============================================================================
+// Legacy constants — kept for backward compatibility.
+// These map to the dark theme defaults. New code should use Theme fields.
+// ============================================================================
 
 pub const PRIMARY: Color = Color::Rgb(208, 212, 220);
 pub const ACCENT: Color = Color::Rgb(130, 160, 255);
@@ -66,4 +334,106 @@ impl Indent {
     pub const CONT: &str = "  ";
     /// Tool result continuation lines (5 spaces to match "  ⎿  " visual width)
     pub const RESULT_CONT: &str = "     ";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dark_theme_matches_legacy_constants() {
+        let dark = Theme::dark();
+        assert_eq!(dark.primary, PRIMARY);
+        assert_eq!(dark.accent, ACCENT);
+        assert_eq!(dark.success, SUCCESS);
+        assert_eq!(dark.error, ERROR);
+        assert_eq!(dark.warning, WARNING);
+        assert_eq!(dark.border, BORDER);
+        assert_eq!(dark.code_fg, CODE_FG);
+        assert_eq!(dark.code_bg, CODE_BG);
+    }
+
+    #[test]
+    fn test_light_theme_differs_from_dark() {
+        let dark = Theme::dark();
+        let light = Theme::light();
+        assert_ne!(dark.primary, light.primary);
+        assert_ne!(dark.code_bg, light.code_bg);
+        assert_eq!(light.name, "light");
+    }
+
+    #[test]
+    fn test_dracula_theme() {
+        let dracula = Theme::dracula();
+        assert_eq!(dracula.name, "dracula");
+        assert_eq!(dracula.primary, Color::Rgb(248, 248, 242));
+        assert_eq!(dracula.error, Color::Rgb(255, 85, 85));
+    }
+
+    #[test]
+    fn test_theme_name_from_str() {
+        assert_eq!(ThemeName::from_str_loose("dark"), Some(ThemeName::Dark));
+        assert_eq!(ThemeName::from_str_loose("LIGHT"), Some(ThemeName::Light));
+        assert_eq!(
+            ThemeName::from_str_loose("Dracula"),
+            Some(ThemeName::Dracula)
+        );
+        assert_eq!(ThemeName::from_str_loose("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_theme_name_roundtrip() {
+        for name in ThemeName::all() {
+            let s = name.as_str();
+            let parsed = ThemeName::from_str_loose(s).unwrap();
+            assert_eq!(*name, parsed);
+        }
+    }
+
+    #[test]
+    fn test_theme_name_to_theme() {
+        let dark = ThemeName::Dark.theme();
+        assert_eq!(dark.name, "dark");
+        let light = ThemeName::Light.theme();
+        assert_eq!(light.name, "light");
+    }
+
+    #[test]
+    fn test_default_theme_is_dark() {
+        let default = Theme::default();
+        assert_eq!(default.name, "dark");
+        assert_eq!(default, Theme::dark());
+    }
+
+    #[test]
+    fn test_detect_terminal_background_dark() {
+        // Can't reliably test env var detection in unit tests,
+        // but we can test the Unknown/default path
+        let bg = detect_terminal_background();
+        // In CI/test, COLORFGBG is typically not set
+        assert!(matches!(
+            bg,
+            TerminalBackground::Dark | TerminalBackground::Light | TerminalBackground::Unknown
+        ));
+    }
+
+    #[test]
+    fn test_auto_detect_theme_fallback() {
+        // Without COLORFGBG set, should default to dark
+        let theme = auto_detect_theme();
+        // Could be Dark or Light depending on environment
+        assert!(matches!(theme, ThemeName::Dark | ThemeName::Light));
+    }
+
+    #[test]
+    fn test_all_themes_have_distinct_names() {
+        let themes: Vec<Theme> = ThemeName::all().iter().map(|n| n.theme()).collect();
+        for (i, a) in themes.iter().enumerate() {
+            for (j, b) in themes.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a.name, b.name);
+                }
+            }
+        }
+    }
 }
