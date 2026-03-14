@@ -741,13 +741,7 @@ impl ReactLoop {
                                 // Uses Python's stronger wording from thinking_trace_reminder
                                 messages.push(serde_json::json!({
                                     "role": "user",
-                                    "content": format!(
-                                        "<thinking_trace>\n{final_trace}\n</thinking_trace>\n\n\
-                                         You MUST follow the action plan in your thinking \
-                                         trace above. Execute exactly the next step it \
-                                         describes — do not skip ahead or choose a \
-                                         different approach."
-                                    ),
+                                    "content": get_reminder("thinking_trace_reminder", &[("thinking_trace", &final_trace)]),
                                     "_thinking": true
                                 }));
                             }
@@ -1032,15 +1026,28 @@ impl ReactLoop {
                                 continue;
                             }
                             let (summary, status) = Self::extract_task_complete_args(tc);
-                            // Emit summary as agent chunk so TUI displays it
+                            // Prefer the assistant's text content over the
+                            // task_complete summary.  When thinking guides
+                            // the model to produce a natural conversational
+                            // reply, the real answer lives in
+                            // `response.content` while the summary is just
+                            // a terse label like "Greeted the user".
+                            let display_text = response
+                                .content
+                                .as_deref()
+                                .filter(|c| !c.trim().is_empty())
+                                .map(|c| c.to_string())
+                                .unwrap_or(summary);
+                            // Emit as agent chunk so TUI displays it
                             if let Some(cb) = event_callback {
-                                cb.on_agent_chunk(&summary);
+                                cb.on_agent_chunk(&display_text);
                             }
                             iter_metrics.total_duration_ms =
                                 iter_start.elapsed().as_millis() as u64;
                             self.push_metrics(iter_metrics);
                             play_finish_sound();
-                            let mut result = AgentResult::ok(summary, messages.clone());
+                            let mut result =
+                                AgentResult::ok(display_text, messages.clone());
                             result.completion_status = Some(status);
                             return Ok(result);
                         }

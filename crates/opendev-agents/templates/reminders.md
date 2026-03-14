@@ -20,7 +20,10 @@ IMPORTANT: If your next step involves reading or searching multiple files to und
 {thinking_trace}
 </thinking_trace>
 
-You MUST follow the action plan in your thinking trace above. Execute exactly the next step it describes — do not skip ahead or choose a different approach.
+The thinking trace above is your INTERNAL reasoning — treat it as your private thought process, not as a task report. Use it to guide your next action:
+- If the trace identifies a tool call or code change, perform that step.
+- If the trace concludes a conversational response is appropriate, respond naturally to the user. Put your actual reply in the task_complete result — write it as a direct response to the user, not a third-person summary.
+Stay aligned with the trace's conclusions but express yourself naturally.
 
 --- subagent_complete_signal ---
 <subagent_complete>
