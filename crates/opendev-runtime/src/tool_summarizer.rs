@@ -92,6 +92,37 @@ pub fn summarize_tool_result(tool_name: &str, output: Option<&str>, error: Optio
             }
         }
 
+        // Todo tools
+        "write_todos" => {
+            let count = result_str
+                .lines()
+                .filter(|l| {
+                    let t = l.trim();
+                    t.starts_with("[todo]") || t.starts_with("[doing]") || t.starts_with("[done]")
+                })
+                .count();
+            if count == 1 {
+                "Created 1 todo".to_string()
+            } else if count > 1 {
+                format!("Created {count} todos")
+            } else {
+                "Todos updated".to_string()
+            }
+        }
+        "update_todo" => "Todo updated".to_string(),
+        "complete_todo" => "Todo completed".to_string(),
+        "list_todos" => {
+            let count = result_str
+                .lines()
+                .filter(|l| {
+                    let t = l.trim();
+                    t.starts_with("[todo]") || t.starts_with("[doing]") || t.starts_with("[done]")
+                })
+                .count();
+            format!("{count} todos listed")
+        }
+        "clear_todos" => "All todos cleared".to_string(),
+
         // Generic fallback
         _ => {
             if result_str.len() < 100 {
@@ -161,7 +192,8 @@ mod tests {
 
     #[test]
     fn test_search_with_matches() {
-        let output = "src/main.rs:10: fn main()\nsrc/lib.rs:5: pub mod config\nsrc/app.rs:1: use std";
+        let output =
+            "src/main.rs:10: fn main()\nsrc/lib.rs:5: pub mod config\nsrc/app.rs:1: use std";
         let summary = summarize_tool_result("search", Some(output), None);
         assert_eq!(summary, "Search completed (3 matches found)");
     }
@@ -181,7 +213,10 @@ mod tests {
 
     #[test]
     fn test_bash_long_output() {
-        let output = (0..20).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let output = (0..20)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let summary = summarize_tool_result("run_command", Some(&output), None);
         assert_eq!(summary, "Command executed (20 lines of output)");
     }

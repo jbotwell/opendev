@@ -16,6 +16,7 @@ use opendev_agents::llm_calls::{LlmCallConfig, LlmCaller};
 use opendev_agents::prompts::{create_default_composer, create_thinking_composer};
 use opendev_agents::react_loop::{ReactLoop, ReactLoopConfig};
 use opendev_agents::traits::{AgentError, AgentEventCallback, AgentResult, TaskMonitor};
+use opendev_context::{ArtifactIndex, ContextCompactor};
 use opendev_history::SessionManager;
 use opendev_http::HttpClient;
 use opendev_http::adapted_client::AdaptedClient;
@@ -24,7 +25,6 @@ use opendev_models::AppConfig;
 use opendev_models::message::{ChatMessage, Role};
 use opendev_repl::HandlerRegistry;
 use opendev_repl::query_enhancer::QueryEnhancer;
-use opendev_context::{ArtifactIndex, ContextCompactor};
 use opendev_runtime::CostTracker;
 use opendev_tools_core::{ToolContext, ToolRegistry};
 use opendev_tools_impl::*;
@@ -58,10 +58,12 @@ pub struct AgentRuntime {
     pub artifact_index: Mutex<ArtifactIndex>,
     /// Context compactor for auto-compaction when approaching context limits.
     pub compactor: Mutex<ContextCompactor>,
+    /// Shared todo manager for TUI panel synchronization.
+    pub todo_manager: Arc<Mutex<opendev_runtime::TodoManager>>,
 }
 
 /// Register all built-in tools into the registry.
-fn register_default_tools(registry: &mut ToolRegistry) {
+fn register_default_tools(registry: &mut ToolRegistry) -> Arc<Mutex<opendev_runtime::TodoManager>> {
     // Process execution
     registry.register(Arc::new(BashTool::new()));
 
@@ -109,12 +111,14 @@ fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Arc::new(ListTodosTool::new(Arc::clone(&todo_manager))));
     registry.register(Arc::new(ClearTodosTool::new(Arc::clone(&todo_manager))));
     // Keep legacy single-action tool for backward compatibility
-    registry.register(Arc::new(TodoTool::new(todo_manager)));
+    registry.register(Arc::new(TodoTool::new(Arc::clone(&todo_manager))));
 
     // Agent tools
     registry.register(Arc::new(AgentsTool));
     // Note: SpawnSubagentTool requires shared Arc<ToolRegistry> and Arc<HttpClient>,
     // which are created after registration. Deferred for now.
+
+    todo_manager
 }
 
 /// Build the system prompt from embedded templates.
@@ -157,7 +161,7 @@ impl AgentRuntime {
         session_manager: SessionManager,
     ) -> Result<Self, String> {
         let mut tool_registry = ToolRegistry::new();
-        register_default_tools(&mut tool_registry);
+        let todo_manager = register_default_tools(&mut tool_registry);
         info!(
             tool_count = tool_registry.tool_names().len(),
             "Registered default tools"
@@ -367,6 +371,7 @@ impl AgentRuntime {
             cost_tracker,
             artifact_index,
             compactor,
+            todo_manager,
         })
     }
 
@@ -413,17 +418,7 @@ impl AgentRuntime {
         let session_messages = self
             .session_manager
             .current_session()
-            .map(|s| {
-                s.messages
-                    .iter()
-                    .map(|m| {
-                        serde_json::json!({
-                            "role": m.role.to_string(),
-                            "content": &m.content,
-                        })
-                    })
-                    .collect::<Vec<Value>>()
-            })
+            .map(|s| opendev_history::message_convert::chatmessages_to_api_values(&s.messages))
             .unwrap_or_default();
 
         let mut messages = self.query_enhancer.prepare_messages(
@@ -462,6 +457,7 @@ impl AgentRuntime {
             .set_thinking_context(Some(query.to_string()), thinking_sys_prompt);
 
         // Step 7: Run the ReAct loop
+        let pre_count = messages.len();
         let result = self
             .react_loop
             .run(
@@ -479,20 +475,16 @@ impl AgentRuntime {
             )
             .await?;
 
-        // Step 7: Save assistant response to session
-        if let Some(session) = self.session_manager.current_session_mut() {
-            session.messages.push(ChatMessage {
-                role: Role::Assistant,
-                content: result.content.clone(),
-                timestamp: Utc::now(),
-                metadata: HashMap::new(),
-                tool_calls: Vec::new(),
-                tokens: None,
-                thinking_trace: None,
-                reasoning_content: None,
-                token_usage: None,
-                provenance: None,
-            });
+        // Step 7b: Save all new messages from the react loop to the session.
+        // Convert the new API values (assistant + tool messages) back to ChatMessages
+        // so tool calls and their results are fully preserved.
+        {
+            let new_values = &result.messages[pre_count..];
+            let new_chat_messages =
+                opendev_history::message_convert::api_values_to_chatmessages(new_values);
+            for msg in new_chat_messages {
+                self.session_manager.add_message(msg);
+            }
         }
 
         // Step 8: Persist session to disk

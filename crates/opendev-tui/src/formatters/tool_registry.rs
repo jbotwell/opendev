@@ -46,6 +46,7 @@ pub enum ResultFormat {
     File,
     Directory,
     Generic,
+    Todo,
 }
 
 /// Single source of truth for how a tool appears in the TUI.
@@ -285,26 +286,26 @@ static TOOL_REGISTRY: &[ToolDisplayEntry] = &[
     ToolDisplayEntry {
         names: &["write_todos"],
         category: ToolCategory::Plan,
-        verb: "Create",
+        verb: "Todos",
         label: "todos",
         primary_arg_keys: &["name", "title"],
-        result_format: ResultFormat::Generic,
+        result_format: ResultFormat::Todo,
     },
     ToolDisplayEntry {
         names: &["update_todo"],
         category: ToolCategory::Plan,
-        verb: "Update Todos",
+        verb: "Update Todo",
         label: "todo",
         primary_arg_keys: &["id", "name"],
-        result_format: ResultFormat::Generic,
+        result_format: ResultFormat::Todo,
     },
     ToolDisplayEntry {
         names: &["complete_todo"],
         category: ToolCategory::Plan,
-        verb: "Complete Todos",
+        verb: "Complete Todo",
         label: "todo",
         primary_arg_keys: &["id", "name"],
-        result_format: ResultFormat::Generic,
+        result_format: ResultFormat::Todo,
     },
     ToolDisplayEntry {
         names: &["list_todos"],
@@ -312,7 +313,7 @@ static TOOL_REGISTRY: &[ToolDisplayEntry] = &[
         verb: "List Todos",
         label: "todos",
         primary_arg_keys: &[],
-        result_format: ResultFormat::Generic,
+        result_format: ResultFormat::Todo,
     },
     ToolDisplayEntry {
         names: &["clear_todos"],
@@ -320,7 +321,7 @@ static TOOL_REGISTRY: &[ToolDisplayEntry] = &[
         verb: "Clear Todos",
         label: "todos",
         primary_arg_keys: &[],
-        result_format: ResultFormat::Generic,
+        result_format: ResultFormat::Todo,
     },
     ToolDisplayEntry {
         names: &["task_complete"],

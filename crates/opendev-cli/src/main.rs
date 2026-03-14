@@ -757,52 +757,79 @@ async fn run_interactive(
                 }
             }
             None => {
-                // Interactive session picker (printed before entering TUI)
-                let listing = SessionListing::new(session_dir.clone());
-                let sessions = listing.list_sessions(None, false);
+                // Interactive session picker — list across all projects
+                let paths_for_listing =
+                    opendev_config::Paths::new(Some(working_dir.to_path_buf()));
+                let sessions = SessionListing::list_all_sessions(
+                    &paths_for_listing.global_projects_dir(),
+                );
 
                 if sessions.is_empty() {
                     session_manager.create_session();
                 } else {
                     println!("Available sessions:");
+                    println!(
+                        "  {:<3} {:<40} {:<12} {:<12} {:>4}",
+                        "#", "Title", "ID", "Updated", "Msgs"
+                    );
+                    println!("  {}", "-".repeat(75));
                     for (i, meta) in sessions.iter().enumerate().take(20) {
                         let title = meta.title.as_deref().unwrap_or("(untitled)");
+                        let display_title: String = if title.len() > 38 {
+                            format!("{}...", &title[..35])
+                        } else {
+                            title.to_string()
+                        };
+                        let relative = format_relative_time(meta.updated_at);
+                        let short_id = if meta.id.len() > 10 {
+                            &meta.id[..10]
+                        } else {
+                            &meta.id
+                        };
                         println!(
-                            "  {}. {} — {} ({} messages, {})",
+                            "  {:<3} {:<40} {:<12} {:<12} {:>4}",
                             i + 1,
-                            meta.id,
-                            title,
+                            display_title,
+                            short_id,
+                            relative,
                             meta.message_count,
-                            meta.updated_at.format("%Y-%m-%d %H:%M"),
                         );
                     }
                     println!();
 
                     use std::io::{self, Write};
-                    print!("Enter session number (or press Enter for new): ");
-                    let _ = io::stdout().flush();
-                    let mut buf = String::new();
-                    if io::stdin().read_line(&mut buf).is_ok() {
-                        let input = buf.trim();
-                        if input.is_empty() {
-                            session_manager.create_session();
-                        } else if let Ok(n) = input.parse::<usize>() {
-                            if n >= 1 && n <= sessions.len() {
-                                let selected = &sessions[n - 1];
-                                if let Err(e) = session_manager.resume_session(&selected.id) {
-                                    eprintln!("Failed to load session: {e}");
-                                    session_manager.create_session();
+                    loop {
+                        print!("Enter session number (q to cancel, Enter for new): ");
+                        let _ = io::stdout().flush();
+                        let mut buf = String::new();
+                        if io::stdin().read_line(&mut buf).is_ok() {
+                            let input = buf.trim();
+                            if input.is_empty() {
+                                session_manager.create_session();
+                                break;
+                            } else if input == "q" {
+                                session_manager.create_session();
+                                break;
+                            } else if let Ok(n) = input.parse::<usize>() {
+                                if n >= 1 && n <= sessions.len() {
+                                    let selected = &sessions[n - 1];
+                                    if let Err(e) =
+                                        session_manager.resume_session(&selected.id)
+                                    {
+                                        eprintln!("Failed to load session: {e}");
+                                        session_manager.create_session();
+                                    }
+                                    break;
+                                } else {
+                                    eprintln!("Invalid selection, try again.");
                                 }
                             } else {
-                                eprintln!("Invalid selection. Starting a new session.");
-                                session_manager.create_session();
+                                eprintln!("Invalid input, try again.");
                             }
                         } else {
-                            eprintln!("Invalid input. Starting a new session.");
                             session_manager.create_session();
+                            break;
                         }
-                    } else {
-                        session_manager.create_session();
                     }
                 }
             }
@@ -842,6 +869,62 @@ async fn run_interactive(
         theme_name: resolved_theme,
         ..opendev_tui::AppState::default()
     };
+
+    // Wire todo manager from runtime to TUI for panel sync
+    app_state.todo_manager = Some(std::sync::Arc::clone(&agent_runtime.todo_manager));
+
+    // Hydrate TUI with session history on resume/continue
+    if let Some(session) = agent_runtime.session_manager.current_session() {
+        for msg in &session.messages {
+            match msg.role {
+                opendev_models::Role::User => {
+                    if msg.metadata.get("display_hidden").is_some() {
+                        continue;
+                    }
+                    app_state.messages.push(opendev_tui::app::DisplayMessage {
+                        role: opendev_tui::app::DisplayRole::User,
+                        content: msg.content.clone(),
+                        tool_call: None,
+                    });
+                }
+                opendev_models::Role::Assistant => {
+                    // Add thinking trace if present
+                    if let Some(ref trace) = msg.thinking_trace {
+                        app_state.messages.push(opendev_tui::app::DisplayMessage {
+                            role: opendev_tui::app::DisplayRole::Thinking,
+                            content: trace.clone(),
+                            tool_call: None,
+                        });
+                    }
+                    // Add assistant text
+                    if !msg.content.is_empty() {
+                        app_state.messages.push(opendev_tui::app::DisplayMessage {
+                            role: opendev_tui::app::DisplayRole::Assistant,
+                            content: msg.content.clone(),
+                            tool_call: None,
+                        });
+                    }
+                    // Add tool calls
+                    for tc in &msg.tool_calls {
+                        app_state.messages.push(opendev_tui::app::DisplayMessage {
+                            role: opendev_tui::app::DisplayRole::Assistant,
+                            content: String::new(),
+                            tool_call: Some(opendev_tui::app::DisplayToolCall {
+                                name: tc.name.clone(),
+                                arguments: tc.parameters.clone(),
+                                summary: tc.result_summary.clone(),
+                                success: tc.error.is_none(),
+                                collapsed: true,
+                                result_lines: Vec::new(),
+                                nested_calls: Vec::new(),
+                            }),
+                        });
+                    }
+                }
+                opendev_models::Role::System => {} // Skip system messages
+            }
+        }
+    }
 
     // Inject initial message as first user submission (handled by the agent task)
     if let Some(ref msg) = initial_message {

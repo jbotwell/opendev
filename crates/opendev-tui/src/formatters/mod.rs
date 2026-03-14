@@ -9,6 +9,7 @@ pub mod file_formatter;
 pub mod generic_formatter;
 pub mod markdown;
 pub mod style_tokens;
+pub mod todo_formatter;
 pub mod tool_registry;
 
 pub use base::{FormattedOutput, ToolFormatter};

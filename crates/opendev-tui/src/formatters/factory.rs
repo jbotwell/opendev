@@ -5,6 +5,7 @@ use super::bash_formatter::BashFormatter;
 use super::directory_formatter::DirectoryFormatter;
 use super::file_formatter::FileFormatter;
 use super::generic_formatter::GenericFormatter;
+use super::todo_formatter::TodoFormatter;
 use super::tool_registry::{ResultFormat, lookup_tool};
 
 /// Factory that selects the right formatter for a given tool name.
@@ -24,6 +25,7 @@ impl FormatterFactory {
             ResultFormat::File => Box::new(FileFormatter),
             ResultFormat::Directory => Box::new(DirectoryFormatter),
             ResultFormat::Generic => Box::new(GenericFormatter),
+            ResultFormat::Todo => Box::new(TodoFormatter),
         }
     }
 }

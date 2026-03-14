@@ -3,7 +3,10 @@
 //! Mirrors the Python `SWECLIChatApp` — manages terminal setup/teardown,
 //! the main render loop, and dispatches events to widgets and controllers.
 
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::controllers::{ApprovalController, MessageController};
@@ -12,7 +15,7 @@ use crate::history::CommandHistory;
 use crate::managers::InterruptManager;
 use crate::widgets::{
     ConversationWidget, InputWidget, NestedToolWidget, StatusBarWidget, TodoDisplayItem,
-    TodoPanelWidget, WelcomePanelState, WelcomePanelWidget,
+    TodoDisplayStatus, TodoPanelWidget, WelcomePanelState, WelcomePanelWidget,
 };
 use crossterm::{
     event::{
@@ -117,6 +120,8 @@ pub struct AppState {
     pub background_task_count: usize,
     /// Active subagent executions for nested display.
     pub active_subagents: Vec<crate::widgets::nested_tool::SubagentDisplayState>,
+    /// Shared todo manager for syncing panel state with tool results.
+    pub todo_manager: Option<Arc<Mutex<opendev_runtime::TodoManager>>>,
     /// Todo items from the current plan (for the todo progress panel).
     pub todo_items: Vec<TodoDisplayItem>,
     /// Whether the todo panel is expanded (true) or collapsed (false).
@@ -144,6 +149,12 @@ pub struct AppState {
     pub cached_lines: Vec<ratatui::text::Line<'static>>,
     /// Generation counter at which `cached_lines` was last built.
     pub lines_generation: u64,
+    /// Per-message content hashes for incremental cache rebuilds.
+    pub per_message_hashes: Vec<u64>,
+    /// Per-message line counts tracking how many cached_lines each message produced.
+    pub per_message_line_counts: Vec<usize>,
+    /// Per-message markdown render cache, keyed by hash of (role + content).
+    pub markdown_cache: HashMap<u64, Vec<ratatui::text::Line<'static>>>,
     /// Scroll acceleration: last scroll direction (true = up, false = down).
     pub scroll_last_direction: Option<bool>,
     /// Scroll acceleration: timestamp of the last scroll key press.
@@ -284,6 +295,7 @@ impl Default for AppState {
             ),
             background_task_count: 0,
             active_subagents: Vec::new(),
+            todo_manager: None,
             todo_items: Vec::new(),
             todo_expanded: true,
             todo_spinner_tick: 0,
@@ -297,6 +309,9 @@ impl Default for AppState {
             message_generation: 0,
             cached_lines: Vec::new(),
             lines_generation: u64::MAX, // Force initial build
+            per_message_hashes: Vec::new(),
+            per_message_line_counts: Vec::new(),
+            markdown_cache: HashMap::new(),
             scroll_last_direction: None,
             scroll_last_time: None,
             scroll_accel_level: 0,
@@ -463,6 +478,11 @@ impl App {
         Ok(())
     }
 
+    /// Clear the per-message markdown render cache.
+    pub fn clear_markdown_cache(&mut self) {
+        self.state.markdown_cache.clear();
+    }
+
     /// Rebuild the cached static conversation lines from messages.
     ///
     /// This is the expensive part of line building (markdown rendering, etc.)
@@ -577,7 +597,7 @@ impl App {
                             lines.push(Line::from(spans));
                             leading_consumed = true;
                         } else {
-                            let mut spans = vec![Span::raw(Indent::CONT.to_string())];
+                            let mut spans = vec![Span::raw(Indent::CONT)];
                             spans.extend(
                                 md_line
                                     .spans
@@ -606,7 +626,7 @@ impl App {
                             ]));
                         } else {
                             lines.push(Line::from(vec![
-                                Span::raw(Indent::CONT.to_string()),
+                                Span::raw(Indent::CONT),
                                 Span::styled(
                                     content_line.to_string(),
                                     Style::default().fg(style_tokens::PRIMARY),
@@ -633,7 +653,7 @@ impl App {
                             ]));
                         } else {
                             lines.push(Line::from(vec![
-                                Span::raw(Indent::CONT.to_string()),
+                                Span::raw(Indent::CONT),
                                 Span::styled(
                                     content_line.to_string(),
                                     Style::default().fg(style_tokens::SUBTLE),
@@ -659,7 +679,7 @@ impl App {
                             ]));
                         } else {
                             lines.push(Line::from(vec![
-                                Span::raw(Indent::CONT.to_string()),
+                                Span::raw(Indent::CONT),
                                 Span::styled(
                                     content_line.to_string(),
                                     Style::default()
@@ -693,10 +713,10 @@ impl App {
                 // Collapsible result lines
                 if !tc.collapsed && !tc.result_lines.is_empty() {
                     for (i, result_line) in tc.result_lines.iter().enumerate() {
-                        let prefix_char = if i == 0 {
-                            format!("  {}  ", CONTINUATION_CHAR)
+                        let prefix_char: Cow<'static, str> = if i == 0 {
+                            format!("  {}  ", CONTINUATION_CHAR).into()
                         } else {
-                            Indent::RESULT_CONT.to_string()
+                            Cow::Borrowed(Indent::RESULT_CONT)
                         };
                         lines.push(Line::from(vec![
                             Span::styled(prefix_char, Style::default().fg(style_tokens::SUBTLE)),
@@ -721,7 +741,6 @@ impl App {
 
                 // Nested tool calls
                 for nested in &tc.nested_calls {
-                    let n_indent = Indent::CONT.to_string();
                     let n_category = categorize_tool(&nested.name);
                     let n_color = tool_color(n_category);
                     let (n_icon, n_icon_color) = if nested.success {
@@ -732,7 +751,7 @@ impl App {
                     let n_display = format_tool_call_display(&nested.name, &nested.arguments);
                     lines.push(Line::from(vec![
                         Span::styled(
-                            format!("{n_indent}\u{2514}\u{2500} "),
+                            format!("{}\u{2514}\u{2500} ", Indent::CONT),
                             Style::default().fg(style_tokens::SUBTLE),
                         ),
                         Span::styled(format!("{n_icon} "), Style::default().fg(n_icon_color)),
@@ -1126,28 +1145,80 @@ impl App {
                     .map(|t| t.args.clone())
                     .unwrap_or(result_args);
 
-                let result_lines: Vec<String> =
-                    output.lines().take(50).map(|l| l.to_string()).collect();
-                let display_lines = if result_lines.is_empty() && !output.is_empty() {
-                    vec![output.clone()]
+                // Check if this is a todo tool for special handling
+                let is_todo_tool = matches!(
+                    tool_name.as_str(),
+                    "write_todos" | "update_todo" | "complete_todo" | "list_todos" | "clear_todos"
+                );
+
+                let (display_lines, collapsed) = if is_todo_tool {
+                    let summary = crate::formatters::todo_formatter::summarize_todo_result(
+                        &tool_name, &output,
+                    );
+                    (vec![summary], false)
                 } else {
-                    result_lines
+                    let result_lines: Vec<String> =
+                        output.lines().take(50).map(|l| l.to_string()).collect();
+                    let lines = if result_lines.is_empty() && !output.is_empty() {
+                        vec![output.clone()]
+                    } else {
+                        result_lines
+                    };
+                    let collapse = lines.len() > 5;
+                    (lines, collapse)
                 };
+
                 if !display_lines.is_empty() {
                     self.state.messages.push(DisplayMessage {
                         role: DisplayRole::Assistant,
                         content: String::new(),
                         tool_call: Some(DisplayToolCall {
-                            name: tool_name,
+                            name: tool_name.clone(),
                             arguments,
                             summary: None,
                             success,
-                            collapsed: display_lines.len() > 5,
+                            collapsed,
                             result_lines: display_lines,
                             nested_calls: Vec::new(),
                         }),
                     });
                 }
+
+                // Refresh todo panel from shared manager after any todo tool
+                if is_todo_tool
+                    && let Some(ref mgr) = self.state.todo_manager
+                    && let Ok(mgr) = mgr.lock()
+                {
+                    self.state.todo_items = mgr
+                        .all()
+                        .iter()
+                        .map(|item| TodoDisplayItem {
+                            id: item.id,
+                            title: item.title.clone(),
+                            status: match item.status {
+                                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
+                                opendev_runtime::TodoStatus::InProgress => {
+                                    TodoDisplayStatus::InProgress
+                                }
+                                opendev_runtime::TodoStatus::Completed => {
+                                    TodoDisplayStatus::Completed
+                                }
+                            },
+                            active_form: if item.active_form.is_empty() {
+                                None
+                            } else {
+                                Some(item.active_form.clone())
+                            },
+                        })
+                        .collect();
+                    if tool_name == "write_todos" && !self.state.todo_items.is_empty() {
+                        self.state.todo_expanded = true;
+                    }
+                    if tool_name == "clear_todos" {
+                        self.state.todo_items.clear();
+                    }
+                }
+
                 self.state.dirty = true;
                 self.state.message_generation += 1;
             }
@@ -1992,4 +2063,222 @@ mod tests {
             "cached_lines should not be empty"
         );
     }
+
+    // ---------------------------------------------------------------
+    // Per-message dirty tracking tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_markdown_cache_hit() {
+        let mut app = App::new();
+        app.state.messages.push(DisplayMessage {
+            role: DisplayRole::Assistant,
+            content: "Hello **world**".into(),
+            tool_call: None,
+        });
+        app.state.terminal_height = 24;
+        app.rebuild_cached_lines();
+        assert_eq!(app.state.markdown_cache.len(), 1);
+        let first_lines = app.state.cached_lines.clone();
+        app.state.per_message_hashes.clear();
+        app.state.per_message_line_counts.clear();
+        app.state.cached_lines.clear();
+        app.rebuild_cached_lines();
+        assert_eq!(app.state.markdown_cache.len(), 1);
+        assert_eq!(app.state.cached_lines.len(), first_lines.len());
+    }
+
+    #[test]
+    fn test_markdown_cache_miss_different_content() {
+        let mut app = App::new();
+        app.state.messages.push(DisplayMessage {
+            role: DisplayRole::Assistant,
+            content: "Hello **world**".into(),
+            tool_call: None,
+        });
+        app.state.terminal_height = 24;
+        app.rebuild_cached_lines();
+        assert_eq!(app.state.markdown_cache.len(), 1);
+        app.state.messages[0].content = "Goodbye **world**".into();
+        app.rebuild_cached_lines();
+        assert_eq!(app.state.markdown_cache.len(), 2);
+    }
+
+    #[test]
+    fn test_markdown_cache_clear() {
+        let mut app = App::new();
+        app.state.messages.push(DisplayMessage {
+            role: DisplayRole::Assistant,
+            content: "# Title\nSome text".into(),
+            tool_call: None,
+        });
+        app.state.terminal_height = 24;
+        app.rebuild_cached_lines();
+        assert!(!app.state.markdown_cache.is_empty());
+        app.clear_markdown_cache();
+        assert!(app.state.markdown_cache.is_empty());
+    }
+
+    #[test]
+    fn test_incremental_append_only_renders_new_message() {
+        let mut app = App::new();
+        app.state.terminal_height = 24;
+        app.state.messages.push(DisplayMessage {
+            role: DisplayRole::User,
+            content: "First message".into(),
+            tool_call: None,
+        });
+        app.rebuild_cached_lines();
+        let lines_after_first = app.state.cached_lines.len();
+        assert!(lines_after_first > 0);
+        assert_eq!(app.state.per_message_hashes.len(), 1);
+        assert_eq!(app.state.per_message_line_counts.len(), 1);
+        let first_hash = app.state.per_message_hashes[0];
+        let first_lines_snapshot = app.state.cached_lines.clone();
+
+        // Append a second message
+        app.state.messages.push(DisplayMessage {
+            role: DisplayRole::User,
+            content: "Second message".into(),
+            tool_call: None,
+        });
+        app.rebuild_cached_lines();
+        assert_eq!(
+            app.state.per_message_hashes[0], first_hash,
+            "first message hash should be unchanged after append"
+        );
+        assert_eq!(app.state.per_message_hashes.len(), 2);
+        for i in 0..first_lines_snapshot.len() {
+            assert_eq!(
+                format!("{:?}", app.state.cached_lines[i]),
+                format!("{:?}", first_lines_snapshot[i]),
+                "first message lines should be preserved at index {i}"
+            );
+        }
+        assert!(app.state.cached_lines.len() > lines_after_first);
+    }
+
+    #[test]
+    fn test_incremental_modify_middle_rebuilds_from_change() {
+        let mut app = App::new();
+        app.state.terminal_height = 24;
+        for content in &["First", "Second", "Third"] {
+            app.state.messages.push(DisplayMessage {
+                role: DisplayRole::User,
+                content: content.to_string(),
+                tool_call: None,
+            });
+        }
+        app.rebuild_cached_lines();
+        let original_lines = app.state.cached_lines.len();
+        assert_eq!(app.state.per_message_hashes.len(), 3);
+        let first_hash = app.state.per_message_hashes[0];
+        let first_line_count = app.state.per_message_line_counts[0];
+
+        // Modify the second message
+        app.state.messages[1].content = "Modified Second".into();
+        app.rebuild_cached_lines();
+
+        // First message preserved
+        assert_eq!(app.state.per_message_hashes[0], first_hash);
+        assert_eq!(app.state.per_message_line_counts[0], first_line_count);
+        assert_eq!(app.state.per_message_hashes.len(), 3);
+        // Second hash changed
+        assert_ne!(
+            app.state.per_message_hashes[1],
+            display_message_hash(&DisplayMessage {
+                role: DisplayRole::User,
+                content: "Second".into(),
+                tool_call: None,
+            }),
+        );
+        assert_eq!(app.state.cached_lines.len(), original_lines);
+    }
+
+    #[test]
+    fn test_incremental_empty_conversation() {
+        let mut app = App::new();
+        app.state.terminal_height = 24;
+        app.rebuild_cached_lines();
+        assert!(app.state.cached_lines.is_empty());
+        assert!(app.state.per_message_hashes.is_empty());
+        assert!(app.state.per_message_line_counts.is_empty());
+    }
+
+    #[test]
+    fn test_incremental_multiple_appends_correct_cache() {
+        let mut app = App::new();
+        app.state.terminal_height = 24;
+        for i in 0..5u32 {
+            app.state.messages.push(DisplayMessage {
+                role: if i % 2 == 0 {
+                    DisplayRole::User
+                } else {
+                    DisplayRole::Assistant
+                },
+                content: format!("Message {i}"),
+                tool_call: None,
+            });
+            app.rebuild_cached_lines();
+            assert_eq!(app.state.per_message_hashes.len(), (i + 1) as usize);
+            assert_eq!(app.state.per_message_line_counts.len(), (i + 1) as usize);
+        }
+        // Compare with full rebuild
+        let incremental_lines = app.state.cached_lines.clone();
+        app.state.per_message_hashes.clear();
+        app.state.per_message_line_counts.clear();
+        app.state.cached_lines.clear();
+        app.rebuild_cached_lines();
+        assert_eq!(app.state.cached_lines.len(), incremental_lines.len());
+        for (i, (inc, full)) in incremental_lines
+            .iter()
+            .zip(app.state.cached_lines.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                format!("{:?}", inc),
+                format!("{:?}", full),
+                "line {i} differs between incremental and full rebuild"
+            );
+        }
+    }
+
+    #[test]
+    fn test_incremental_no_change_is_noop() {
+        let mut app = App::new();
+        app.state.terminal_height = 24;
+        app.state.messages.push(DisplayMessage {
+            role: DisplayRole::User,
+            content: "Hello".into(),
+            tool_call: None,
+        });
+        app.rebuild_cached_lines();
+        let lines_after = app.state.cached_lines.clone();
+        // Second rebuild with no changes
+        app.rebuild_cached_lines();
+        assert_eq!(app.state.cached_lines.len(), lines_after.len());
+    }
+
+    #[test]
+    fn test_incremental_message_removal() {
+        let mut app = App::new();
+        app.state.terminal_height = 24;
+        app.state.messages.push(DisplayMessage {
+            role: DisplayRole::User,
+            content: "First".into(),
+            tool_call: None,
+        });
+        app.state.messages.push(DisplayMessage {
+            role: DisplayRole::User,
+            content: "Second".into(),
+            tool_call: None,
+        });
+        app.rebuild_cached_lines();
+        assert_eq!(app.state.per_message_hashes.len(), 2);
+        app.state.messages.pop();
+        app.rebuild_cached_lines();
+        assert_eq!(app.state.per_message_hashes.len(), 1);
+        assert_eq!(app.state.per_message_line_counts.len(), 1);
+    }
+
 }
