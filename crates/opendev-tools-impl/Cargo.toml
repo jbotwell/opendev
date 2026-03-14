@@ -34,3 +34,4 @@ open = "5"
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full", "test-util"] }
+proptest = "1"

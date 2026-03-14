@@ -324,4 +324,58 @@ mod tests {
         assert!(result.contains("line2_modified"));
         assert!(!result.contains("\nline2\n"));
     }
+
+    // -----------------------------------------------------------------------
+    // Property-based tests for patch hunk parsing (fuzzing #71)
+    // -----------------------------------------------------------------------
+
+    mod proptest_patch {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// parse_hunk_header must never panic on arbitrary input.
+            #[test]
+            fn fuzz_hunk_header_no_panic(line in "\\PC*") {
+                let _ = parse_hunk_header(&line);
+            }
+
+            /// strip_path must never panic on arbitrary input.
+            #[test]
+            fn fuzz_strip_path_no_panic(
+                path in "\\PC{0,200}",
+                strip in 0usize..10
+            ) {
+                let _ = strip_path(&path, strip);
+            }
+
+            /// Valid hunk headers must be parsed correctly.
+            #[test]
+            fn valid_hunk_header_parsed(
+                old_start in 1usize..10000,
+                old_count in 0usize..1000,
+                new_start in 1usize..10000,
+                new_count in 0usize..1000,
+            ) {
+                let line = format!("@@ -{old_start},{old_count} +{new_start},{new_count} @@");
+                let result = parse_hunk_header(&line);
+                prop_assert!(result.is_some(), "Failed to parse: {}", line);
+                let hb = result.unwrap();
+                prop_assert_eq!(hb.old_start, old_start);
+            }
+
+            /// apply_patch_manually must not panic on arbitrary patch content.
+            #[test]
+            fn fuzz_apply_patch_manually_no_panic(
+                patch in "\\PC{0,1000}",
+                strip in 0usize..5,
+            ) {
+                let tmp = TempDir::new().unwrap();
+                // Create a dummy file so patch application has something to work with
+                std::fs::write(tmp.path().join("test.txt"), "line1\nline2\nline3\n").unwrap();
+                // Should not panic — errors are returned as ToolResult
+                let _ = apply_patch_manually(&patch, tmp.path(), strip);
+            }
+        }
+    }
 }
