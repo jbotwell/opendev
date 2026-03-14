@@ -115,7 +115,7 @@ impl HttpClient {
                     if let Some(status) = hr.status
                         && self.retry_config.is_retryable_status(status)
                     {
-                        let delay = self.get_retry_delay(None, attempt);
+                        let delay = self.get_retry_delay(hr.retry_after.as_deref(), attempt);
                         last_result = Some(hr);
                         if attempt < self.retry_config.max_retries {
                             warn!(
@@ -141,9 +141,10 @@ impl HttpClient {
                     return Ok(hr);
                 }
                 Ok(hr) if hr.retryable => {
+                    let retry_after = hr.retry_after.clone();
                     last_result = Some(hr);
                     if attempt < self.retry_config.max_retries {
-                        let delay = self.retry_config.delay_for_attempt(attempt);
+                        let delay = self.get_retry_delay(retry_after.as_deref(), attempt);
                         warn!(
                             error = last_result.as_ref().and_then(|r| r.error.as_deref()),
                             attempt = attempt + 1,
@@ -222,7 +223,8 @@ impl HttpClient {
                 tokio::select! {
                     resp = request => resp,
                     _ = token.cancelled() => {
-                        return Ok(HttpResult::interrupted());
+                        return Ok(HttpResult::interrupted()
+                            .with_request_id(request_id));
                     }
                 }
             }
@@ -234,9 +236,17 @@ impl HttpClient {
                 let status = resp.status().as_u16();
                 debug!(request_id = %request_id, status, "LLM response received");
                 if self.retry_config.is_retryable_status(status) {
-                    // Parse Retry-After for the caller's retry logic
+                    // Extract Retry-After header before consuming the response body
+                    let retry_after = resp
+                        .headers()
+                        .get("retry-after")
+                        .and_then(|v| v.to_str().ok())
+                        .map(String::from);
                     let body = resp.json::<serde_json::Value>().await.ok();
-                    return Ok(HttpResult::retryable_status(status, body));
+                    return Ok(
+                        HttpResult::retryable_status(status, body, retry_after)
+                            .with_request_id(request_id),
+                    );
                 }
                 let body = resp.json::<serde_json::Value>().await?;
                 if status >= 400 {
@@ -251,20 +261,28 @@ impl HttpClient {
                         success: false,
                         status: Some(status),
                         body: Some(body),
-                        error: Some(error_msg),
+                        error: Some(format!("[request_id={}] {}", request_id, error_msg)),
                         interrupted: false,
                         retryable: false,
+                        request_id: Some(request_id),
+                        retry_after: None,
                     });
                 }
-                Ok(HttpResult::ok(status, body))
+                Ok(HttpResult::ok(status, body).with_request_id(request_id))
             }
             Err(e) if is_retryable_error(&e) => {
                 warn!(request_id = %request_id, error = %e, "LLM request retryable error");
-                Ok(HttpResult::fail(e.to_string(), true))
+                Ok(
+                    HttpResult::fail(format!("[request_id={}] {}", request_id, e), true)
+                        .with_request_id(request_id),
+                )
             }
             Err(e) => {
                 warn!(request_id = %request_id, error = %e, "LLM request error");
-                Ok(HttpResult::fail(e.to_string(), false))
+                Ok(
+                    HttpResult::fail(format!("[request_id={}] {}", request_id, e), false)
+                        .with_request_id(request_id),
+                )
             }
         }
     }
@@ -413,6 +431,33 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Circuit breaker open"));
+    }
+
+    // --- #60: Request ID tracing tests ---
+
+    #[test]
+    fn test_http_result_with_request_id() {
+        let result = HttpResult::ok(200, serde_json::json!({})).with_request_id("test-uuid-1234");
+        assert_eq!(result.request_id.as_deref(), Some("test-uuid-1234"));
+    }
+
+    #[test]
+    fn test_http_result_fail_with_request_id() {
+        let result = HttpResult::fail("error", true).with_request_id("req-5678");
+        assert_eq!(result.request_id.as_deref(), Some("req-5678"));
+    }
+
+    #[test]
+    fn test_http_result_interrupted_with_request_id() {
+        let result = HttpResult::interrupted().with_request_id("req-cancel");
+        assert_eq!(result.request_id.as_deref(), Some("req-cancel"));
+        assert!(result.interrupted);
+    }
+
+    #[test]
+    fn test_http_result_default_no_request_id() {
+        let result = HttpResult::ok(200, serde_json::json!({}));
+        assert!(result.request_id.is_none());
     }
 
     #[test]

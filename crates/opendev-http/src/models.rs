@@ -42,6 +42,12 @@ pub struct HttpResult {
     pub interrupted: bool,
     /// Whether the failure is transient and worth retrying.
     pub retryable: bool,
+    /// Unique request identifier for end-to-end tracing.
+    /// Propagated via the `X-Request-ID` header.
+    pub request_id: Option<String>,
+    /// Value of the `Retry-After` response header, if present.
+    /// Used to honor server-requested retry delays on 429/503 responses.
+    pub retry_after: Option<String>,
 }
 
 impl HttpResult {
@@ -54,6 +60,8 @@ impl HttpResult {
             error: None,
             interrupted: false,
             retryable: false,
+            request_id: None,
+            retry_after: None,
         }
     }
 
@@ -66,6 +74,8 @@ impl HttpResult {
             error: Some(error.into()),
             interrupted: false,
             retryable,
+            request_id: None,
+            retry_after: None,
         }
     }
 
@@ -78,11 +88,17 @@ impl HttpResult {
             error: Some("Interrupted by user".into()),
             interrupted: true,
             retryable: false,
+            request_id: None,
+            retry_after: None,
         }
     }
 
     /// Create a result from an HTTP response with a retryable status.
-    pub fn retryable_status(status: u16, body: Option<serde_json::Value>) -> Self {
+    pub fn retryable_status(
+        status: u16,
+        body: Option<serde_json::Value>,
+        retry_after: Option<String>,
+    ) -> Self {
         Self {
             success: false,
             status: Some(status),
@@ -90,7 +106,15 @@ impl HttpResult {
             error: Some(format!("HTTP {status}")),
             interrupted: false,
             retryable: true,
+            request_id: None,
+            retry_after,
         }
+    }
+
+    /// Attach a request ID to this result for tracing.
+    pub fn with_request_id(mut self, request_id: impl Into<String>) -> Self {
+        self.request_id = Some(request_id.into());
+        self
     }
 }
 
@@ -160,10 +184,18 @@ mod tests {
 
     #[test]
     fn test_http_result_retryable_status() {
-        let result = HttpResult::retryable_status(429, None);
+        let result = HttpResult::retryable_status(429, None, None);
         assert!(!result.success);
         assert!(result.retryable);
         assert_eq!(result.status, Some(429));
+    }
+
+    #[test]
+    fn test_http_result_retryable_status_with_retry_after() {
+        let result = HttpResult::retryable_status(429, None, Some("30".to_string()));
+        assert!(!result.success);
+        assert!(result.retryable);
+        assert_eq!(result.retry_after.as_deref(), Some("30"));
     }
 
     #[test]
