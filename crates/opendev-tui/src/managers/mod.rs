@@ -11,7 +11,7 @@ pub mod interrupt;
 pub mod message_history;
 pub mod spinner;
 
-pub use background_tasks::{BackgroundTaskManager, TaskStatus};
+pub use background_tasks::{BackgroundTaskManager, TaskState, TaskStatus};
 pub use display_ledger::DisplayLedger;
 pub use frecency::{FrecencyEntry, FrecencyTracker};
 pub use interrupt::InterruptManager;
