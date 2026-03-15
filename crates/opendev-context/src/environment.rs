@@ -187,6 +187,13 @@ impl EnvironmentContext {
 /// Instruction file names to search for, in priority order.
 const INSTRUCTION_FILENAMES: &[&str] = &["AGENTS.md", "CLAUDE.md", "OPENDEV.md"];
 
+/// Additional instruction file patterns from other AI tools.
+/// These are checked per-directory alongside the standard filenames.
+const COMPAT_INSTRUCTION_FILES: &[&str] = &[
+    ".cursorrules",                      // Cursor AI (flat file)
+    ".github/copilot-instructions.md",   // GitHub Copilot
+];
+
 /// Max content size per instruction file (50 KB).
 const MAX_INSTRUCTION_BYTES: usize = 50 * 1024;
 
@@ -217,6 +224,40 @@ pub fn discover_instruction_files(working_dir: &Path) -> Vec<InstructionFile> {
         try_add_instruction(&opendev_instr, &current, working_dir, &mut files, &mut seen);
         let claude_instr = current.join(".claude").join("instructions.md");
         try_add_instruction(&claude_instr, &current, working_dir, &mut files, &mut seen);
+
+        // Check compatibility files from other AI tools (.cursorrules, copilot, etc.)
+        for compat_path in COMPAT_INSTRUCTION_FILES {
+            let candidate = current.join(compat_path);
+            try_add_instruction(&candidate, &current, working_dir, &mut files, &mut seen);
+        }
+
+        // Check .cursor/rules/ directory for individual rule files
+        let cursor_rules_dir = current.join(".cursor").join("rules");
+        if cursor_rules_dir.is_dir()
+            && let Ok(entries) = std::fs::read_dir(&cursor_rules_dir)
+        {
+            let mut rule_files: Vec<_> = entries
+                .flatten()
+                .filter(|e| {
+                    let name = e.file_name();
+                    let name_str = name.to_string_lossy();
+                    e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+                        && (name_str.ends_with(".md")
+                            || name_str.ends_with(".txt")
+                            || name_str.ends_with(".mdc"))
+                })
+                .collect();
+            rule_files.sort_by_key(|e| e.file_name());
+            for entry in rule_files {
+                try_add_instruction(
+                    &entry.path(),
+                    &current,
+                    working_dir,
+                    &mut files,
+                    &mut seen,
+                );
+            }
+        }
 
         // Stop at git root or filesystem root
         if current.join(".git").exists() {
@@ -1058,6 +1099,73 @@ mod tests {
         assert_eq!(
             file.path.to_string_lossy(),
             "https://example.com/rules.md"
+        );
+    }
+
+    #[test]
+    fn test_discover_cursorrules() {
+        let dir = TempDir::new().unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+
+        // .git to stop traversal
+        std::fs::create_dir(dir_path.join(".git")).unwrap();
+
+        // Create .cursorrules file
+        std::fs::write(dir_path.join(".cursorrules"), "Use strict TypeScript").unwrap();
+
+        let files = discover_instruction_files(&dir_path);
+        assert!(
+            files.iter().any(|f| f.content.contains("strict TypeScript")),
+            "Should discover .cursorrules: {:?}",
+            files.iter().map(|f| f.path.display().to_string()).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_discover_copilot_instructions() {
+        let dir = TempDir::new().unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+
+        std::fs::create_dir(dir_path.join(".git")).unwrap();
+
+        let github_dir = dir_path.join(".github");
+        std::fs::create_dir_all(&github_dir).unwrap();
+        std::fs::write(
+            github_dir.join("copilot-instructions.md"),
+            "Follow conventional commits",
+        )
+        .unwrap();
+
+        let files = discover_instruction_files(&dir_path);
+        assert!(
+            files.iter().any(|f| f.content.contains("conventional commits")),
+            "Should discover .github/copilot-instructions.md"
+        );
+    }
+
+    #[test]
+    fn test_discover_cursor_rules_directory() {
+        let dir = TempDir::new().unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+
+        std::fs::create_dir(dir_path.join(".git")).unwrap();
+
+        // Create .cursor/rules/ with rule files
+        let rules_dir = dir_path.join(".cursor").join("rules");
+        std::fs::create_dir_all(&rules_dir).unwrap();
+        std::fs::write(rules_dir.join("security.md"), "Always validate input").unwrap();
+        std::fs::write(rules_dir.join("style.md"), "Use 4-space indentation").unwrap();
+        // Non-rule file should be ignored
+        std::fs::write(rules_dir.join("README"), "Ignore this").unwrap();
+
+        let files = discover_instruction_files(&dir_path);
+        assert!(
+            files.iter().any(|f| f.content.contains("validate input")),
+            "Should discover .cursor/rules/security.md"
+        );
+        assert!(
+            files.iter().any(|f| f.content.contains("4-space")),
+            "Should discover .cursor/rules/style.md"
         );
     }
 }

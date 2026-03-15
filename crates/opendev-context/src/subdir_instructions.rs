@@ -14,6 +14,12 @@ use tracing::debug;
 /// Recognized instruction file names (same order as environment.rs).
 const INSTRUCTION_FILENAMES: &[&str] = &["AGENTS.md", "CLAUDE.md", "OPENDEV.md", "CONTEXT.md"];
 
+/// Additional instruction files from other AI tools.
+const COMPAT_INSTRUCTION_FILES: &[&str] = &[
+    ".cursorrules",
+    ".github/copilot-instructions.md",
+];
+
 /// Maximum instruction file size to inject (50 KB).
 const MAX_INSTRUCTION_SIZE: usize = 50 * 1024;
 
@@ -128,6 +134,35 @@ impl SubdirInstructionTracker {
                             .display()
                             .to_string();
                         debug!(path = %relative, "Injecting subdirectory instruction file");
+                        self.injected.insert(canonical.clone());
+                        results.push(SubdirInstruction {
+                            path: canonical,
+                            relative_path: relative,
+                            content,
+                        });
+                    }
+                }
+            }
+
+            // Check compatibility instruction files (.cursorrules, copilot, etc.)
+            for compat_path in COMPAT_INSTRUCTION_FILES {
+                let candidate = current.join(compat_path);
+                if let Ok(canonical) = candidate.canonicalize() {
+                    if self.injected.contains(&canonical) {
+                        continue;
+                    }
+                    if let Ok(content) = std::fs::read_to_string(&canonical) {
+                        let content = if content.len() > MAX_INSTRUCTION_SIZE {
+                            content[..MAX_INSTRUCTION_SIZE].to_string()
+                        } else {
+                            content
+                        };
+                        let relative = canonical
+                            .strip_prefix(&canonical_root)
+                            .unwrap_or(&canonical)
+                            .display()
+                            .to_string();
+                        debug!(path = %relative, "Injecting compatibility instruction file");
                         self.injected.insert(canonical.clone());
                         results.push(SubdirInstruction {
                             path: canonical,
@@ -278,5 +313,47 @@ mod tests {
         let results = tracker.check_file_read(&file);
         assert_eq!(results.len(), 1);
         assert!(results[0].content.contains("deprecated but supported"));
+    }
+
+    #[test]
+    fn test_cursorrules_discovered() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+
+        // Create a .cursorrules file at project root
+        std::fs::write(root.join(".cursorrules"), "Always use TypeScript strict mode").unwrap();
+
+        let file = root.join("index.ts");
+        std::fs::write(&file, "").unwrap();
+
+        let mut tracker = SubdirInstructionTracker::new(root.clone(), &[]);
+
+        let results = tracker.check_file_read(&file);
+        assert_eq!(results.len(), 1);
+        assert!(results[0].content.contains("TypeScript strict mode"));
+    }
+
+    #[test]
+    fn test_copilot_instructions_discovered() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+
+        // Create .github/copilot-instructions.md
+        let github_dir = root.join(".github");
+        std::fs::create_dir_all(&github_dir).unwrap();
+        std::fs::write(
+            github_dir.join("copilot-instructions.md"),
+            "Use conventional commits",
+        )
+        .unwrap();
+
+        let file = root.join("main.rs");
+        std::fs::write(&file, "").unwrap();
+
+        let mut tracker = SubdirInstructionTracker::new(root.clone(), &[]);
+
+        let results = tracker.check_file_read(&file);
+        assert_eq!(results.len(), 1);
+        assert!(results[0].content.contains("conventional commits"));
     }
 }
