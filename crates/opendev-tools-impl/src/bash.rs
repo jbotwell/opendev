@@ -492,12 +492,45 @@ impl BashTool {
                 // Truncate for LLM metadata
                 let llm_output = truncate_output(&combined, true);
 
+                // If output was truncated, save full output to overflow file.
+                let overflow_result = if combined.len() > MAX_OUTPUT_CHARS {
+                    Some(crate::truncation::truncate_output(
+                        &combined,
+                        None,
+                        None,
+                        crate::truncation::TruncateDirection::Head,
+                    ))
+                } else {
+                    None
+                };
+
                 let mut metadata = HashMap::new();
                 metadata.insert("exit_code".into(), serde_json::json!(exit_code));
                 metadata.insert("llm_output".into(), serde_json::json!(llm_output));
+                if let Some(ref ovf) = overflow_result
+                    && let Some(ref path) = ovf.output_path
+                {
+                    metadata.insert(
+                        "overflow_path".into(),
+                        serde_json::json!(path.display().to_string()),
+                    );
+                }
 
                 if success {
-                    ToolResult::ok_with_metadata(display_output, metadata)
+                    // If overflowed, append the hint to the display output.
+                    let final_output = if let Some(ref ovf) = overflow_result {
+                        if let Some(ref path) = ovf.output_path {
+                            format!(
+                                "{display_output}\n\n[Full output saved to: {}. Use Read with offset/limit or Grep to search it.]",
+                                path.display()
+                            )
+                        } else {
+                            display_output
+                        }
+                    } else {
+                        display_output
+                    };
+                    ToolResult::ok_with_metadata(final_output, metadata)
                 } else {
                     let suffix = command_failure_suffix(exit_code, &combined);
                     ToolResult {

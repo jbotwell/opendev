@@ -56,6 +56,7 @@ pub mod schedule;
 pub mod session;
 pub mod task_complete;
 pub mod todo;
+pub mod truncation;
 pub mod update_todo;
 pub mod vlm;
 pub mod web_fetch;
