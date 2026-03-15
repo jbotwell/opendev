@@ -1634,9 +1634,10 @@ fn apply_staged_compaction(compactor: &Mutex<ContextCompactor>, messages: &mut V
     match level {
         OptimizationLevel::None | OptimizationLevel::Warning => false,
         OptimizationLevel::Mask | OptimizationLevel::Aggressive => {
-            // Convert to ApiMessage, apply masking, convert back
+            // Convert to ApiMessage, apply masking + early summarization, convert back
             let mut api_msgs = values_to_api_messages(messages);
             if let Ok(comp) = compactor.lock() {
+                comp.summarize_verbose_tool_outputs(&mut api_msgs);
                 comp.mask_old_observations(&mut api_msgs, level);
             }
             // Write masked messages back
@@ -1652,6 +1653,7 @@ fn apply_staged_compaction(compactor: &Mutex<ContextCompactor>, messages: &mut V
         OptimizationLevel::Prune => {
             let mut api_msgs = values_to_api_messages(messages);
             if let Ok(comp) = compactor.lock() {
+                comp.summarize_verbose_tool_outputs(&mut api_msgs);
                 comp.mask_old_observations(&mut api_msgs, OptimizationLevel::Mask);
                 comp.prune_old_tool_outputs(&mut api_msgs);
             }

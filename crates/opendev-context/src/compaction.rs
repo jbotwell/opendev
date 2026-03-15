@@ -3,8 +3,8 @@
 //! Implements staged context optimization with proactive reduction:
 //! - Sliding window: For 500+ message sessions, keep recent N + compressed summary
 //! - 70%: Warning logged, tracking begins
-//! - 80%: Progressive observation masking (old tool results -> compact refs)
-//! - 85%: Smart tool output summarization, then fast pruning of old tool outputs
+//! - 80%: Progressive observation masking + verbose tool output summarization
+//! - 85%: Fast pruning of old tool outputs (skips small outputs < 200 chars)
 //! - 90%: Aggressive masking + trimming
 //! - 99%: Full LLM-powered compaction (summarize middle messages)
 
@@ -25,7 +25,17 @@ pub const STAGE_COMPACT: f64 = 0.99;
 pub const PRUNE_PROTECTED_TOKENS: u64 = 40_000;
 
 /// Tool types whose outputs survive compaction pruning.
-pub const PROTECTED_TOOL_TYPES: &[&str] = &["skill", "invoke_skill", "present_plan", "read_file"];
+pub const PROTECTED_TOOL_TYPES: &[&str] = &[
+    "skill",
+    "invoke_skill",
+    "present_plan",
+    "read_file",
+    "web_screenshot",
+    "vlm",
+];
+
+/// Minimum output length below which pruning is skipped (not worth it).
+pub const PRUNE_MIN_LENGTH: usize = 200;
 
 /// Sliding window: number of recent messages to keep verbatim.
 pub const SLIDING_WINDOW_RECENT: usize = 50;
@@ -299,7 +309,9 @@ fn msg_token_count(msg: &ApiMessage) -> usize {
 
 /// Produce a 2-3 line summary of a verbose tool output.
 ///
-/// Keeps the tool name, success/failure indication, and first+last lines.
+/// Uses tool-specific logic: for `run_command` keeps exit code + last lines,
+/// for `search`/`list_files` keeps result count + first results,
+/// for other tools keeps first+last lines.
 fn summarize_tool_output(tool_name: &str, content: &str) -> String {
     use std::fmt::Write;
 
@@ -310,25 +322,63 @@ fn summarize_tool_output(tool_name: &str, content: &str) -> String {
         && !content.contains("panic");
     let status = if succeeded { "succeeded" } else { "failed" };
 
-    let first_line = lines.first().map(|l| l.trim()).unwrap_or("");
-    let last_line = if lines.len() > 1 {
-        lines.last().map(|l| l.trim()).unwrap_or("")
-    } else {
-        ""
-    };
+    let mut buf = String::with_capacity(400);
 
-    let first_snippet: String = first_line.chars().take(120).collect();
-    let last_snippet: String = last_line.chars().take(120).collect();
-
-    // Pre-allocate: header (~40) + first snippet (~120) + optional last (~130)
-    let mut buf = String::with_capacity(300);
-    let _ = write!(
-        buf,
-        "[summary: {tool_name} {status}, {} lines]\n{first_snippet}",
-        lines.len(),
-    );
-    if !last_snippet.is_empty() {
-        let _ = write!(buf, "\n...\n{last_snippet}");
+    match tool_name {
+        "run_command" | "bash" => {
+            // For command outputs: keep exit code hint + last few lines
+            let _ = write!(
+                buf,
+                "[summary: {tool_name} {status}, {} lines]",
+                lines.len(),
+            );
+            // Show last 3 meaningful lines (often contain the result/error)
+            let tail: Vec<&str> = lines
+                .iter()
+                .rev()
+                .filter(|l| !l.trim().is_empty())
+                .take(3)
+                .copied()
+                .collect();
+            for line in tail.into_iter().rev() {
+                let snippet: String = line.chars().take(150).collect();
+                let _ = write!(buf, "\n{snippet}");
+            }
+        }
+        "search" | "list_files" | "glob" | "grep" | "file_search" => {
+            // For search results: keep count + first few results
+            let result_count = lines.len();
+            let _ = write!(
+                buf,
+                "[summary: {tool_name} {status}, {result_count} results]",
+            );
+            for line in lines.iter().take(5) {
+                let snippet: String = line.chars().take(150).collect();
+                let _ = write!(buf, "\n{snippet}");
+            }
+            if result_count > 5 {
+                let _ = write!(buf, "\n... ({} more)", result_count - 5);
+            }
+        }
+        _ => {
+            // Generic: first + last lines
+            let first_line = lines.first().map(|l| l.trim()).unwrap_or("");
+            let last_line = if lines.len() > 1 {
+                lines.last().map(|l| l.trim()).unwrap_or("")
+            } else {
+                ""
+            };
+            let first_snippet: String = first_line.chars().take(120).collect();
+            let last_snippet: String = last_line.chars().take(120).collect();
+            let _ = write!(
+                buf,
+                "[summary: {tool_name} {status}, {} lines]\n{first_snippet}",
+                lines.len(),
+            );
+            if !last_snippet.is_empty() {
+                let _ = write!(buf, "\n...\n{last_snippet}");
+            }
+        }
     }
     buf
 }
@@ -732,6 +782,11 @@ impl ContextCompactor {
                 protected_indices.insert(idx);
                 continue;
             }
+            // Small outputs aren't worth pruning — keep them
+            if content.len() < PRUNE_MIN_LENGTH {
+                protected_indices.insert(idx);
+                continue;
+            }
             let token_estimate = count_tokens(content) as u64;
             if protected_tokens + token_estimate <= PRUNE_PROTECTED_TOKENS {
                 protected_tokens += token_estimate;
@@ -752,6 +807,10 @@ impl ContextCompactor {
                 || content == "[pruned]"
                 || content.starts_with("[summary:")
             {
+                continue;
+            }
+            // Small outputs survive even without budget
+            if content.len() < PRUNE_MIN_LENGTH {
                 continue;
             }
             messages[idx].insert(
@@ -1552,7 +1611,7 @@ mod tests {
         );
         let summary = summarize_tool_output("bash", &output);
         assert!(summary.starts_with("[summary: bash succeeded"));
-        assert!(summary.contains("Line 1: all good"));
+        // bash/run_command branch keeps last 3 meaningful lines
         assert!(summary.contains("Line 100: done"));
     }
 
@@ -1561,6 +1620,19 @@ mod tests {
         let output = "Error: file not found\nbacktrace follows\npanic at line 42";
         let summary = summarize_tool_output("bash", output);
         assert!(summary.contains("failed"));
+    }
+
+    #[test]
+    fn test_summarize_tool_output_generic() {
+        let output = format!(
+            "First line of output\n{}\nLast line of output",
+            "middle data\n".repeat(50)
+        );
+        let summary = summarize_tool_output("edit_file", &output);
+        assert!(summary.starts_with("[summary: edit_file succeeded"));
+        // Generic branch keeps first + last lines
+        assert!(summary.contains("First line of output"));
+        assert!(summary.contains("Last line of output"));
     }
 
     #[test]
@@ -1824,5 +1896,76 @@ mod tests {
         assert_eq!(compactor.api_prompt_tokens, 0);
         assert!(!compactor.warned_70);
         assert!(!compactor.warned_80);
+    }
+
+    // ── Tool-specific summarization ──
+
+    #[test]
+    fn test_summarize_run_command_keeps_tail() {
+        let output = format!(
+            "Compiling opendev v0.1.0\n{}\n    Finished release [optimized] target(s) in 42.3s",
+            "   Compiling some-crate v1.0.0\n".repeat(20)
+        );
+        let summary = summarize_tool_output("run_command", &output);
+        assert!(summary.starts_with("[summary: run_command succeeded"));
+        // Should contain the last line (build result)
+        assert!(summary.contains("Finished release"));
+    }
+
+    #[test]
+    fn test_summarize_search_keeps_first_results() {
+        let output = (0..20)
+            .map(|i| format!("src/file_{i}.rs:42: match found"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let summary = summarize_tool_output("search", &output);
+        assert!(summary.starts_with("[summary: search succeeded, 20 results]"));
+        // Should show first 5 results
+        assert!(summary.contains("src/file_0.rs"));
+        assert!(summary.contains("src/file_4.rs"));
+        // Should indicate more
+        assert!(summary.contains("15 more"));
+    }
+
+    #[test]
+    fn test_prune_skips_small_outputs() {
+        let compactor = ContextCompactor::new(100_000);
+
+        let mut messages = vec![make_msg("system", "sys")];
+        let tc_ids: Vec<String> = (0..5).map(|i| format!("tc-{i}")).collect();
+        let pairs: Vec<(&str, &str)> = tc_ids.iter().map(|id| (id.as_str(), "bash")).collect();
+        messages.push(make_assistant_with_tc(pairs));
+
+        // Small output (< PRUNE_MIN_LENGTH)
+        messages.push(make_tool_msg("tc-0", "ok"));
+        messages.push(make_tool_msg("tc-1", "short result"));
+        // Large outputs that should be prunable
+        messages.push(make_tool_msg("tc-2", &"x".repeat(20_000)));
+        messages.push(make_tool_msg("tc-3", &"y".repeat(20_000)));
+        messages.push(make_tool_msg("tc-4", &"z".repeat(20_000)));
+
+        compactor.prune_old_tool_outputs(&mut messages);
+
+        // Small outputs should NOT be pruned
+        let tc0 = messages
+            .iter()
+            .find(|m| m.get("tool_call_id").and_then(|v| v.as_str()) == Some("tc-0"))
+            .unwrap();
+        assert_eq!(tc0.get("content").and_then(|v| v.as_str()).unwrap(), "ok");
+
+        let tc1 = messages
+            .iter()
+            .find(|m| m.get("tool_call_id").and_then(|v| v.as_str()) == Some("tc-1"))
+            .unwrap();
+        assert_eq!(
+            tc1.get("content").and_then(|v| v.as_str()).unwrap(),
+            "short result"
+        );
+    }
+
+    #[test]
+    fn test_protected_tool_types_includes_web_screenshot() {
+        assert!(PROTECTED_TOOL_TYPES.contains(&"web_screenshot"));
+        assert!(PROTECTED_TOOL_TYPES.contains(&"vlm"));
     }
 }
