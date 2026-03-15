@@ -295,6 +295,15 @@ impl McpTransport for StdioTransport {
 
         let mut lock = self.state.lock().await;
         if let Some(mut proc) = lock.take() {
+            // Collect descendant PIDs before killing the main process,
+            // so we can clean up grandchild processes (e.g. Chrome spawned
+            // by chrome-devtools-mcp) that would otherwise be orphaned.
+            let descendant_pids = if let Some(pid) = proc.child.id() {
+                collect_descendant_pids(pid)
+            } else {
+                vec![]
+            };
+
             // Drop stdin to signal EOF to the child.
             drop(proc.child.stdin.take());
 
@@ -311,6 +320,9 @@ impl McpTransport for StdioTransport {
                     let _ = proc.child.kill().await;
                 }
             }
+
+            // Kill any descendant processes that may still be running.
+            kill_descendant_pids(&descendant_pids);
 
             // Cancel any pending requests.
             for (id, tx) in proc.pending.drain() {
@@ -339,6 +351,57 @@ impl McpTransport for StdioTransport {
         self.notification_rx.lock().await.take()
     }
 }
+
+/// Recursively collect all descendant PIDs of a process using `pgrep -P`.
+///
+/// Uses BFS to traverse the process tree, collecting all child and grandchild
+/// PIDs. This is needed to clean up processes spawned by MCP servers (e.g.,
+/// Chrome spawned by chrome-devtools-mcp).
+#[cfg(unix)]
+fn collect_descendant_pids(root_pid: u32) -> Vec<u32> {
+    let mut descendants = Vec::new();
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back(root_pid);
+
+    while let Some(pid) = queue.pop_front() {
+        match std::process::Command::new("pgrep")
+            .args(["-P", &pid.to_string()])
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    if let Ok(child_pid) = line.trim().parse::<u32>() {
+                        descendants.push(child_pid);
+                        queue.push_back(child_pid);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    descendants
+}
+
+#[cfg(not(unix))]
+fn collect_descendant_pids(_root_pid: u32) -> Vec<u32> {
+    Vec::new()
+}
+
+/// Send SIGTERM to each descendant PID, logging any that fail.
+#[cfg(unix)]
+fn kill_descendant_pids(pids: &[u32]) {
+    for &pid in pids {
+        debug!("Killing descendant MCP process {}", pid);
+        let _ = std::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .output();
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_descendant_pids(_pids: &[u32]) {}
 
 /// Read a single Content-Length framed message from a buffered reader.
 async fn read_message<R: tokio::io::AsyncBufRead + Unpin>(reader: &mut R) -> McpResult<Vec<u8>> {
@@ -756,5 +819,31 @@ while True:
         assert_eq!(response.jsonrpc, "2.0");
 
         transport.close().await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_collect_descendant_pids_self_process() {
+        // Our own PID should have no children in this test context.
+        let my_pid = std::process::id();
+        let descendants = collect_descendant_pids(my_pid);
+        // We can't assert exact count (test runner may have threads),
+        // but the function should not panic or hang.
+        assert!(descendants.len() < 100, "Unreasonable number of descendants");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_collect_descendant_pids_nonexistent() {
+        // A PID that almost certainly doesn't exist.
+        let descendants = collect_descendant_pids(999_999_999);
+        assert!(descendants.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_kill_descendant_pids_empty() {
+        // Should be a no-op, no panics.
+        kill_descendant_pids(&[]);
     }
 }

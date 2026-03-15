@@ -22,7 +22,7 @@ pub mod validation;
 pub use middleware::ToolMiddleware;
 pub use policy::ToolPolicy;
 pub use registry::ToolRegistry;
-pub use sanitizer::ToolResultSanitizer;
+pub use sanitizer::{ToolResultSanitizer, cleanup_overflow_dir};
 pub use traits::{
     BaseTool, DiagnosticProvider, FileDiagnostic, ToolContext, ToolError, ToolResult,
     ToolTimeoutConfig, ValidationError,

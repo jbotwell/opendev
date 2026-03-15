@@ -222,6 +222,8 @@ impl AgentRuntime {
     ) -> Result<Self, String> {
         // Set up tool registry with overflow storage for truncated tool outputs.
         let overflow_dir = working_dir.join(".opendev").join("tool-output");
+        // Clean up overflow files older than 7 days on startup.
+        opendev_tools_core::cleanup_overflow_dir(&overflow_dir);
         let tool_registry = Arc::new(ToolRegistry::with_overflow_dir(overflow_dir));
         let (todo_manager, channel_receivers, tool_approval_tx) =
             register_default_tools(&tool_registry);
