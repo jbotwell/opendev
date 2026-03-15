@@ -18,6 +18,9 @@ pub const SPINNER_FRAMES: &[char] = &[
     '\u{280f}', // ⠏
 ];
 
+/// Compaction spinner character (matches Claude Code `✻`).
+pub const COMPACTION_CHAR: char = '\u{273b}'; // ✻
+
 /// Completed/stopped indicator (matches Python `⏺`).
 pub const COMPLETED_CHAR: char = '\u{23fa}'; // ⏺
 

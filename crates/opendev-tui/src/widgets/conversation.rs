@@ -22,7 +22,7 @@ use crate::formatters::markdown::MarkdownRenderer;
 use crate::formatters::style_tokens::{self, Indent};
 use crate::formatters::tool_registry::{categorize_tool, format_tool_call_parts};
 use crate::widgets::progress::TaskProgress;
-use crate::widgets::spinner::{COMPLETED_CHAR, CONTINUATION_CHAR, SPINNER_FRAMES};
+use crate::widgets::spinner::{COMPACTION_CHAR, COMPLETED_CHAR, CONTINUATION_CHAR, SPINNER_FRAMES};
 
 /// Check if a tool name is an edit/write tool that produces diffs.
 pub fn is_diff_tool(name: &str) -> bool {
@@ -213,6 +213,8 @@ pub struct ConversationWidget<'a> {
     task_progress: Option<&'a TaskProgress>,
     /// Pre-computed spinner character for the current frame.
     spinner_char: char,
+    /// Whether manual compaction is in progress.
+    compaction_active: bool,
     /// Pre-built cached lines for the static message portion (if available).
     cached_lines: Option<&'a [Line<'static>]>,
 }
@@ -228,6 +230,7 @@ impl<'a> ConversationWidget<'a> {
             active_tools: &[],
             task_progress: None,
             spinner_char: SPINNER_FRAMES[0],
+            compaction_active: false,
             cached_lines: None,
         }
     }
@@ -259,6 +262,11 @@ impl<'a> ConversationWidget<'a> {
 
     pub fn spinner_char(mut self, ch: char) -> Self {
         self.spinner_char = ch;
+        self
+    }
+
+    pub fn compaction_active(mut self, active: bool) -> Self {
+        self.compaction_active = active;
         self
     }
 
@@ -482,7 +490,23 @@ impl<'a> ConversationWidget<'a> {
             .filter(|t| !t.is_finished())
             .collect();
 
-        if !active_unfinished.is_empty() {
+        if self.compaction_active {
+            // Compaction spinner: ✻ Compacting conversation…
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{} ", COMPACTION_CHAR),
+                    Style::default()
+                        .fg(style_tokens::BLUE_BRIGHT)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "Compacting conversation\u{2026}",
+                    Style::default()
+                        .fg(style_tokens::SUBTLE)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]));
+        } else if !active_unfinished.is_empty() {
             for tool in &active_unfinished {
                 let frame_idx = tool.tick_count % SPINNER_FRAMES.len();
                 let spinner = SPINNER_FRAMES[frame_idx];

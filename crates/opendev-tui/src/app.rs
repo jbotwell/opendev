@@ -196,6 +196,8 @@ pub struct AppState {
     pub command_history: CommandHistory,
     /// Flag set by /compact command; agent loop consumes and triggers compaction.
     pub compact_requested: bool,
+    /// Whether manual compaction is currently in progress.
+    pub compaction_active: bool,
     /// Plan mode flag — when true, next UserSubmit injects plan reminder.
     pub pending_plan_request: bool,
     /// Plan content to display in the conversation (consumed after first render).
@@ -440,6 +442,7 @@ impl Default for AppState {
             theme_name: crate::formatters::style_tokens::ThemeName::Dark,
             command_history: CommandHistory::new(),
             compact_requested: false,
+            compaction_active: false,
             pending_plan_request: false,
             plan_content_display: None,
         }
@@ -1081,7 +1084,8 @@ impl App {
                     .mode(mode_str)
                     .active_tools(&self.state.active_tools)
                     .task_progress(self.state.task_progress.as_ref())
-                    .spinner_char(self.state.spinner.current());
+                    .spinner_char(self.state.spinner.current())
+                    .compaction_active(self.state.compaction_active);
             if !self.state.cached_lines.is_empty() {
                 conversation = conversation.cached_lines(&self.state.cached_lines);
             }
@@ -1998,6 +2002,20 @@ impl App {
                 self.push_system_message(format!("Killing task '{id_display}'..."));
                 self.state.dirty = true;
             }
+            AppEvent::CompactionStarted => {
+                self.state.compaction_active = true;
+                self.state.dirty = true;
+            }
+            AppEvent::CompactionFinished { success, message } => {
+                self.state.compaction_active = false;
+                if success {
+                    self.push_system_message(message);
+                } else {
+                    self.push_system_message(format!("Compaction failed: {message}"));
+                }
+                self.state.dirty = true;
+            }
+
             AppEvent::Quit => {
                 self.state.running = false;
                 self.state.dirty = true;
@@ -2679,11 +2697,19 @@ impl App {
                     self.push_system_message(
                         "Not enough messages to compact (need at least 5).".to_string(),
                     );
-                } else {
-                    self.state.compact_requested = true;
+                } else if self.state.compaction_active {
                     self.push_system_message(
-                        "Context compaction triggered. Will compact on next query.".to_string(),
+                        "Compaction already in progress.".to_string(),
                     );
+                } else if self.state.agent_active {
+                    self.push_system_message(
+                        "Cannot compact while agent is running.".to_string(),
+                    );
+                } else {
+                    // Send special sentinel to trigger compaction in the backend
+                    if let Some(ref tx) = self.user_message_tx {
+                        let _ = tx.send("\x00__COMPACT__".to_string());
+                    }
                 }
             }
             "help" => {

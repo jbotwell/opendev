@@ -129,6 +129,15 @@ pub enum AppEvent {
     /// Context window usage percentage updated (0.0–100.0).
     ContextUsage(f64),
 
+    // -- Compaction events --
+    /// Manual compaction started (shows compaction spinner).
+    CompactionStarted,
+    /// Manual compaction finished (hides compaction spinner, shows result).
+    CompactionFinished {
+        success: bool,
+        message: String,
+    },
+
     // -- Plan events --
     /// Plan approval request arrived from the PresentPlanTool.
     /// Contains the plan content to display and the oneshot sender for the decision.
@@ -504,6 +513,13 @@ impl RecordedEvent {
             AppEvent::ContextUsage(pct) => {
                 ("ContextUsage".to_string(), serde_json::json!({"pct": pct}))
             }
+            AppEvent::CompactionStarted => {
+                ("CompactionStarted".to_string(), serde_json::Value::Null)
+            }
+            AppEvent::CompactionFinished { success, message } => (
+                "CompactionFinished".to_string(),
+                serde_json::json!({"success": success, "message": message}),
+            ),
             AppEvent::ToolApprovalRequested {
                 command,
                 working_dir,
@@ -689,6 +705,12 @@ impl RecordedEvent {
             "ContextUsage" => {
                 let pct = self.payload.get("pct")?.as_f64()?;
                 Some(AppEvent::ContextUsage(pct))
+            }
+            "CompactionStarted" => Some(AppEvent::CompactionStarted),
+            "CompactionFinished" => {
+                let success = self.payload.get("success")?.as_bool()?;
+                let message = self.payload.get("message")?.as_str()?.to_string();
+                Some(AppEvent::CompactionFinished { success, message })
             }
             // These cannot be reconstructed (contain oneshot senders)
             "PlanApprovalRequested" => None,

@@ -170,6 +170,28 @@ impl TuiRunner {
 
         tokio::spawn(async move {
             while let Some(msg) = user_rx.recv().await {
+                // Handle manual compaction sentinel
+                if msg == "\x00__COMPACT__" {
+                    info!("TUI: manual compaction requested");
+                    let _ = event_tx.send(AppEvent::CompactionStarted);
+
+                    match runtime.run_compaction().await {
+                        Ok(summary) => {
+                            let _ = event_tx.send(AppEvent::CompactionFinished {
+                                success: true,
+                                message: summary,
+                            });
+                        }
+                        Err(e) => {
+                            let _ = event_tx.send(AppEvent::CompactionFinished {
+                                success: false,
+                                message: e,
+                            });
+                        }
+                    }
+                    continue;
+                }
+
                 info!(msg_len = msg.len(), "TUI: user submitted message");
 
                 // Create fresh interrupt token for this query
