@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use opendev_tools_core::{BaseTool, ToolContext, ToolResult};
 
-use crate::path_utils::{resolve_file_path, validate_path_access};
+use crate::path_utils::{is_sensitive_file, resolve_file_path, validate_path_access};
 
 /// Tool for reading file contents.
 #[derive(Debug)]
@@ -219,6 +219,17 @@ impl BaseTool for FileReadTool {
                         "\n[...truncated: {remaining} more lines not shown (output exceeded {} KB limit). Use offset/limit to read specific sections.]\n",
                         Self::MAX_OUTPUT_BYTES / 1024
                     ));
+                }
+
+                // Warn if the file is potentially sensitive.
+                if let Some(reason) = is_sensitive_file(&path) {
+                    output.insert_str(
+                        0,
+                        &format!(
+                            "WARNING: This is a {reason}. Do NOT include its contents \
+                             in responses, commits, or logs. Treat all values as secrets.\n\n"
+                        ),
+                    );
                 }
 
                 let mut metadata = HashMap::new();
@@ -677,5 +688,49 @@ mod tests {
         // Tabs and newlines should NOT count as non-printable
         let bytes = b"hello\tworld\nfoo\rbar";
         assert!(!is_binary(bytes));
+    }
+
+    // ---- Sensitive file warning ----
+
+    #[tokio::test]
+    async fn test_read_sensitive_env_file_warns() {
+        let tmp = TempDir::new().unwrap();
+        let tmp_path = tmp.path().canonicalize().unwrap();
+        let env_file = tmp_path.join(".env");
+        fs::write(&env_file, "SECRET_KEY=abc123\nDB_PASSWORD=hunter2\n").unwrap();
+
+        let tool = FileReadTool;
+        let ctx = ToolContext::new(&tmp_path);
+        let args = make_args(&[("file_path", serde_json::json!(env_file.to_str().unwrap()))]);
+        let result = tool.execute(args, &ctx).await;
+
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(
+            output.starts_with("WARNING:"),
+            "Sensitive file should have WARNING prefix, got: {}",
+            &output[..output.len().min(100)]
+        );
+        assert!(output.contains("secrets"));
+    }
+
+    #[tokio::test]
+    async fn test_read_env_example_no_warning() {
+        let tmp = TempDir::new().unwrap();
+        let tmp_path = tmp.path().canonicalize().unwrap();
+        let env_file = tmp_path.join(".env.example");
+        fs::write(&env_file, "SECRET_KEY=\nDB_PASSWORD=\n").unwrap();
+
+        let tool = FileReadTool;
+        let ctx = ToolContext::new(&tmp_path);
+        let args = make_args(&[("file_path", serde_json::json!(env_file.to_str().unwrap()))]);
+        let result = tool.execute(args, &ctx).await;
+
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(
+            !output.starts_with("WARNING:"),
+            ".env.example should NOT have warning"
+        );
     }
 }

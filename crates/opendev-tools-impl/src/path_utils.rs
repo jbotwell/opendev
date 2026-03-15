@@ -186,6 +186,59 @@ pub fn validate_path_access(resolved: &Path, working_dir: &Path) -> Result<(), S
     ))
 }
 
+/// Check if a file is likely to contain sensitive data (secrets, credentials, keys).
+///
+/// Matches patterns from `.gitignore` for Node.js (`.env` family) plus
+/// common credential/key files. Returns a human-readable reason if sensitive.
+pub fn is_sensitive_file(path: &Path) -> Option<&'static str> {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    // .env files (matches .env, .env.local, .env.production, etc.)
+    // but NOT .env.example or .env.sample
+    if name == ".env"
+        || (name.starts_with(".env.") && !name.ends_with(".example") && !name.ends_with(".sample"))
+    {
+        return Some("environment file (may contain secrets)");
+    }
+
+    // Private keys
+    if name.ends_with(".pem")
+        || name.ends_with(".key")
+        || name == "id_rsa"
+        || name == "id_ed25519"
+        || name == "id_ecdsa"
+    {
+        return Some("private key file");
+    }
+
+    // Known credential files
+    let credential_names = [
+        "credentials",
+        "credentials.json",
+        "credentials.yaml",
+        "credentials.yml",
+        "service-account.json",
+        ".npmrc",
+        ".pypirc",
+        ".netrc",
+        ".htpasswd",
+    ];
+    if credential_names.contains(&name.as_str()) {
+        return Some("credentials file");
+    }
+
+    // Token/secret files
+    if name.contains("secret") && (name.ends_with(".json") || name.ends_with(".yaml") || name.ends_with(".yml")) {
+        return Some("secrets file");
+    }
+
+    None
+}
+
 /// Normalize a path by collapsing `.` and `..` components without touching the filesystem.
 ///
 /// Unlike `canonicalize()`, this works on paths that don't exist yet.
@@ -408,5 +461,52 @@ mod tests {
         assert_eq!(expand_home("/absolute/path"), "/absolute/path");
         assert_eq!(expand_home("relative/path"), "relative/path");
         assert_eq!(expand_home("~not-a-tilde"), "~not-a-tilde");
+    }
+
+    // ---- Sensitive file detection ----
+
+    #[test]
+    fn test_sensitive_env_file() {
+        assert!(is_sensitive_file(Path::new(".env")).is_some());
+        assert!(is_sensitive_file(Path::new("/project/.env")).is_some());
+        assert!(is_sensitive_file(Path::new(".env.local")).is_some());
+        assert!(is_sensitive_file(Path::new(".env.production")).is_some());
+    }
+
+    #[test]
+    fn test_sensitive_env_example_allowed() {
+        assert!(is_sensitive_file(Path::new(".env.example")).is_none());
+        assert!(is_sensitive_file(Path::new(".env.sample")).is_none());
+    }
+
+    #[test]
+    fn test_sensitive_private_keys() {
+        assert!(is_sensitive_file(Path::new("server.pem")).is_some());
+        assert!(is_sensitive_file(Path::new("private.key")).is_some());
+        assert!(is_sensitive_file(Path::new("id_rsa")).is_some());
+        assert!(is_sensitive_file(Path::new("id_ed25519")).is_some());
+    }
+
+    #[test]
+    fn test_sensitive_credentials() {
+        assert!(is_sensitive_file(Path::new("credentials.json")).is_some());
+        assert!(is_sensitive_file(Path::new(".npmrc")).is_some());
+        assert!(is_sensitive_file(Path::new(".netrc")).is_some());
+        assert!(is_sensitive_file(Path::new(".htpasswd")).is_some());
+    }
+
+    #[test]
+    fn test_sensitive_secrets_files() {
+        assert!(is_sensitive_file(Path::new("app-secret.json")).is_some());
+        assert!(is_sensitive_file(Path::new("secret.yaml")).is_some());
+    }
+
+    #[test]
+    fn test_non_sensitive_files() {
+        assert!(is_sensitive_file(Path::new("main.rs")).is_none());
+        assert!(is_sensitive_file(Path::new("README.md")).is_none());
+        assert!(is_sensitive_file(Path::new("config.toml")).is_none());
+        assert!(is_sensitive_file(Path::new("package.json")).is_none());
+        assert!(is_sensitive_file(Path::new("Cargo.lock")).is_none());
     }
 }

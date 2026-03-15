@@ -7,7 +7,7 @@ use opendev_tools_core::{BaseTool, ToolContext, ToolResult};
 
 use crate::diagnostics_helper;
 use crate::formatter;
-use crate::path_utils::{resolve_file_path, validate_path_access};
+use crate::path_utils::{is_sensitive_file, resolve_file_path, validate_path_access};
 
 /// Tool for writing file contents.
 #[derive(Debug)]
@@ -68,6 +68,15 @@ impl BaseTool for FileWriteTool {
 
         if let Err(msg) = validate_path_access(&path, &ctx.working_dir) {
             return ToolResult::fail(msg);
+        }
+
+        // Warn about writing to sensitive files.
+        if let Some(reason) = is_sensitive_file(&path) {
+            return ToolResult::fail(format!(
+                "Refusing to write to {}: {} — this file likely contains secrets. \
+                 If you need to modify it, ask the user to do so manually.",
+                file_path, reason
+            ));
         }
 
         // Create parent directories if needed

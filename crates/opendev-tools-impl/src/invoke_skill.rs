@@ -104,7 +104,7 @@ impl BaseTool for InvokeSkillTool {
         enum SkillLookup {
             ListOnly(Vec<String>),
             SubagentRedirect(String),
-            Found(opendev_agents::skills::LoadedSkill),
+            Found(Box<opendev_agents::skills::LoadedSkill>),
             NotFound(Vec<String>),
         }
 
@@ -127,7 +127,7 @@ impl BaseTool for InvokeSkillTool {
                     SkillLookup::SubagentRedirect(normalized.replace('-', "_"))
                 } else {
                     match loader.load_skill(skill_name) {
-                        Some(s) => SkillLookup::Found(s),
+                        Some(s) => SkillLookup::Found(Box::new(s)),
                         None => SkillLookup::NotFound(loader.get_skill_names()),
                     }
                 }
@@ -204,7 +204,7 @@ impl BaseTool for InvokeSkillTool {
         }
 
         // Extract the skill from the Found variant (safe: all other arms return).
-        let SkillLookup::Found(skill) = lookup else {
+        let SkillLookup::Found(skill) = lookup else { // Box<LoadedSkill>
             unreachable!()
         };
 
