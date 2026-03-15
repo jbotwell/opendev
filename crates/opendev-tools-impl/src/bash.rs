@@ -347,8 +347,18 @@ fn prepare_command(command: &str) -> String {
 
 fn kill_process_group(pgid: u32) {
     unsafe {
-        // SIGKILL the entire process group
-        libc::kill(-(pgid as i32), libc::SIGKILL);
+        // Graceful shutdown: SIGTERM first, then SIGKILL after a brief grace period.
+        // This gives processes a chance to clean up (flush buffers, remove temp files, etc.).
+        libc::kill(-(pgid as i32), libc::SIGTERM);
+    }
+    // Give the process group 500ms to exit gracefully before force-killing.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    unsafe {
+        // Check if still alive, then SIGKILL.
+        let alive = libc::kill(-(pgid as i32), 0) == 0;
+        if alive {
+            libc::kill(-(pgid as i32), libc::SIGKILL);
+        }
     }
 }
 

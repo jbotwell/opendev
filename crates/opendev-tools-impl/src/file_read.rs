@@ -260,15 +260,16 @@ impl BaseTool for FileReadTool {
     }
 }
 
-/// Build an error message for a missing file, with up to 3 suggestions from the
-/// parent directory based on case-insensitive substring matching against the basename.
+/// Build an error message for a missing file, with up to 5 suggestions from the
+/// parent directory using both substring matching and Levenshtein edit distance.
 fn file_not_found_message(display_path: &str, resolved: &std::path::Path) -> String {
     let mut msg = format!("File not found: {display_path}");
 
     let basename = match resolved.file_name().and_then(|n| n.to_str()) {
-        Some(n) => n.to_lowercase(),
+        Some(n) => n,
         None => return msg,
     };
+    let basename_lower = basename.to_lowercase();
 
     let parent = match resolved.parent() {
         Some(p) if p.is_dir() => p,
@@ -280,28 +281,73 @@ fn file_not_found_message(display_path: &str, resolved: &std::path::Path) -> Str
         Err(_) => return msg,
     };
 
-    let mut suggestions: Vec<String> = Vec::new();
+    // Collect candidates with a relevance score (lower is better).
+    let mut scored: Vec<(String, usize)> = Vec::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         let name_lower = name.to_lowercase();
-        // Match if either string contains the other (case-insensitive)
-        if name_lower.contains(&basename) || basename.contains(&name_lower) {
-            suggestions.push(name);
-            if suggestions.len() >= 3 {
-                break;
-            }
+
+        // Substring match gets score 0 (best)
+        if name_lower.contains(&basename_lower) || basename_lower.contains(&name_lower) {
+            scored.push((name, 0));
+            continue;
+        }
+
+        // Levenshtein distance for typo detection
+        let dist = levenshtein(&basename_lower, &name_lower);
+        // Only suggest if edit distance is within 40% of the longer string length
+        let max_dist = basename_lower.len().max(name_lower.len()) * 2 / 5;
+        if dist <= max_dist.max(2) {
+            scored.push((name, dist));
         }
     }
 
-    if !suggestions.is_empty() {
-        suggestions.sort();
+    if !scored.is_empty() {
+        scored.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+        scored.truncate(5);
         msg.push_str("\n\nDid you mean one of these?\n");
-        for s in &suggestions {
+        for (s, _) in &scored {
             msg.push_str(&format!("  - {s}\n"));
         }
     }
 
     msg
+}
+
+/// Compute the Levenshtein edit distance between two strings.
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a_chars: Vec<char> = a.chars().collect();
+    let b_chars: Vec<char> = b.chars().collect();
+    let m = a_chars.len();
+    let n = b_chars.len();
+
+    if m == 0 {
+        return n;
+    }
+    if n == 0 {
+        return m;
+    }
+
+    // Use single-row optimization (O(n) space).
+    let mut prev: Vec<usize> = (0..=n).collect();
+    let mut curr = vec![0usize; n + 1];
+
+    for i in 1..=m {
+        curr[0] = i;
+        for j in 1..=n {
+            let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                0
+            } else {
+                1
+            };
+            curr[j] = (prev[j] + 1) // deletion
+                .min(curr[j - 1] + 1) // insertion
+                .min(prev[j - 1] + cost); // substitution
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+
+    prev[n]
 }
 
 /// Known binary file extensions (fast path to avoid reading content).
@@ -589,7 +635,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_file_not_found_suggestions() {
+    async fn test_file_not_found_suggestions_levenshtein() {
         let tmp = TempDir::new().unwrap();
         let tmp_path = tmp.path().canonicalize().unwrap();
         fs::write(tmp_path.join("file.rs"), "").unwrap();
@@ -598,6 +644,7 @@ mod tests {
 
         let tool = FileReadTool;
         let ctx = ToolContext::new(tmp_path.to_str().unwrap());
+        // "flie.rs" is a typo for "file.rs" — Levenshtein distance = 2
         let wrong_path = tmp_path.join("flie.rs");
         let args = make_args(&[("file_path", serde_json::json!(wrong_path.to_str().unwrap()))]);
         let result = tool.execute(args, &ctx).await;
@@ -605,10 +652,8 @@ mod tests {
         assert!(!result.success);
         let err = result.error.unwrap();
         assert!(err.contains("not found"));
-        // "flie" is contained in no filename, but "flie" doesn't match.
-        // Actually: basename is "flie.rs", entries are "file.rs", "file_edit.rs", "other.txt"
-        // "flie.rs" is not contained in any, and none are contained in "flie.rs"
-        // So let's test with a substring match instead.
+        assert!(err.contains("Did you mean"), "Should suggest similar files, got: {err}");
+        assert!(err.contains("file.rs"), "Should suggest file.rs for typo flie.rs, got: {err}");
     }
 
     #[tokio::test]
@@ -771,6 +816,38 @@ mod tests {
             &output[..output.len().min(100)]
         );
         assert!(output.contains("secrets"));
+    }
+
+    // ---- Levenshtein distance ----
+
+    #[test]
+    fn test_levenshtein_identical() {
+        assert_eq!(levenshtein("hello", "hello"), 0);
+    }
+
+    #[test]
+    fn test_levenshtein_empty() {
+        assert_eq!(levenshtein("", "abc"), 3);
+        assert_eq!(levenshtein("abc", ""), 3);
+        assert_eq!(levenshtein("", ""), 0);
+    }
+
+    #[test]
+    fn test_levenshtein_transposition() {
+        // "flie" vs "file" = 2 (swap i and l requires delete + insert)
+        assert_eq!(levenshtein("flie", "file"), 2);
+    }
+
+    #[test]
+    fn test_levenshtein_single_edit() {
+        assert_eq!(levenshtein("cat", "car"), 1);  // substitution
+        assert_eq!(levenshtein("cat", "cats"), 1);  // insertion
+        assert_eq!(levenshtein("cats", "cat"), 1);  // deletion
+    }
+
+    #[test]
+    fn test_levenshtein_completely_different() {
+        assert_eq!(levenshtein("abc", "xyz"), 3);
     }
 
     #[tokio::test]
