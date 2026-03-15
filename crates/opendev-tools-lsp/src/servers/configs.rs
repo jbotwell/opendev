@@ -139,6 +139,108 @@ pub fn default_server_configs() -> Vec<ServerConfig> {
             "markdown",
             vec!["md".to_string()],
         ),
+        // Vue
+        ServerConfig::new(
+            "vue-language-server",
+            vec!["--stdio".to_string()],
+            "vue",
+            vec!["vue".to_string()],
+        ),
+        // Svelte
+        ServerConfig::new(
+            "svelteserver",
+            vec!["--stdio".to_string()],
+            "svelte",
+            vec!["svelte".to_string()],
+        ),
+        // Astro
+        ServerConfig::new(
+            "astro-ls",
+            vec!["--stdio".to_string()],
+            "astro",
+            vec!["astro".to_string()],
+        ),
+        // OCaml
+        ServerConfig::new(
+            "ocamllsp",
+            vec![],
+            "ocaml",
+            vec!["ml".to_string(), "mli".to_string()],
+        ),
+        // Gleam
+        ServerConfig::new(
+            "gleam",
+            vec!["lsp".to_string()],
+            "gleam",
+            vec!["gleam".to_string()],
+        ),
+        // Clojure
+        ServerConfig::new(
+            "clojure-lsp",
+            vec![],
+            "clojure",
+            vec!["clj".to_string(), "cljs".to_string(), "cljc".to_string(), "edn".to_string()],
+        ),
+        // Nix
+        ServerConfig::new(
+            "nixd",
+            vec![],
+            "nix",
+            vec!["nix".to_string()],
+        ),
+        // LaTeX
+        ServerConfig::new(
+            "texlab",
+            vec![],
+            "latex",
+            vec!["tex".to_string(), "bib".to_string()],
+        ),
+        // Dockerfile
+        ServerConfig::new(
+            "docker-langserver",
+            vec!["--stdio".to_string()],
+            "dockerfile",
+            vec!["dockerfile".to_string()],
+        ),
+        // Prisma
+        ServerConfig::new(
+            "prisma-language-server",
+            vec!["--stdio".to_string()],
+            "prisma",
+            vec!["prisma".to_string()],
+        ),
+        // F#
+        ServerConfig::new(
+            "fsautocomplete",
+            vec!["--adaptive-lsp-server-enabled".to_string()],
+            "fsharp",
+            vec!["fs".to_string(), "fsx".to_string(), "fsi".to_string()],
+        ),
+        // Julia
+        ServerConfig::new(
+            "julia",
+            vec![
+                "--startup-file=no".to_string(),
+                "-e".to_string(),
+                "using LanguageServer; runserver()".to_string(),
+            ],
+            "julia",
+            vec!["jl".to_string()],
+        ),
+        // Deno (TypeScript variant — only used when Deno project detected)
+        ServerConfig::new(
+            "deno",
+            vec!["lsp".to_string()],
+            "deno",
+            vec![], // No default extensions — activated by deno.json presence
+        ),
+        // Typst
+        ServerConfig::new(
+            "tinymist",
+            vec![],
+            "typst",
+            vec!["typ".to_string()],
+        ),
     ]
 }
 
@@ -151,7 +253,11 @@ mod tests {
     fn test_default_configs_non_empty() {
         let configs = default_server_configs();
         assert!(!configs.is_empty());
-        assert!(configs.len() >= 15);
+        assert!(
+            configs.len() >= 35,
+            "Expected at least 35 server configs, got {}",
+            configs.len()
+        );
     }
 
     #[test]
@@ -182,11 +288,32 @@ mod tests {
         for config in &configs {
             assert!(!config.command.is_empty(), "Empty command");
             assert!(!config.language_id.is_empty(), "Empty language_id");
-            assert!(
-                !config.extensions.is_empty(),
-                "No extensions for {}",
-                config.language_id
-            );
+            // Deno has no default extensions (activated by project detection)
+            if config.language_id != "deno" {
+                assert!(
+                    !config.extensions.is_empty(),
+                    "No extensions for {}",
+                    config.language_id
+                );
+            }
         }
+    }
+
+    #[test]
+    fn test_new_servers_present() {
+        let configs = default_server_configs();
+        let ids: Vec<&str> = configs.iter().map(|c| c.language_id.as_str()).collect();
+        assert!(ids.contains(&"vue"), "Vue LSP missing");
+        assert!(ids.contains(&"svelte"), "Svelte LSP missing");
+        assert!(ids.contains(&"ocaml"), "OCaml LSP missing");
+        assert!(ids.contains(&"gleam"), "Gleam LSP missing");
+        assert!(ids.contains(&"clojure"), "Clojure LSP missing");
+        assert!(ids.contains(&"nix"), "Nix LSP missing");
+        assert!(ids.contains(&"latex"), "LaTeX LSP missing");
+        assert!(ids.contains(&"dockerfile"), "Dockerfile LSP missing");
+        assert!(ids.contains(&"prisma"), "Prisma LSP missing");
+        assert!(ids.contains(&"fsharp"), "F# LSP missing");
+        assert!(ids.contains(&"julia"), "Julia LSP missing");
+        assert!(ids.contains(&"typst"), "Typst LSP missing");
     }
 }

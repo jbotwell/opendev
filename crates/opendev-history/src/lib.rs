@@ -26,6 +26,6 @@ pub use index::SessionIndex;
 pub use listing::SessionListing;
 pub use session_manager::{SessionManager, generate_title_from_messages};
 pub use sharing::share_session;
-pub use snapshot::SnapshotManager;
+pub use snapshot::{DiffStatus, DiffSummary, FileDiff, FileDiffStat, SnapshotManager};
 pub use sqlite_store::SqliteSessionStore;
 pub use topic_detector::TopicDetector;

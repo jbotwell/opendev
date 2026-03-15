@@ -18,6 +18,58 @@ fn encode_project_id(project_path: &str) -> String {
     format!("{:016x}", hasher.finish())
 }
 
+/// Line-level diff stats for a single file.
+#[derive(Debug, Clone)]
+pub struct FileDiffStat {
+    pub file_path: String,
+    pub additions: u64,
+    pub deletions: u64,
+    pub is_binary: bool,
+}
+
+/// Full diff information for a single file, including content.
+#[derive(Debug, Clone)]
+pub struct FileDiff {
+    pub file_path: String,
+    pub before: String,
+    pub after: String,
+    pub additions: u64,
+    pub deletions: u64,
+    pub is_binary: bool,
+    pub status: DiffStatus,
+}
+
+/// File change status in a diff.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiffStatus {
+    Added,
+    Modified,
+    Deleted,
+}
+
+/// Aggregate diff summary.
+#[derive(Debug, Clone, Default)]
+pub struct DiffSummary {
+    pub additions: u64,
+    pub deletions: u64,
+    pub files: usize,
+}
+
+/// Unquote git paths that may be escaped (e.g., paths with spaces or special chars).
+fn unquote_git_path(path: &str) -> String {
+    if path.starts_with('"') && path.ends_with('"') && path.len() >= 2 {
+        let inner = &path[1..path.len() - 1];
+        inner
+            .replace("\\\\", "\x00")
+            .replace("\\\"", "\"")
+            .replace("\\n", "\n")
+            .replace("\\t", "\t")
+            .replace('\x00', "\\")
+    } else {
+        path.to_string()
+    }
+}
+
 /// Manages shadow git snapshots for per-step undo.
 ///
 /// Each snapshot is a git tree hash that captures the complete state
@@ -231,6 +283,104 @@ impl SnapshotManager {
         }
     }
 
+    /// Compute line-level diff stats between two tree hashes.
+    ///
+    /// Returns a list of `(file_path, additions, deletions, status)` tuples.
+    /// This is the equivalent of OpenCode's `diffNumstat()`.
+    pub fn diff_numstat(&mut self, from: &str, to: &str) -> Vec<FileDiffStat> {
+        if !self.ensure_initialized() {
+            return Vec::new();
+        }
+
+        // Use git diff-tree with --numstat to get line counts
+        match self.git(&["diff-tree", "-r", "--numstat", from, to]) {
+            Ok(output) => output
+                .lines()
+                .filter(|line| !line.is_empty())
+                .filter_map(|line| {
+                    let parts: Vec<&str> = line.splitn(3, '\t').collect();
+                    if parts.len() < 3 {
+                        return None;
+                    }
+                    let additions = parts[0].parse::<u64>().unwrap_or(0);
+                    let deletions = parts[1].parse::<u64>().unwrap_or(0);
+                    let file_path = unquote_git_path(parts[2]);
+                    // Binary files show "-" for both counts
+                    let is_binary = parts[0] == "-" && parts[1] == "-";
+                    Some(FileDiffStat {
+                        file_path,
+                        additions,
+                        deletions,
+                        is_binary,
+                    })
+                })
+                .collect(),
+            Err(e) => {
+                debug!("Failed to compute numstat diff: {}", e);
+                Vec::new()
+            }
+        }
+    }
+
+    /// Compute a full diff between two tree hashes, including file contents.
+    ///
+    /// Returns before/after content for each changed file. This is the
+    /// equivalent of OpenCode's `diffFull()`.
+    pub fn diff_full(&mut self, from: &str, to: &str) -> Vec<FileDiff> {
+        if !self.ensure_initialized() {
+            return Vec::new();
+        }
+
+        let stats = self.diff_numstat(from, to);
+        let mut diffs = Vec::new();
+
+        for stat in stats {
+            let before = self.show_file(from, &stat.file_path);
+            let after = self.show_file(to, &stat.file_path);
+
+            let status = match (&before, &after) {
+                (None, Some(_)) => DiffStatus::Added,
+                (Some(_), None) => DiffStatus::Deleted,
+                _ => DiffStatus::Modified,
+            };
+
+            diffs.push(FileDiff {
+                file_path: stat.file_path,
+                before: before.unwrap_or_default(),
+                after: after.unwrap_or_default(),
+                additions: stat.additions,
+                deletions: stat.deletions,
+                is_binary: stat.is_binary,
+                status,
+            });
+        }
+
+        diffs
+    }
+
+    /// Compute aggregate diff summary between two tree hashes.
+    ///
+    /// Returns total additions, deletions, and file count.
+    pub fn diff_summary(&mut self, from: &str, to: &str) -> DiffSummary {
+        let stats = self.diff_numstat(from, to);
+        DiffSummary {
+            additions: stats.iter().map(|s| s.additions).sum(),
+            deletions: stats.iter().map(|s| s.deletions).sum(),
+            files: stats.len(),
+        }
+    }
+
+    /// Get file content at a specific tree hash.
+    fn show_file(&self, tree_hash: &str, file_path: &str) -> Option<String> {
+        let spec = format!("{tree_hash}:{file_path}");
+        self.git(&["show", &spec]).ok()
+    }
+
+    /// Get the latest snapshot hash, if any.
+    pub fn latest_snapshot(&self) -> Option<&str> {
+        self.snapshots.last().map(|s| s.as_str())
+    }
+
     /// Run git gc on the shadow repo to free space.
     pub fn cleanup(&self) {
         if !self.initialized {
@@ -319,6 +469,136 @@ mod tests {
 
     // Integration tests that require git are skipped in CI
     // but can be run locally with: cargo test -- --ignored
+
+    #[test]
+    fn test_unquote_git_path_plain() {
+        assert_eq!(unquote_git_path("src/main.rs"), "src/main.rs");
+    }
+
+    #[test]
+    fn test_unquote_git_path_quoted() {
+        assert_eq!(
+            unquote_git_path("\"path with spaces/file.rs\""),
+            "path with spaces/file.rs"
+        );
+    }
+
+    #[test]
+    fn test_unquote_git_path_escaped() {
+        assert_eq!(
+            unquote_git_path("\"path\\\\with\\\\backslashes\""),
+            "path\\with\\backslashes"
+        );
+    }
+
+    #[test]
+    fn test_diff_summary_default() {
+        let summary = DiffSummary::default();
+        assert_eq!(summary.additions, 0);
+        assert_eq!(summary.deletions, 0);
+        assert_eq!(summary.files, 0);
+    }
+
+    #[test]
+    fn test_diff_status_equality() {
+        assert_eq!(DiffStatus::Added, DiffStatus::Added);
+        assert_ne!(DiffStatus::Added, DiffStatus::Modified);
+        assert_ne!(DiffStatus::Modified, DiffStatus::Deleted);
+    }
+
+    #[test]
+    fn test_latest_snapshot_empty() {
+        let mgr = SnapshotManager::new("/tmp/test-project");
+        assert!(mgr.latest_snapshot().is_none());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_snapshot_diff_numstat() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let project_dir = tmp.path().to_string_lossy().to_string();
+
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&project_dir)
+            .output()
+            .unwrap();
+
+        // Create initial file
+        std::fs::write(tmp.path().join("test.txt"), "line1\nline2\nline3\n").unwrap();
+        let mut mgr = SnapshotManager::new(&project_dir);
+        let hash1 = mgr.track().unwrap();
+
+        // Modify file — add 2 lines, remove 1
+        std::fs::write(tmp.path().join("test.txt"), "line1\nline2_modified\nline3\nnew_line4\nnew_line5\n").unwrap();
+        let hash2 = mgr.track().unwrap();
+
+        let stats = mgr.diff_numstat(&hash1, &hash2);
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].file_path, "test.txt");
+        assert!(stats[0].additions > 0);
+        assert!(!stats[0].is_binary);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_snapshot_diff_full() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let project_dir = tmp.path().to_string_lossy().to_string();
+
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&project_dir)
+            .output()
+            .unwrap();
+
+        std::fs::write(tmp.path().join("hello.rs"), "fn main() {}\n").unwrap();
+        let mut mgr = SnapshotManager::new(&project_dir);
+        let hash1 = mgr.track().unwrap();
+
+        std::fs::write(tmp.path().join("hello.rs"), "fn main() {\n    println!(\"hello\");\n}\n").unwrap();
+        std::fs::write(tmp.path().join("new_file.txt"), "new content\n").unwrap();
+        let hash2 = mgr.track().unwrap();
+
+        let diffs = mgr.diff_full(&hash1, &hash2);
+        assert!(diffs.len() >= 2);
+
+        let hello_diff = diffs.iter().find(|d| d.file_path == "hello.rs").unwrap();
+        assert_eq!(hello_diff.status, DiffStatus::Modified);
+        assert!(hello_diff.before.contains("fn main()"));
+        assert!(hello_diff.after.contains("println!"));
+
+        let new_diff = diffs.iter().find(|d| d.file_path == "new_file.txt").unwrap();
+        assert_eq!(new_diff.status, DiffStatus::Added);
+        assert!(new_diff.before.is_empty());
+        assert!(new_diff.after.contains("new content"));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_snapshot_diff_summary() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let project_dir = tmp.path().to_string_lossy().to_string();
+
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&project_dir)
+            .output()
+            .unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "line1\n").unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "line1\n").unwrap();
+        let mut mgr = SnapshotManager::new(&project_dir);
+        let hash1 = mgr.track().unwrap();
+
+        std::fs::write(tmp.path().join("a.txt"), "line1\nline2\n").unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "modified\n").unwrap();
+        let hash2 = mgr.track().unwrap();
+
+        let summary = mgr.diff_summary(&hash1, &hash2);
+        assert_eq!(summary.files, 2);
+        assert!(summary.additions > 0);
+    }
 
     #[test]
     #[ignore]
