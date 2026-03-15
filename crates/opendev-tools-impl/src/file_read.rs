@@ -213,11 +213,22 @@ impl BaseTool for FileReadTool {
                     lines_emitted += 1;
                 }
 
+                // Calculate the next offset for follow-up reads.
+                let next_offset = start + lines_emitted + 1;
+                let has_more = next_offset <= total_lines;
+
                 if byte_truncated {
                     let remaining = end - start - lines_emitted;
                     output.push_str(&format!(
-                        "\n[...truncated: {remaining} more lines not shown (output exceeded {} KB limit). Use offset/limit to read specific sections.]\n",
+                        "\n[...truncated: {remaining} more lines not shown (output exceeded {} KB limit). \
+                         Use offset={next_offset} to continue reading.]\n",
                         Self::MAX_OUTPUT_BYTES / 1024
+                    ));
+                } else if end < total_lines {
+                    // Lines were limited by the limit param, hint the next offset.
+                    output.push_str(&format!(
+                        "\n[{} more lines below. Use offset={next_offset} to continue reading.]\n",
+                        total_lines - end
                     ));
                 }
 
@@ -235,6 +246,9 @@ impl BaseTool for FileReadTool {
                 let mut metadata = HashMap::new();
                 metadata.insert("total_lines".into(), serde_json::json!(total_lines));
                 metadata.insert("lines_shown".into(), serde_json::json!(lines_emitted));
+                if has_more {
+                    metadata.insert("next_offset".into(), serde_json::json!(next_offset));
+                }
                 if byte_truncated {
                     metadata.insert("truncated".into(), serde_json::json!(true));
                 }
@@ -618,6 +632,51 @@ mod tests {
         assert!(err.contains("file_read.rs"));
         assert!(err.contains("file_write.rs"));
         assert!(!err.contains("other.txt"));
+    }
+
+    // ---- Next offset hint ----
+
+    #[tokio::test]
+    async fn test_read_next_offset_hint() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+        let file = dir_path.join("lines.txt");
+        let content: String = (1..=20).map(|i| format!("line {i}\n")).collect();
+        std::fs::write(&file, content).unwrap();
+
+        let tool = FileReadTool;
+        let ctx = ToolContext::new(&dir_path);
+        // Read only 5 lines from the start
+        let args = make_args(&[
+            ("file_path", serde_json::json!(file.to_str().unwrap())),
+            ("limit", serde_json::json!(5)),
+        ]);
+        let result = tool.execute(args, &ctx).await;
+
+        assert!(result.success);
+        let output = result.output.unwrap();
+        // Should hint next offset
+        assert!(output.contains("offset=6"), "Should hint offset=6, got: {output}");
+        assert!(output.contains("15 more lines below"));
+        // Metadata should have next_offset
+        assert_eq!(result.metadata.get("next_offset"), Some(&serde_json::json!(6)));
+    }
+
+    #[tokio::test]
+    async fn test_read_no_next_offset_at_end() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+        let file = dir_path.join("small.txt");
+        std::fs::write(&file, "line 1\nline 2\nline 3\n").unwrap();
+
+        let tool = FileReadTool;
+        let ctx = ToolContext::new(&dir_path);
+        let args = make_args(&[("file_path", serde_json::json!(file.to_str().unwrap()))]);
+        let result = tool.execute(args, &ctx).await;
+
+        assert!(result.success);
+        // No next_offset when all lines are shown
+        assert!(result.metadata.get("next_offset").is_none());
     }
 
     // ---- Output byte limit ----
