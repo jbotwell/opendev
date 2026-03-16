@@ -523,6 +523,23 @@ pub fn format_tool_call_parts_with_wd(
         return (verb, task);
     }
 
+    // Special case: search tools show "pattern" in path
+    if matches!(tool_name, "search" | "Grep") {
+        let pattern = args.get("pattern").or_else(|| args.get("query"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("...");
+        let pattern_display = if pattern.len() > 40 {
+            format!("\"{}...\"", &pattern[..37])
+        } else {
+            format!("\"{pattern}\"")
+        };
+        if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
+            let rel = make_relative(path, working_dir);
+            return ("Search".to_string(), format!("{pattern_display} in {rel}"));
+        }
+        return ("Search".to_string(), pattern_display);
+    }
+
     // Try to extract a meaningful summary from args
     if let Some(summary) = extract_arg_from_keys(entry.primary_arg_keys, args) {
         // Strip working dir prefix from file path args
