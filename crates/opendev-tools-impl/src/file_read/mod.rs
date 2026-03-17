@@ -1,10 +1,16 @@
 //! Read file tool — reads file contents with optional line ranges and binary detection.
 
+mod binary;
+mod suggestions;
+
 use std::collections::HashMap;
 
 use opendev_tools_core::{BaseTool, ToolContext, ToolResult};
 
 use crate::path_utils::{is_sensitive_file, resolve_file_path, validate_path_access};
+
+use binary::is_binary_file;
+use suggestions::file_not_found_message;
 
 /// Tool for reading file contents.
 #[derive(Debug)]
@@ -260,163 +266,11 @@ impl BaseTool for FileReadTool {
     }
 }
 
-/// Build an error message for a missing file, with up to 5 suggestions from the
-/// parent directory using both substring matching and Levenshtein edit distance.
-fn file_not_found_message(display_path: &str, resolved: &std::path::Path) -> String {
-    let mut msg = format!("File not found: {display_path}");
-
-    let basename = match resolved.file_name().and_then(|n| n.to_str()) {
-        Some(n) => n,
-        None => return msg,
-    };
-    let basename_lower = basename.to_lowercase();
-
-    let parent = match resolved.parent() {
-        Some(p) if p.is_dir() => p,
-        _ => return msg,
-    };
-
-    let entries = match std::fs::read_dir(parent) {
-        Ok(rd) => rd,
-        Err(_) => return msg,
-    };
-
-    // Collect candidates with a relevance score (lower is better).
-    let mut scored: Vec<(String, usize)> = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let name_lower = name.to_lowercase();
-
-        // Substring match gets score 0 (best)
-        if name_lower.contains(&basename_lower) || basename_lower.contains(&name_lower) {
-            scored.push((name, 0));
-            continue;
-        }
-
-        // Levenshtein distance for typo detection
-        let dist = levenshtein(&basename_lower, &name_lower);
-        // Only suggest if edit distance is within 40% of the longer string length
-        let max_dist = basename_lower.len().max(name_lower.len()) * 2 / 5;
-        if dist <= max_dist.max(2) {
-            scored.push((name, dist));
-        }
-    }
-
-    if !scored.is_empty() {
-        scored.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
-        scored.truncate(5);
-        msg.push_str("\n\nDid you mean one of these?\n");
-        for (s, _) in &scored {
-            msg.push_str(&format!("  - {s}\n"));
-        }
-    }
-
-    msg
-}
-
-/// Compute the Levenshtein edit distance between two strings.
-fn levenshtein(a: &str, b: &str) -> usize {
-    let a_chars: Vec<char> = a.chars().collect();
-    let b_chars: Vec<char> = b.chars().collect();
-    let m = a_chars.len();
-    let n = b_chars.len();
-
-    if m == 0 {
-        return n;
-    }
-    if n == 0 {
-        return m;
-    }
-
-    // Use single-row optimization (O(n) space).
-    let mut prev: Vec<usize> = (0..=n).collect();
-    let mut curr = vec![0usize; n + 1];
-
-    for i in 1..=m {
-        curr[0] = i;
-        for j in 1..=n {
-            let cost = if a_chars[i - 1] == b_chars[j - 1] {
-                0
-            } else {
-                1
-            };
-            curr[j] = (prev[j] + 1) // deletion
-                .min(curr[j - 1] + 1) // insertion
-                .min(prev[j - 1] + cost); // substitution
-        }
-        std::mem::swap(&mut prev, &mut curr);
-    }
-
-    prev[n]
-}
-
-/// Known binary file extensions (fast path to avoid reading content).
-const BINARY_EXTENSIONS: &[&str] = &[
-    // Archives & compressed
-    "zip", "gz", "tar", "bz2", "xz", "7z", "rar", "zst", "lz4", // Images
-    "png", "jpg", "jpeg", "gif", "bmp", "ico", "webp", "tiff", "tif", "avif", "heic",
-    // Audio/Video
-    "mp3", "mp4", "wav", "ogg", "flac", "avi", "mkv", "mov", "webm",
-    // Executables & libraries
-    "exe", "dll", "so", "dylib", "o", "a", "lib", "class", // Compiled/bytecode
-    "pyc", "pyo", "wasm", "beam", // Databases
-    "db", "sqlite", "sqlite3", // Documents (binary)
-    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", // Fonts
-    "ttf", "otf", "woff", "woff2", "eot", // Other binary
-    "bin", "dat", "pak", "jar", "war", "egg", // Serialized data
-    "pb", "protobuf", "flatbuf", "msgpack", // Lock files (often large, not useful)
-    "lock",
-];
-
-/// Check if a file is likely binary, first by extension, then by content inspection.
-fn is_binary_file(path: &std::path::Path, bytes: &[u8]) -> bool {
-    // Fast path: check extension
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        let ext_lower = ext.to_ascii_lowercase();
-        if BINARY_EXTENSIONS.contains(&ext_lower.as_str()) {
-            return true;
-        }
-    }
-    // Content-based: check for null bytes in first 8 KB
-    is_binary(bytes)
-}
-
-/// Check if content appears to be binary.
-///
-/// Uses two heuristics (matching OpenCode's approach):
-/// 1. Null bytes in the first 8KB → definitely binary.
-/// 2. More than 30% non-printable characters → likely binary.
-///
-/// Non-printable is defined as bytes < 9 or (> 13 and < 32), excluding
-/// tab (9), newline (10), carriage return (13).
-fn is_binary(bytes: &[u8]) -> bool {
-    let check_len = bytes.len().min(8192);
-    if check_len == 0 {
-        return false;
-    }
-    let sample = &bytes[..check_len];
-
-    // Check for null bytes (fast path)
-    if sample.contains(&0) {
-        return true;
-    }
-
-    // Check non-printable character ratio
-    let non_printable = sample
-        .iter()
-        .filter(|&&b| b < 9 || (b > 13 && b < 32))
-        .count();
-
-    let ratio = non_printable as f64 / check_len as f64;
-    ratio > 0.3
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
-    use std::io::Write;
-    use tempfile::{NamedTempFile, TempDir};
+    use tempfile::TempDir;
 
     fn make_args(pairs: &[(&str, serde_json::Value)]) -> HashMap<String, serde_json::Value> {
         pairs
@@ -504,52 +358,6 @@ mod tests {
         let ctx = ToolContext::new("/tmp");
         let result = tool.execute(HashMap::new(), &ctx).await;
         assert!(!result.success);
-    }
-
-    #[test]
-    fn test_is_binary() {
-        assert!(is_binary(&[0u8, 1, 2]));
-        assert!(!is_binary(b"hello world\n"));
-    }
-
-    #[test]
-    fn test_is_binary_file_by_extension() {
-        let path = std::path::Path::new("image.png");
-        assert!(is_binary_file(path, b"this is actually text"));
-
-        let path = std::path::Path::new("archive.zip");
-        assert!(is_binary_file(path, b"text content"));
-
-        let path = std::path::Path::new("data.sqlite3");
-        assert!(is_binary_file(path, b"text content"));
-    }
-
-    #[test]
-    fn test_is_binary_file_case_insensitive() {
-        let path = std::path::Path::new("image.PNG");
-        assert!(is_binary_file(path, b"text"));
-
-        let path = std::path::Path::new("image.Jpg");
-        assert!(is_binary_file(path, b"text"));
-    }
-
-    #[test]
-    fn test_is_binary_file_text_extensions_use_content() {
-        // .rs file with no null bytes = not binary
-        let path = std::path::Path::new("main.rs");
-        assert!(!is_binary_file(path, b"fn main() {}"));
-
-        // .rs file with null bytes = binary
-        let path = std::path::Path::new("main.rs");
-        assert!(is_binary_file(path, &[0u8, 1, 2]));
-    }
-
-    #[test]
-    fn test_is_binary_file_no_extension() {
-        // No extension, fallback to content check
-        let path = std::path::Path::new("Makefile");
-        assert!(!is_binary_file(path, b"all: build"));
-        assert!(is_binary_file(path, &[0u8]));
     }
 
     #[tokio::test]
@@ -767,43 +575,6 @@ mod tests {
         }
     }
 
-    // ---- Binary detection improvements ----
-
-    #[test]
-    fn test_binary_detection_null_bytes() {
-        let bytes = b"hello\x00world";
-        assert!(is_binary(bytes));
-    }
-
-    #[test]
-    fn test_binary_detection_high_non_printable_ratio() {
-        // 50% non-printable chars (bytes < 9)
-        let mut bytes = vec![0x01u8; 50];
-        bytes.extend_from_slice(&[b'a'; 50]);
-        assert!(is_binary(&bytes));
-    }
-
-    #[test]
-    fn test_binary_detection_low_non_printable_ratio() {
-        // Mostly printable with a few control chars (< 30%)
-        let mut bytes = vec![b'a'; 100];
-        bytes[0] = 0x01;
-        bytes[1] = 0x02;
-        assert!(!is_binary(&bytes));
-    }
-
-    #[test]
-    fn test_binary_detection_empty() {
-        assert!(!is_binary(&[]));
-    }
-
-    #[test]
-    fn test_binary_detection_text_with_tabs_newlines() {
-        // Tabs and newlines should NOT count as non-printable
-        let bytes = b"hello\tworld\nfoo\rbar";
-        assert!(!is_binary(bytes));
-    }
-
     // ---- Sensitive file warning ----
 
     #[tokio::test]
@@ -826,38 +597,6 @@ mod tests {
             &output[..output.len().min(100)]
         );
         assert!(output.contains("secrets"));
-    }
-
-    // ---- Levenshtein distance ----
-
-    #[test]
-    fn test_levenshtein_identical() {
-        assert_eq!(levenshtein("hello", "hello"), 0);
-    }
-
-    #[test]
-    fn test_levenshtein_empty() {
-        assert_eq!(levenshtein("", "abc"), 3);
-        assert_eq!(levenshtein("abc", ""), 3);
-        assert_eq!(levenshtein("", ""), 0);
-    }
-
-    #[test]
-    fn test_levenshtein_transposition() {
-        // "flie" vs "file" = 2 (swap i and l requires delete + insert)
-        assert_eq!(levenshtein("flie", "file"), 2);
-    }
-
-    #[test]
-    fn test_levenshtein_single_edit() {
-        assert_eq!(levenshtein("cat", "car"), 1); // substitution
-        assert_eq!(levenshtein("cat", "cats"), 1); // insertion
-        assert_eq!(levenshtein("cats", "cat"), 1); // deletion
-    }
-
-    #[test]
-    fn test_levenshtein_completely_different() {
-        assert_eq!(levenshtein("abc", "xyz"), 3);
     }
 
     #[tokio::test]

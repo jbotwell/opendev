@@ -1,0 +1,194 @@
+use std::collections::HashMap;
+
+use opendev_tools_core::{BaseTool, ToolContext, ToolResult};
+
+/// Built-in subagent type definition.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct AgentType {
+    name: String,
+    description: String,
+    tools: Vec<String>,
+}
+
+/// Tool for listing available subagent types.
+#[derive(Debug)]
+pub struct AgentsTool;
+
+/// Default agent types available in the system.
+fn default_agent_types() -> Vec<AgentType> {
+    vec![
+        AgentType {
+            name: "code_explorer".into(),
+            description: "Read-only agent for exploring and understanding codebases. \
+                           Has access to file reading, search, and listing tools."
+                .into(),
+            tools: vec!["read_file".into(), "search".into(), "list_files".into()],
+        },
+        AgentType {
+            name: "planner".into(),
+            description: "Planning agent that creates implementation plans. \
+                           Has read-only access to understand the codebase before planning."
+                .into(),
+            tools: vec![
+                "read_file".into(),
+                "search".into(),
+                "list_files".into(),
+                "write_file".into(),
+            ],
+        },
+        AgentType {
+            name: "ask_user".into(),
+            description: "Agent that interacts with the user to gather information \
+                           or clarify requirements."
+                .into(),
+            tools: vec!["ask_user".into()],
+        },
+    ]
+}
+
+#[async_trait::async_trait]
+impl BaseTool for AgentsTool {
+    fn name(&self) -> &str {
+        "agents"
+    }
+
+    fn description(&self) -> &str {
+        "List available subagent types with their descriptions and allowed tools."
+    }
+
+    fn parameter_schema(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Action to perform. Currently only 'list' is supported.",
+                    "enum": ["list"]
+                }
+            }
+        })
+    }
+
+    async fn execute(
+        &self,
+        args: HashMap<String, serde_json::Value>,
+        ctx: &ToolContext,
+    ) -> ToolResult {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("list");
+
+        match action {
+            "list" => self.list_agents(ctx),
+            other => ToolResult::fail(format!("Unknown action: {other}. Available actions: list")),
+        }
+    }
+}
+
+impl AgentsTool {
+    fn list_agents(&self, ctx: &ToolContext) -> ToolResult {
+        // Try to read agent types from context values (injected by runtime)
+        let agents = if let Some(custom_agents) = ctx.values.get("agent_types") {
+            match serde_json::from_value::<Vec<AgentType>>(custom_agents.clone()) {
+                Ok(agents) => agents,
+                Err(_) => default_agent_types(),
+            }
+        } else {
+            default_agent_types()
+        };
+
+        if agents.is_empty() {
+            return ToolResult::ok("No subagent types found.");
+        }
+
+        let mut parts = vec![format!("Available agents ({}):\n", agents.len())];
+
+        for agent in &agents {
+            parts.push(format!("  {}: {}", agent.name, agent.description));
+            if !agent.tools.is_empty() {
+                let tools_display: Vec<&str> =
+                    agent.tools.iter().take(10).map(|s| s.as_str()).collect();
+                parts.push(format!("    Tools: {}", tools_display.join(", ")));
+            }
+        }
+
+        let output = parts.join("\n");
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "agents".into(),
+            serde_json::to_value(&agents).unwrap_or_default(),
+        );
+        metadata.insert("count".into(), serde_json::json!(agents.len()));
+
+        ToolResult::ok_with_metadata(output, metadata)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_list_agents_default() {
+        let tool = AgentsTool;
+        let ctx = ToolContext::new("/tmp");
+        let result = tool.execute(HashMap::new(), &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("Available agents"));
+        assert!(output.contains("code_explorer"));
+        assert!(output.contains("planner"));
+    }
+
+    #[tokio::test]
+    async fn test_list_agents_explicit_action() {
+        let tool = AgentsTool;
+        let ctx = ToolContext::new("/tmp");
+        let mut args = HashMap::new();
+        args.insert("action".to_string(), serde_json::json!("list"));
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+    }
+
+    #[tokio::test]
+    async fn test_list_agents_unknown_action() {
+        let tool = AgentsTool;
+        let ctx = ToolContext::new("/tmp");
+        let mut args = HashMap::new();
+        args.insert("action".to_string(), serde_json::json!("spawn"));
+        let result = tool.execute(args, &ctx).await;
+        assert!(!result.success);
+        assert!(result.error.unwrap().contains("Unknown action"));
+    }
+
+    #[tokio::test]
+    async fn test_list_agents_with_custom_context() {
+        let tool = AgentsTool;
+        let custom_agents = serde_json::json!([
+            {
+                "name": "custom_agent",
+                "description": "A custom agent",
+                "tools": ["read_file", "write_file"]
+            }
+        ]);
+        let ctx = ToolContext::new("/tmp").with_value("agent_types", custom_agents);
+        let result = tool.execute(HashMap::new(), &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("custom_agent"));
+        assert!(output.contains("A custom agent"));
+    }
+
+    #[test]
+    fn test_default_agent_types() {
+        let agents = default_agent_types();
+        assert!(agents.len() >= 3);
+
+        let names: Vec<&str> = agents.iter().map(|a| a.name.as_str()).collect();
+        assert!(names.contains(&"code_explorer"));
+        assert!(names.contains(&"planner"));
+        assert!(names.contains(&"ask_user"));
+    }
+}
