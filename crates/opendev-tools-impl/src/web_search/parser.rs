@@ -1,189 +1,63 @@
-//! Web search tool — search the web via DuckDuckGo HTML scraping.
-//!
-//! Uses DuckDuckGo's HTML interface for privacy-respecting web searches
-//! without requiring API keys. Results are parsed from the HTML response.
-
-use std::collections::HashMap;
-
-use opendev_tools_core::{BaseTool, ToolContext, ToolResult};
-
-/// Default number of search results to return.
-const DEFAULT_MAX_RESULTS: usize = 10;
-
-/// Maximum body size to read from DuckDuckGo (256 KB).
-const MAX_BODY_SIZE: usize = 256 * 1024;
-
-/// Tool for searching the web using DuckDuckGo.
-#[derive(Debug)]
-pub struct WebSearchTool;
+//! HTML parsing utilities for DuckDuckGo search results.
 
 /// A single search result.
 #[derive(Debug, Clone, serde::Serialize)]
-struct SearchResult {
-    title: String,
-    url: String,
-    snippet: String,
+pub(super) struct SearchResult {
+    pub(super) title: String,
+    pub(super) url: String,
+    pub(super) snippet: String,
 }
 
-#[async_trait::async_trait]
-impl BaseTool for WebSearchTool {
-    fn name(&self) -> &str {
-        "web_search"
-    }
+/// Parse DuckDuckGo HTML search results.
+///
+/// DuckDuckGo's HTML-only endpoint returns results inside
+/// `<div class="result ...">` blocks. Each block contains:
+/// - `<a class="result__a" href="...">title</a>`
+/// - `<a class="result__snippet" ...>snippet</a>`
+pub(super) fn parse_ddg_html(html: &str) -> Vec<SearchResult> {
+    let mut results = Vec::new();
 
-    fn description(&self) -> &str {
-        "Search the web using DuckDuckGo. Returns titles, URLs, and snippets."
-    }
+    // Split by result blocks
+    let parts: Vec<&str> = html.split("class=\"result__a\"").collect();
 
-    fn parameter_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query string"
-                },
-                "max_results": {
-                    "type": "integer",
-                    "description": "Maximum number of results (default: 10)"
-                },
-                "allowed_domains": {
-                    "type": "array",
-                    "items": { "type": "string" },
-                    "description": "Only include results from these domains"
-                },
-                "blocked_domains": {
-                    "type": "array",
-                    "items": { "type": "string" },
-                    "description": "Exclude results from these domains"
-                }
-            },
-            "required": ["query"]
-        })
-    }
-
-    async fn execute(
-        &self,
-        args: HashMap<String, serde_json::Value>,
-        _ctx: &ToolContext,
-    ) -> ToolResult {
-        let query = match args.get("query").and_then(|v| v.as_str()) {
-            Some(q) if !q.trim().is_empty() => q.trim(),
-            _ => return ToolResult::fail("Search query is required"),
-        };
-
-        let max_results = args
-            .get("max_results")
-            .and_then(|v| v.as_u64())
-            .map(|n| n as usize)
-            .unwrap_or(DEFAULT_MAX_RESULTS);
-
-        let allowed_domains: Vec<String> = args
-            .get("allowed_domains")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_lowercase()))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let blocked_domains: Vec<String> = args
-            .get("blocked_domains")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_lowercase()))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        // Build DuckDuckGo HTML search URL
-        let encoded_query = urlencoded(query);
-        let url = format!("https://html.duckduckgo.com/html/?q={encoded_query}");
-
-        let client = match reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(15))
-            .redirect(reqwest::redirect::Policy::limited(5))
-            .user_agent(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
-                 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            )
-            .build()
-        {
-            Ok(c) => c,
-            Err(e) => return ToolResult::fail(format!("Failed to create HTTP client: {e}")),
-        };
-
-        let response = match client.get(&url).send().await {
-            Ok(r) => r,
-            Err(e) => return ToolResult::fail(format!("Search request failed: {e}")),
-        };
-
-        if !response.status().is_success() {
-            return ToolResult::fail(format!("DuckDuckGo returned HTTP {}", response.status()));
-        }
-
-        let body = match response.text().await {
-            Ok(t) => {
-                if t.len() > MAX_BODY_SIZE {
-                    t[..MAX_BODY_SIZE].to_string()
+    for part in parts.iter().skip(1) {
+        // Extract URL from href="..."
+        let url = extract_attr(part, "href=\"")
+            .map(|u| {
+                // DuckDuckGo wraps URLs in redirect links
+                if let Some(actual) = extract_redirect_url(u) {
+                    actual
                 } else {
-                    t
+                    u.to_string()
                 }
-            }
-            Err(e) => return ToolResult::fail(format!("Failed to read response: {e}")),
+            })
+            .unwrap_or_default();
+
+        // Extract title (text between > and </a>)
+        let title = extract_tag_text(part).unwrap_or_default();
+
+        // Extract snippet
+        let snippet = if let Some(snippet_start) = part.find("result__snippet") {
+            let snippet_part = &part[snippet_start..];
+            extract_tag_text(snippet_part).unwrap_or_default()
+        } else {
+            String::new()
         };
 
-        // Parse results from HTML
-        let mut results = parse_ddg_html(&body);
-
-        // Filter by domain
-        if !allowed_domains.is_empty() || !blocked_domains.is_empty() {
-            results = filter_by_domain(results, &allowed_domains, &blocked_domains);
+        if !url.is_empty() && !title.is_empty() {
+            results.push(SearchResult {
+                title: strip_html_tags(&title),
+                url,
+                snippet: strip_html_tags(&snippet),
+            });
         }
-
-        // Limit results
-        results.truncate(max_results);
-
-        let result_count = results.len();
-
-        // Format output
-        let mut output_parts = Vec::new();
-        output_parts.push(format!(
-            "Search results for \"{query}\" ({result_count} results):\n"
-        ));
-
-        for (i, result) in results.iter().enumerate() {
-            output_parts.push(format!(
-                "{}. {}\n   {}\n   {}\n",
-                i + 1,
-                result.title,
-                result.url,
-                result.snippet
-            ));
-        }
-
-        if results.is_empty() {
-            output_parts.push("No results found.".to_string());
-        }
-
-        let output = output_parts.join("");
-
-        let mut metadata = HashMap::new();
-        metadata.insert("query".into(), serde_json::json!(query));
-        metadata.insert("result_count".into(), serde_json::json!(result_count));
-        metadata.insert(
-            "results".into(),
-            serde_json::to_value(&results).unwrap_or_default(),
-        );
-
-        ToolResult::ok_with_metadata(output, metadata)
     }
+
+    results
 }
 
 /// URL-encode a string for query parameters.
-fn urlencoded(s: &str) -> String {
+pub(super) fn urlencoded(s: &str) -> String {
     let mut result = String::with_capacity(s.len() * 3);
     for c in s.chars() {
         match c {
@@ -224,7 +98,7 @@ fn extract_domain(url: &str) -> Option<String> {
 }
 
 /// Filter results by allowed/blocked domain lists.
-fn filter_by_domain(
+pub(super) fn filter_by_domain(
     results: Vec<SearchResult>,
     allowed: &[String],
     blocked: &[String],
@@ -262,54 +136,6 @@ fn filter_by_domain(
             true
         })
         .collect()
-}
-
-/// Parse DuckDuckGo HTML search results.
-///
-/// DuckDuckGo's HTML-only endpoint returns results inside
-/// `<div class="result ...">` blocks. Each block contains:
-/// - `<a class="result__a" href="...">title</a>`
-/// - `<a class="result__snippet" ...>snippet</a>`
-fn parse_ddg_html(html: &str) -> Vec<SearchResult> {
-    let mut results = Vec::new();
-
-    // Split by result blocks
-    let parts: Vec<&str> = html.split("class=\"result__a\"").collect();
-
-    for part in parts.iter().skip(1) {
-        // Extract URL from href="..."
-        let url = extract_attr(part, "href=\"")
-            .map(|u| {
-                // DuckDuckGo wraps URLs in redirect links
-                if let Some(actual) = extract_redirect_url(u) {
-                    actual
-                } else {
-                    u.to_string()
-                }
-            })
-            .unwrap_or_default();
-
-        // Extract title (text between > and </a>)
-        let title = extract_tag_text(part).unwrap_or_default();
-
-        // Extract snippet
-        let snippet = if let Some(snippet_start) = part.find("result__snippet") {
-            let snippet_part = &part[snippet_start..];
-            extract_tag_text(snippet_part).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        if !url.is_empty() && !title.is_empty() {
-            results.push(SearchResult {
-                title: strip_html_tags(&title),
-                url,
-                snippet: strip_html_tags(&snippet),
-            });
-        }
-    }
-
-    results
 }
 
 /// Extract an attribute value after the given prefix.
@@ -408,13 +234,6 @@ fn strip_html_tags(s: &str) -> String {
 mod tests {
     use super::*;
 
-    fn make_args(pairs: &[(&str, serde_json::Value)]) -> HashMap<String, serde_json::Value> {
-        pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.clone()))
-            .collect()
-    }
-
     #[test]
     fn test_urlencoded() {
         assert_eq!(urlencoded("hello world"), "hello+world");
@@ -501,25 +320,6 @@ mod tests {
             extract_redirect_url(url),
             Some("https://example.com/page".to_string())
         );
-    }
-
-    #[tokio::test]
-    async fn test_web_search_missing_query() {
-        let tool = WebSearchTool;
-        let ctx = ToolContext::new("/tmp");
-        let result = tool.execute(HashMap::new(), &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("query is required"));
-    }
-
-    #[tokio::test]
-    async fn test_web_search_empty_query() {
-        let tool = WebSearchTool;
-        let ctx = ToolContext::new("/tmp");
-        let args = make_args(&[("query", serde_json::json!("  "))]);
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("query is required"));
     }
 
     #[test]
