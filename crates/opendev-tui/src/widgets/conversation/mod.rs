@@ -199,10 +199,9 @@ impl<'a> ConversationWidget<'a> {
                     let rs = msg.role.style().unwrap();
                     Self::render_simple_role(&content, &rs, &mut lines);
                 }
-                DisplayRole::Thinking => {
+                DisplayRole::Reasoning => {
                     for (i, content_line) in content.lines().enumerate() {
                         if i == 0 {
-                            // First line: ⟡ icon at same indent as ⏺ / > / !
                             lines.push(Line::from(vec![
                                 Span::styled(
                                     format!("{} ", style_tokens::THINKING_ICON),
@@ -216,7 +215,6 @@ impl<'a> ConversationWidget<'a> {
                                 ),
                             ]));
                         } else {
-                            // Continuation: 2-char indent matching other roles
                             lines.push(Line::from(vec![
                                 Span::raw(Indent::CONT),
                                 Span::styled(
@@ -891,12 +889,6 @@ mod tests {
                 collapsed: false,
             },
             DisplayMessage {
-                role: DisplayRole::Thinking,
-                content: "Let me think about closures in Rust...".into(),
-                tool_call: None,
-                collapsed: false,
-            },
-            DisplayMessage {
                 role: DisplayRole::Assistant,
                 content: "Closures capture variables from their scope.".into(),
                 tool_call: None,
@@ -917,10 +909,6 @@ mod tests {
         assert!(
             all_text.contains("Explain closures"),
             "Missing user message"
-        );
-        assert!(
-            all_text.contains("think about closures"),
-            "Missing thinking content"
         );
         assert!(
             all_text.contains("capture variables"),
@@ -971,27 +959,6 @@ mod tests {
             right_col.chars().any(|c| scrollbar_chars.contains(&c)),
             "Expected scrollbar characters in rightmost column when scrolled, got: {right_col:?}"
         );
-    }
-
-    #[test]
-    fn test_thinking_always_shows_full() {
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::Thinking,
-            content: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
-        let widget = ConversationWidget::new(&msgs, 0);
-        let lines = widget.build_lines();
-        let text: String = lines
-            .iter()
-            .flat_map(|l| l.spans.iter())
-            .map(|s| s.content.to_string())
-            .collect();
-        // Thinking traces always show full content
-        assert!(text.contains("Line 1"), "Should show first line");
-        assert!(text.contains("Line 6"), "Should show last line");
-        assert!(!text.contains("Ctrl+O"), "Should not show collapse hint");
     }
 
     #[test]

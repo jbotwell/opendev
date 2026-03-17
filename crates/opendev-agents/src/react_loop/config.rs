@@ -2,9 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::agent_types::AgentDefinition;
 use crate::subagents::spec::{PermissionAction, PermissionRule};
-use opendev_runtime::ThinkingLevel;
 
 /// Configuration for the ReAct loop.
 #[derive(Debug, Clone)]
@@ -15,16 +13,8 @@ pub struct ReactLoopConfig {
     pub max_nudge_attempts: usize,
     /// Maximum todo completion nudges before allowing completion anyway.
     pub max_todo_nudges: usize,
-    /// Thinking level — controls whether thinking/critique phases run.
-    pub thinking_level: ThinkingLevel,
-    /// Pre-composed thinking system prompt (from `create_thinking_composer`).
-    /// If `None`, the thinking phase will not swap the system prompt.
-    pub thinking_system_prompt: Option<String>,
-    /// The user's original task text, used for analysis prompt construction.
+    /// The user's original task text, used for completion nudge construction.
     pub original_task: Option<String>,
-    /// Optional agent definition — when set, the loop uses the agent's
-    /// thinking/critique model overrides and thinking level.
-    pub agent_definition: Option<AgentDefinition>,
     /// Per-agent permission rules for tool access control.
     /// Maps tool name patterns to permission rules (allow/deny/ask).
     /// When non-empty, each tool call is checked against these rules
@@ -38,25 +28,13 @@ impl Default for ReactLoopConfig {
             max_iterations: None, // Unlimited by default (matches Python)
             max_nudge_attempts: 3,
             max_todo_nudges: 4,
-            thinking_level: ThinkingLevel::Medium,
-            thinking_system_prompt: None,
             original_task: None,
-            agent_definition: None,
             permission: HashMap::new(),
         }
     }
 }
 
 impl ReactLoopConfig {
-    /// Return the effective thinking level, considering the agent definition override.
-    pub fn effective_thinking_level(&self) -> ThinkingLevel {
-        if let Some(ref def) = self.agent_definition {
-            def.effective_thinking_level()
-        } else {
-            self.thinking_level
-        }
-    }
-
     /// Evaluate permission rules for a tool call.
     ///
     /// Returns `None` if no rules match (caller decides default behavior).

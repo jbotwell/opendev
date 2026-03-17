@@ -314,15 +314,6 @@ pub async fn run_interactive(
                     });
                 }
                 opendev_models::Role::Assistant => {
-                    // Add thinking trace if present
-                    if let Some(ref trace) = msg.thinking_trace {
-                        app_state.messages.push(opendev_tui::app::DisplayMessage {
-                            role: opendev_tui::app::DisplayRole::Thinking,
-                            content: trace.clone(),
-                            tool_call: None,
-                            collapsed: false,
-                        });
-                    }
                     // Add assistant text
                     if !msg.content.is_empty() {
                         app_state.messages.push(opendev_tui::app::DisplayMessage {

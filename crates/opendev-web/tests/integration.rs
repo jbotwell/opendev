@@ -234,7 +234,6 @@ async fn get_config() {
     assert_eq!(json["model_provider"], "fireworks");
     assert_eq!(json["mode"], "normal");
     assert_eq!(json["autonomy_level"], "Manual");
-    assert_eq!(json["thinking_level"], "Medium");
 }
 
 /// PUT /api/config updates configuration.
@@ -331,41 +330,6 @@ async fn set_invalid_autonomy_returns_400() {
         Method::POST,
         "/api/config/autonomy",
         Some(serde_json::json!({"level": "SuperAuto"})),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-}
-
-/// POST /api/config/thinking sets thinking level.
-#[tokio::test]
-async fn set_thinking_level() {
-    let (_tmp, state) = make_test_state();
-
-    let (status, _) = send_request(
-        state.clone(),
-        Method::POST,
-        "/api/config/thinking",
-        Some(serde_json::json!({"level": "High"})),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK);
-
-    let (_, config) = send_request(state, Method::GET, "/api/config", None).await;
-    assert_eq!(config["thinking_level"], "High");
-}
-
-/// POST /api/config/thinking with invalid level returns 400.
-#[tokio::test]
-async fn set_invalid_thinking_returns_400() {
-    let (_tmp, state) = make_test_state();
-
-    let (status, _) = send_request(
-        state,
-        Method::POST,
-        "/api/config/thinking",
-        Some(serde_json::json!({"level": "Maximum"})),
     )
     .await;
 

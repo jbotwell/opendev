@@ -7,7 +7,7 @@ pub struct DisplayMessage {
     pub content: String,
     /// Optional tool call info for assistant messages.
     pub tool_call: Option<DisplayToolCall>,
-    /// Whether this message is collapsed (used for Thinking role).
+    /// Whether this message is collapsed.
     pub collapsed: bool,
 }
 
@@ -16,9 +16,10 @@ pub enum DisplayRole {
     User,
     Assistant,
     System,
-    Thinking,
     /// Interrupted feedback — rendered with ⎿ in red.
     Interrupt,
+    /// Native reasoning content from the LLM (inline thinking).
+    Reasoning,
 }
 
 /// Rendering configuration for simple (non-markdown, non-collapsible) roles.
@@ -37,7 +38,7 @@ pub struct RoleStyle {
 
 impl DisplayRole {
     /// Returns a `RoleStyle` for roles that use the standard icon+text pattern.
-    /// Returns `None` for Assistant and Thinking (they have custom rendering).
+    /// Returns `None` for Assistant (it has custom rendering).
     pub fn style(&self) -> Option<RoleStyle> {
         use crate::formatters::style_tokens::{self, Indent};
         use crate::widgets::spinner::CONTINUATION_CHAR;
@@ -71,7 +72,7 @@ impl DisplayRole {
                 continuation: Indent::RESULT_CONT,
                 attach_to_previous: true,
             }),
-            Self::Assistant | Self::Thinking => None,
+            Self::Assistant | Self::Reasoning => None,
         }
     }
 }

@@ -235,12 +235,8 @@ pub trait AgentEventCallback: Send + Sync {
     fn on_tool_finished(&self, tool_id: &str, success: bool);
     /// Streaming text chunk from the assistant.
     fn on_agent_chunk(&self, text: &str);
-    /// A thinking trace was produced before the action phase.
-    fn on_thinking(&self, content: &str);
-    /// A self-critique was produced (High thinking level only).
-    fn on_critique(&self, content: &str);
-    /// A refined thinking trace was produced after critique (High thinking level only).
-    fn on_thinking_refined(&self, content: &str);
+    /// Native reasoning content from the LLM response (inline thinking).
+    fn on_reasoning(&self, _content: &str) {}
     /// A tool produced its final result with output content.
     fn on_tool_result(&self, _tool_id: &str, _tool_name: &str, _output: &str, _success: bool) {}
     /// Context window usage percentage updated (0.0–100.0).

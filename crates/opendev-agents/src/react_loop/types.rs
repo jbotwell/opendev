@@ -45,28 +45,6 @@ pub static PARALLELIZABLE_TOOLS: &[&str] = &[
     "find_referencing_symbols",
 ];
 
-/// Extended readonly set for thinking-skip heuristic.
-/// Matches Python's `IterationMixin._READONLY_TOOLS`.
-pub(super) static READONLY_TOOLS: &[&str] = &[
-    "read_file",
-    "list_files",
-    "search",
-    "fetch_url",
-    "web_search",
-    "find_symbol",
-    "find_referencing_symbols",
-    "list_todos",
-    "search_tools",
-    "analyze_image",
-    "capture_screenshot",
-    "capture_web_screenshot",
-    "list_sessions",
-    "get_session_history",
-    "list_subagents",
-    "memory_search",
-    "list_agents",
-];
-
 /// Read-only tool names for consecutive-reads detection.
 /// When all tool calls in an iteration are from this set, the consecutive reads
 /// counter increments. After 5 consecutive read-only iterations, a nudge is injected.

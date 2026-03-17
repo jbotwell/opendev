@@ -57,8 +57,6 @@ impl ConfigLoader {
         [
             "model_provider",
             "model",
-            "model_thinking",
-            "model_thinking_provider",
             "model_vlm",
             "model_vlm_provider",
             "model_critique",
@@ -191,12 +189,6 @@ impl ConfigLoader {
 
         // 1. Model-provider pairing: model set without matching provider
         let model_pairs: &[(&str, &Option<String>, &str, &Option<String>)] = &[
-            (
-                "model_thinking",
-                &config.model_thinking,
-                "model_thinking_provider",
-                &config.model_thinking_provider,
-            ),
             (
                 "model_vlm",
                 &config.model_vlm,

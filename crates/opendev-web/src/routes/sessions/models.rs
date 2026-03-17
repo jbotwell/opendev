@@ -12,8 +12,6 @@ use crate::state::AppState;
 pub struct SessionModelUpdate {
     pub model_provider: Option<String>,
     pub model: Option<String>,
-    pub model_thinking_provider: Option<String>,
-    pub model_thinking: Option<String>,
     pub model_vlm_provider: Option<String>,
     pub model_vlm: Option<String>,
     pub model_critique_provider: Option<String>,
@@ -60,12 +58,6 @@ pub(super) async fn update_session_model(
     }
     if let Some(v) = body.model {
         overlay.insert("model".to_string(), serde_json::json!(v));
-    }
-    if let Some(v) = body.model_thinking_provider {
-        overlay.insert("model_thinking_provider".to_string(), serde_json::json!(v));
-    }
-    if let Some(v) = body.model_thinking {
-        overlay.insert("model_thinking".to_string(), serde_json::json!(v));
     }
     if let Some(v) = body.model_vlm_provider {
         overlay.insert("model_vlm_provider".to_string(), serde_json::json!(v));

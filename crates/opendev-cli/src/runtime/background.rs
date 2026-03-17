@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
 use opendev_agents::llm_calls::{LlmCallConfig, LlmCaller};
-use opendev_agents::prompts::create_thinking_composer;
 use opendev_agents::react_loop::{ReactLoop, ReactLoopConfig};
 use opendev_agents::traits::{AgentEventCallback, AgentResult};
 use opendev_context::{ArtifactIndex, ContextCompactor};
@@ -85,18 +84,8 @@ impl BackgroundRuntime {
             diagnostic_provider: None,
         };
 
-        // Set thinking context
-        let thinking_sys_prompt = {
-            let composer = create_thinking_composer("/dev/null");
-            let prompt = composer.compose(&HashMap::new());
-            if prompt.is_empty() {
-                None
-            } else {
-                Some(prompt)
-            }
-        };
-        self.react_loop
-            .set_thinking_context(Some(query.to_string()), thinking_sys_prompt);
+        // Set original task for completion nudge context
+        self.react_loop.set_original_task(Some(query.to_string()));
 
         // Run the ReAct loop (no tool approval — auto-approve everything)
         let cancel_token = interrupt_token.map(|t| t.child_token());
@@ -159,6 +148,7 @@ impl AgentRuntime {
             model: self.llm_caller.config.model.clone(),
             temperature: self.llm_caller.config.temperature,
             max_tokens: self.llm_caller.config.max_tokens,
+            reasoning_effort: self.llm_caller.config.reasoning_effort.clone(),
         });
 
         let react_loop = ReactLoop::new(ReactLoopConfig::default());

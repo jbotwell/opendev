@@ -1,8 +1,8 @@
-//! Slash command execution: /mode, /thinking, /models, /help, etc.
+//! Slash command execution: /mode, /models, /help, etc.
 
 use crate::event::AppEvent;
 
-use super::{App, AutonomyLevel, DisplayMessage, DisplayRole, OperationMode, ThinkingLevel};
+use super::{App, AutonomyLevel, DisplayMessage, DisplayRole, OperationMode};
 
 impl App {
     pub(super) fn push_system_message(&mut self, content: String) {
@@ -51,29 +51,6 @@ impl App {
                     }
                 }
                 self.push_system_message(format!("Mode: {}", self.state.mode));
-            }
-            "thinking" => {
-                match args {
-                    Some(arg) => {
-                        if let Some(level) = ThinkingLevel::from_str_loose(arg) {
-                            self.state.thinking_level = level;
-                        } else {
-                            self.push_system_message(format!(
-                                "Unknown thinking level: '{arg}'. Use: off, low, medium, high"
-                            ));
-                            return;
-                        }
-                    }
-                    None => {
-                        self.state.thinking_level = match self.state.thinking_level {
-                            ThinkingLevel::Off => ThinkingLevel::Low,
-                            ThinkingLevel::Low => ThinkingLevel::Medium,
-                            ThinkingLevel::Medium => ThinkingLevel::High,
-                            ThinkingLevel::High => ThinkingLevel::Off,
-                        };
-                    }
-                }
-                self.push_system_message(format!("Thinking: {}", self.state.thinking_level));
             }
             "autonomy" => {
                 match args {
@@ -323,7 +300,6 @@ impl App {
                         "  /help              — Show this help",
                         "  /clear             — Clear conversation",
                         "  /mode [plan|normal]      — Toggle or set mode",
-                        "  /thinking [off|low|medium|high] — Cycle or set thinking level",
                         "  /autonomy [manual|semi-auto|auto] — Cycle or set autonomy",
                         "  /models [name]     — Show or set model (global)",
                         "  /session-models [name|clear] — Set model for session",
@@ -400,42 +376,6 @@ mod tests {
         assert_eq!(app.state.mode, OperationMode::Plan);
         app.execute_slash_command("/mode");
         assert_eq!(app.state.mode, OperationMode::Normal);
-    }
-
-    #[test]
-    fn test_slash_thinking_with_arg() {
-        let mut app = App::new();
-        app.execute_slash_command("/thinking high");
-        assert_eq!(app.state.thinking_level, ThinkingLevel::High);
-        app.execute_slash_command("/thinking off");
-        assert_eq!(app.state.thinking_level, ThinkingLevel::Off);
-    }
-
-    #[test]
-    fn test_slash_thinking_bad_arg() {
-        let mut app = App::new();
-        let original = app.state.thinking_level;
-        app.execute_slash_command("/thinking bogus");
-        assert_eq!(app.state.thinking_level, original);
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("Unknown thinking")
-        );
-    }
-
-    #[test]
-    fn test_slash_thinking_no_arg_cycles() {
-        let mut app = App::new();
-        // Default is Medium
-        assert_eq!(app.state.thinking_level, ThinkingLevel::Medium);
-        app.execute_slash_command("/thinking");
-        assert_eq!(app.state.thinking_level, ThinkingLevel::High);
-        app.execute_slash_command("/thinking");
-        assert_eq!(app.state.thinking_level, ThinkingLevel::Off);
     }
 
     #[test]
@@ -598,8 +538,8 @@ mod tests {
         let help = &app.state.messages.last().unwrap().content;
         // Check that all major commands appear
         for cmd in &[
-            "mode", "thinking", "autonomy", "models", "mcp", "tasks", "task", "kill", "agents",
-            "skills", "plugins",
+            "mode", "autonomy", "models", "mcp", "tasks", "task", "kill", "agents", "skills",
+            "plugins",
         ] {
             assert!(help.contains(cmd), "Help text missing /{cmd}");
         }

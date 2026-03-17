@@ -145,25 +145,10 @@ impl MainAgent {
             model: config.model.clone(),
             temperature: config.temperature,
             max_tokens: config.max_tokens,
+            reasoning_effort: None,
         };
 
-        let mut llm_caller = LlmCaller::new(llm_config);
-
-        if let Some(ref thinking_model) = config.model_thinking {
-            llm_caller = llm_caller.with_thinking_config(LlmCallConfig {
-                model: thinking_model.clone(),
-                temperature: config.temperature,
-                max_tokens: config.max_tokens,
-            });
-        }
-
-        if let Some(ref critique_model) = config.model_critique {
-            llm_caller = llm_caller.with_critique_config(LlmCallConfig {
-                model: critique_model.clone(),
-                temperature: config.temperature,
-                max_tokens: Some(2048),
-            });
-        }
+        let llm_caller = LlmCaller::new(llm_config);
 
         let tool_schemas = Self::build_schemas(&tool_registry, config.allowed_tools.as_deref());
         let system_prompt = String::new(); // Built lazily via PromptComposer
@@ -550,16 +535,6 @@ mod tests {
         assert!(debug.contains("MainAgent"));
         assert!(debug.contains("gpt-4o"));
         assert!(debug.contains("has_http_client"));
-    }
-
-    #[test]
-    fn test_agent_with_thinking_model() {
-        let agent = make_agent_with_tools();
-        assert!(agent.llm_caller().thinking_config.is_some());
-        assert_eq!(
-            agent.llm_caller().thinking_config.as_ref().unwrap().model,
-            "o1-preview"
-        );
     }
 
     #[tokio::test]

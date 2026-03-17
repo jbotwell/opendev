@@ -313,6 +313,7 @@ fn make_caller() -> LlmCaller {
         model: "gpt-4o".to_string(),
         temperature: Some(0.7),
         max_tokens: Some(4096),
+        reasoning_effort: None,
     })
 }
 
@@ -329,34 +330,6 @@ fn action_payload_includes_tools() {
     assert_eq!(payload["tools"].as_array().unwrap().len(), 1);
     assert_eq!(payload["temperature"], 0.7);
     assert_eq!(payload["max_tokens"], 4096);
-}
-
-/// Thinking payload has no tools.
-#[test]
-fn thinking_payload_has_no_tools() {
-    let caller = make_caller();
-    let messages = vec![serde_json::json!({"role": "user", "content": "think"})];
-    let payload = caller.build_thinking_payload(&messages, None, None);
-
-    assert!(payload.get("tools").is_none());
-    assert!(payload.get("tool_choice").is_none());
-}
-
-/// Thinking payload uses thinking config when set.
-#[test]
-fn thinking_payload_uses_thinking_model() {
-    let caller = make_caller().with_thinking_config(LlmCallConfig {
-        model: "o1-preview".to_string(),
-        temperature: None,
-        max_tokens: Some(8192),
-    });
-    let messages = vec![serde_json::json!({"role": "user", "content": "think"})];
-    let payload = caller.build_thinking_payload(&messages, None, None);
-
-    assert_eq!(payload["model"], "o1-preview");
-    // o1 is a reasoning model — uses max_completion_tokens instead of max_tokens
-    assert_eq!(payload["max_completion_tokens"], 8192);
-    assert!(payload.get("max_tokens").is_none());
 }
 
 /// clean_messages strips underscore-prefixed keys.
@@ -679,53 +652,6 @@ fn doom_loop_varied_calls_no_detection() {
 }
 
 // ========================================================================
-// Thinking skip heuristic
-// ========================================================================
-
-/// should_skip_thinking returns true when all recent tool calls are read-only.
-#[test]
-fn thinking_skip_for_read_only_tools() {
-    let rl = make_loop();
-
-    // Simulate a history with only read-only tool calls
-    let messages = vec![
-        serde_json::json!({"role": "user", "content": "explore the code"}),
-        serde_json::json!({
-            "role": "assistant",
-            "tool_calls": [
-                {"function": {"name": "read_file", "arguments": "{}"}}
-            ]
-        }),
-        serde_json::json!({"role": "tool", "content": "file contents"}),
-        serde_json::json!({
-            "role": "assistant",
-            "tool_calls": [
-                {"function": {"name": "search", "arguments": "{}"}}
-            ]
-        }),
-        serde_json::json!({"role": "tool", "content": "search results"}),
-    ];
-    assert!(rl.should_skip_thinking(&messages));
-}
-
-/// should_skip_thinking returns false when recent tool calls include writes.
-#[test]
-fn thinking_not_skipped_for_write_tools() {
-    let rl = make_loop();
-
-    let messages = vec![
-        serde_json::json!({"role": "user", "content": "fix it"}),
-        serde_json::json!({
-            "role": "assistant",
-            "tool_calls": [
-                {"function": {"name": "write_file", "arguments": "{}"}}
-            ]
-        }),
-        serde_json::json!({"role": "tool", "content": "written"}),
-    ];
-    assert!(!rl.should_skip_thinking(&messages));
-}
-
 // ========================================================================
 // task_complete terminates loop
 // ========================================================================
@@ -777,8 +703,8 @@ fn all_embedded_templates_load() {
 
     assert_eq!(TEMPLATE_COUNT, TEMPLATES.len());
     assert!(
-        TEMPLATE_COUNT >= 84,
-        "expected at least 84 templates, got {TEMPLATE_COUNT}"
+        TEMPLATE_COUNT >= 78,
+        "expected at least 78 templates, got {TEMPLATE_COUNT}"
     );
 
     for (key, content) in TEMPLATES.iter() {

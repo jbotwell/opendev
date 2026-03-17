@@ -141,9 +141,6 @@ impl crate::traits::AgentEventCallback for SubagentEventBridge {
     }
 
     fn on_agent_chunk(&self, _text: &str) {}
-    fn on_thinking(&self, _content: &str) {}
-    fn on_critique(&self, _content: &str) {}
-    fn on_thinking_refined(&self, _content: &str) {}
 
     fn on_token_usage(&self, input_tokens: u64, output_tokens: u64) {
         self.progress
@@ -302,9 +299,6 @@ mod tests {
         use crate::traits::AgentEventCallback;
         // These should not produce any events
         bridge.on_agent_chunk("hello");
-        bridge.on_thinking("thought");
-        bridge.on_critique("critique");
-        bridge.on_thinking_refined("refined");
 
         assert!(recorder.events().is_empty());
     }

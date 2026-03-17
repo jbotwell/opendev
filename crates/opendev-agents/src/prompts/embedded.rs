@@ -39,10 +39,8 @@ pub const SUBAGENTS_SUBAGENT_PROJECT_INIT: &str =
 
 // system/
 pub const SYSTEM_COMPACTION: &str = include_str!("../../templates/system/compaction.md");
-pub const SYSTEM_CRITIQUE: &str = include_str!("../../templates/system/critique.md");
 pub const SYSTEM_INIT: &str = include_str!("../../templates/system/init.md");
 pub const SYSTEM_MAIN: &str = include_str!("../../templates/system/main.md");
-pub const SYSTEM_THINKING: &str = include_str!("../../templates/system/thinking.md");
 
 // system/main/
 pub const SYSTEM_MAIN_MAIN_ACTION_SAFETY: &str =
@@ -89,16 +87,6 @@ pub const SYSTEM_MAIN_MAIN_TOOL_SELECTION: &str =
     include_str!("../../templates/system/main/main-tool-selection.md");
 pub const SYSTEM_MAIN_MAIN_VERIFICATION: &str =
     include_str!("../../templates/system/main/main-verification.md");
-
-// system/thinking/
-pub const SYSTEM_THINKING_THINKING_AVAILABLE_TOOLS: &str =
-    include_str!("../../templates/system/thinking/thinking-available-tools.md");
-pub const SYSTEM_THINKING_THINKING_CODE_REFERENCES: &str =
-    include_str!("../../templates/system/thinking/thinking-code-references.md");
-pub const SYSTEM_THINKING_THINKING_OUTPUT_RULES: &str =
-    include_str!("../../templates/system/thinking/thinking-output-rules.md");
-pub const SYSTEM_THINKING_THINKING_SUBAGENT_GUIDE: &str =
-    include_str!("../../templates/system/thinking/thinking-subagent-guide.md");
 
 // tools/
 pub const TOOLS_TOOL_ANALYZE_IMAGE: &str =
@@ -172,7 +160,7 @@ pub const TOOLS_TOOL_WRITE_TODOS: &str = include_str!("../../templates/tools/too
 // ---------------------------------------------------------------------------
 
 /// Total number of embedded templates.
-pub const TEMPLATE_COUNT: usize = 84;
+pub const TEMPLATE_COUNT: usize = 78;
 
 /// All embedded templates indexed by their relative path.
 ///
@@ -219,10 +207,8 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
 
     // system
     m.insert("system/compaction.md", SYSTEM_COMPACTION);
-    m.insert("system/critique.md", SYSTEM_CRITIQUE);
     m.insert("system/init.md", SYSTEM_INIT);
     m.insert("system/main.md", SYSTEM_MAIN);
-    m.insert("system/thinking.md", SYSTEM_THINKING);
 
     // system/main
     m.insert(
@@ -314,24 +300,6 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
         SYSTEM_MAIN_MAIN_VERIFICATION,
     );
 
-    // system/thinking
-    m.insert(
-        "system/thinking/thinking-available-tools.md",
-        SYSTEM_THINKING_THINKING_AVAILABLE_TOOLS,
-    );
-    m.insert(
-        "system/thinking/thinking-code-references.md",
-        SYSTEM_THINKING_THINKING_CODE_REFERENCES,
-    );
-    m.insert(
-        "system/thinking/thinking-output-rules.md",
-        SYSTEM_THINKING_THINKING_OUTPUT_RULES,
-    );
-    m.insert(
-        "system/thinking/thinking-subagent-guide.md",
-        SYSTEM_THINKING_THINKING_SUBAGENT_GUIDE,
-    );
-
     // tools
     m.insert("tools/tool-analyze-image.md", TOOLS_TOOL_ANALYZE_IMAGE);
     m.insert("tools/tool-apply-patch.md", TOOLS_TOOL_APPLY_PATCH);
@@ -416,15 +384,6 @@ pub fn system_main_templates() -> Vec<(&'static str, &'static str)> {
     TEMPLATES
         .iter()
         .filter(|(k, _)| k.starts_with("system/main/"))
-        .map(|(&k, &v)| (k, v))
-        .collect()
-}
-
-/// Get all embedded templates in the `system/thinking/` category.
-pub fn system_thinking_templates() -> Vec<(&'static str, &'static str)> {
-    TEMPLATES
-        .iter()
-        .filter(|(k, _)| k.starts_with("system/thinking/"))
         .map(|(&k, &v)| (k, v))
         .collect()
 }

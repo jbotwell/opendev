@@ -168,8 +168,6 @@ pub async fn run_setup_wizard() -> Result<AppConfig, SetupError> {
         model: model_id.clone(),
         api_key: Some(api_key),
         auto_save_interval: 5,
-        model_thinking: Some(thinking_model.clone()),
-        model_thinking_provider: Some(thinking_provider.clone()),
         model_critique: Some(critique_model.clone()),
         model_critique_provider: Some(critique_provider.clone()),
         model_vlm: Some(vlm_model.clone()),

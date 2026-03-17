@@ -7,7 +7,7 @@ use std::time::Instant;
 use crate::history::CommandHistory;
 use crate::widgets::{TodoDisplayItem, WelcomePanelState};
 
-use super::{AutonomyLevel, DisplayMessage, OperationMode, ThinkingLevel, ToolExecution};
+use super::{AutonomyLevel, DisplayMessage, OperationMode, ToolExecution};
 
 /// Persistent application state shared across renders.
 #[derive(Debug)]
@@ -18,8 +18,6 @@ pub struct AppState {
     pub mode: OperationMode,
     /// Autonomy level (Manual / Semi-Auto / Auto).
     pub autonomy: AutonomyLevel,
-    /// Thinking level (Off / Low / Medium / High).
-    pub thinking_level: ThinkingLevel,
     /// Active model name.
     pub model: String,
     /// Current working directory.
@@ -42,8 +40,6 @@ pub struct AppState {
     pub agent_active: bool,
     /// Conversation messages for display.
     pub messages: Vec<DisplayMessage>,
-    /// Thinking trace blocks for the current turn.
-    pub thinking_blocks: Vec<crate::widgets::thinking::ThinkingBlock>,
     /// Current task progress (while agent is working).
     pub task_progress: Option<crate::widgets::progress::TaskProgress>,
     /// Spinner state for animation.
@@ -135,7 +131,6 @@ impl Default for AppState {
             running: true,
             mode: OperationMode::Normal,
             autonomy: AutonomyLevel::Manual,
-            thinking_level: ThinkingLevel::Medium,
             model: String::from("claude-sonnet-4"),
             working_dir: String::from("."),
             git_branch: None,
@@ -147,7 +142,6 @@ impl Default for AppState {
             mcp_has_errors: false,
             agent_active: false,
             messages: Vec::new(),
-            thinking_blocks: Vec::new(),
             task_progress: None,
             spinner: crate::widgets::spinner::SpinnerState::new(),
             input_buffer: String::new(),

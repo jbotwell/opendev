@@ -123,7 +123,6 @@ impl App {
             self.state.mode,
         )
         .autonomy(self.state.autonomy)
-        .thinking_level(self.state.thinking_level)
         .context_usage_pct(self.state.context_usage_pct)
         .session_cost(self.state.session_cost)
         .mcp_status(self.state.mcp_status, self.state.mcp_has_errors)

@@ -6,7 +6,6 @@ use std::sync::Arc;
 use chrono::Utc;
 use tracing::{debug, info, warn};
 
-use opendev_agents::prompts::create_thinking_composer;
 use opendev_agents::traits::{AgentError, AgentEventCallback, AgentResult};
 use opendev_context::ContextCompactor;
 use opendev_history::topic_detector::SimpleMessage;
@@ -142,18 +141,8 @@ impl AgentRuntime {
             diagnostic_provider: None,
         };
 
-        // Step 6: Set thinking context for this query
-        let thinking_sys_prompt = {
-            let composer = create_thinking_composer("/dev/null");
-            let prompt = composer.compose(&HashMap::new());
-            if prompt.is_empty() {
-                None
-            } else {
-                Some(prompt)
-            }
-        };
-        self.react_loop
-            .set_thinking_context(Some(query.to_string()), thinking_sys_prompt);
+        // Step 6: Set original task for completion nudge context
+        self.react_loop.set_original_task(Some(query.to_string()));
 
         // Step 6b: Snapshot workspace state before the react loop
         let pre_snapshot = if let Ok(mut mgr) = self.snapshot_manager.lock() {

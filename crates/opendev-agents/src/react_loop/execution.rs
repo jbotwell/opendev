@@ -10,7 +10,6 @@ use crate::subagents::spec::PermissionAction;
 use crate::agent_types::PartialResult;
 use crate::doom_loop::{DoomLoopAction, DoomLoopDetector, RecoveryAction};
 use crate::llm_calls::LlmCaller;
-use crate::prompts::embedded;
 use crate::prompts::reminders::{
     MessageClass, append_directive, append_nudge, get_reminder, inject_system_message,
 };
@@ -178,130 +177,6 @@ impl ReactLoop {
                 }
             }
 
-            // Thinking phase (before action)
-            // Mirrors Python's 3-step flow: think → critique → refine → inject
-            let skip_thinking = self.should_skip_thinking(messages);
-            let effective_level = self.config.effective_thinking_level();
-            if effective_level.is_enabled() && !skip_thinking {
-                let _thinking_span = info_span!(
-                    "thinking_phase",
-                    iteration = iteration,
-                    level = %effective_level,
-                );
-                let _thinking_guard = _thinking_span.enter();
-                drop(_thinking_guard);
-                // Build analysis prompt based on original task and todo state
-                let analysis_prompt = if let Some(mgr) = todo_manager
-                    && let Ok(mgr) = mgr.lock()
-                    && mgr.has_todos()
-                {
-                    let task = self.config.original_task.as_deref().unwrap_or("(unknown)");
-                    Some(get_reminder(
-                        "thinking_analysis_prompt_with_todos",
-                        &[
-                            ("original_task", task),
-                            ("done_count", &mgr.completed_count().to_string()),
-                            ("total_count", &mgr.total().to_string()),
-                            ("todo_status", &mgr.format_status_sorted()),
-                        ],
-                    ))
-                } else {
-                    self.config.original_task.as_deref().map(|task| {
-                        get_reminder("thinking_analysis_prompt", &[("original_task", task)])
-                    })
-                };
-
-                let thinking_payload = caller.build_thinking_payload(
-                    messages,
-                    self.config.thinking_system_prompt.as_deref(),
-                    analysis_prompt.as_deref(),
-                );
-                debug!(iteration, "Running thinking phase");
-
-                match http_client.post_json(&thinking_payload, cancel).await {
-                    Ok(thinking_result) if thinking_result.success => {
-                        if let Some(ref body) = thinking_result.body {
-                            let thinking_resp = caller.parse_thinking_response(body);
-                            if let Some(ref trace) = thinking_resp.content {
-                                if let Some(cb) = event_callback {
-                                    cb.on_thinking(trace);
-                                }
-
-                                // The trace to inject — may be refined by critique
-                                let mut final_trace = trace.clone();
-
-                                // Critique + refinement phase (High level only)
-                                if effective_level.use_critique() {
-                                    let critique_system = embedded::SYSTEM_CRITIQUE;
-                                    let critique_payload =
-                                        caller.build_critique_payload(trace, critique_system);
-
-                                    if let Ok(critique_result) =
-                                        http_client.post_json(&critique_payload, cancel).await
-                                        && critique_result.success
-                                        && let Some(ref cbody) = critique_result.body
-                                    {
-                                        let critique_resp = caller.parse_critique_response(cbody);
-                                        if let Some(ref critique_text) = critique_resp.content {
-                                            if let Some(cb) = event_callback {
-                                                cb.on_critique(critique_text);
-                                            }
-
-                                            // Refinement step: use critique to
-                                            // improve the thinking trace
-                                            let thinking_sys = self
-                                                .config
-                                                .thinking_system_prompt
-                                                .as_deref()
-                                                .unwrap_or(embedded::SYSTEM_THINKING);
-                                            let refine_payload = caller.build_refinement_payload(
-                                                thinking_sys,
-                                                trace,
-                                                critique_text,
-                                            );
-
-                                            if let Ok(refine_result) =
-                                                http_client.post_json(&refine_payload, cancel).await
-                                                && refine_result.success
-                                                && let Some(ref rbody) = refine_result.body
-                                            {
-                                                let refine_resp =
-                                                    caller.parse_thinking_response(rbody);
-                                                if let Some(ref refined) = refine_resp.content {
-                                                    if let Some(cb) = event_callback {
-                                                        cb.on_thinking_refined(refined);
-                                                    }
-                                                    final_trace = refined.clone();
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Remove any previous thinking trace message from messages
-                                // to prevent accumulation across iterations.
-                                messages.retain(|m| {
-                                    m.get("_thinking").and_then(|v| v.as_bool()) != Some(true)
-                                });
-
-                                // Inject thinking trace as a tagged user message.
-                                messages.push(serde_json::json!({
-                                    "role": "user",
-                                    "content": get_reminder("thinking_trace_reminder", &[("thinking_trace", &final_trace)]),
-                                    "_thinking": true
-                                }));
-                            }
-                        }
-                    }
-                    Ok(_) => {
-                        debug!(iteration, "Thinking call returned non-success, skipping");
-                    }
-                    Err(e) => {
-                        warn!(iteration, error = %e, "Thinking phase failed, proceeding to action");
-                    }
-                }
-            }
-
             // Build payload and send via HttpClient.
             // Apply skill model override if set (from invoke_skill metadata).
             let mut payload = caller.build_action_payload(messages, tool_schemas);
@@ -370,6 +245,13 @@ impl ReactLoop {
                 .as_ref()
                 .and_then(|u| u.get("completion_tokens").and_then(|t| t.as_u64()))
                 .unwrap_or(0);
+
+            // Emit reasoning content to TUI if present
+            if let Some(cb) = event_callback
+                && let Some(ref reasoning) = response.reasoning_content
+            {
+                cb.on_reasoning(reasoning);
+            }
 
             // Track token usage
             if let Some(monitor) = task_monitor

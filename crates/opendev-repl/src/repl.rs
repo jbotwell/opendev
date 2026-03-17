@@ -7,7 +7,7 @@ use std::io::{self, BufRead, Write};
 use tracing::{info, warn};
 
 use opendev_history::SessionManager;
-use opendev_runtime::{AutonomyLevel, ThinkingLevel};
+use opendev_runtime::AutonomyLevel;
 use opendev_tools_core::ToolRegistry;
 
 use crate::commands::{BuiltinCommands, CommandOutcome};
@@ -36,8 +36,6 @@ impl std::fmt::Display for OperationMode {
 pub struct ReplState {
     /// Current operation mode.
     pub mode: OperationMode,
-    /// Current thinking level.
-    pub thinking_level: ThinkingLevel,
     /// Current autonomy level.
     pub autonomy_level: AutonomyLevel,
     /// Whether the REPL is running.
@@ -62,7 +60,6 @@ impl Default for ReplState {
     fn default() -> Self {
         Self {
             mode: OperationMode::Normal,
-            thinking_level: ThinkingLevel::default(),
             autonomy_level: AutonomyLevel::default(),
             running: true,
             last_prompt: String::new(),
@@ -186,8 +183,8 @@ impl Repl {
         println!("OpenDev -- AI-powered coding assistant");
         println!("Type /help for commands, /exit to quit.");
         println!(
-            "Mode: {} | Thinking: {} | Autonomy: {}",
-            self.state.mode, self.state.thinking_level, self.state.autonomy_level
+            "Mode: {} | Autonomy: {}",
+            self.state.mode, self.state.autonomy_level
         );
         println!();
     }
@@ -257,8 +254,6 @@ impl Repl {
         self.session_manager
             .set_metadata("mode", &self.state.mode.to_string());
         self.session_manager
-            .set_metadata("thinking_level", &self.state.thinking_level.to_string());
-        self.session_manager
             .set_metadata("autonomy_level", &self.state.autonomy_level.to_string());
 
         if let Err(e) = self.session_manager.save_current() {
@@ -282,7 +277,6 @@ mod tests {
     fn test_repl_state_default() {
         let state = ReplState::default();
         assert_eq!(state.mode, OperationMode::Normal);
-        assert_eq!(state.thinking_level, ThinkingLevel::Medium);
         assert_eq!(state.autonomy_level, AutonomyLevel::SemiAuto);
         assert!(state.running);
         assert!(state.last_prompt.is_empty());
@@ -290,14 +284,6 @@ mod tests {
         assert!(state.last_error.is_none());
         assert!(state.last_latency_ms.is_none());
         assert!(!state.pending_plan_request);
-    }
-
-    #[test]
-    fn test_thinking_level_in_state() {
-        let mut state = ReplState::default();
-        state.thinking_level = ThinkingLevel::High;
-        assert_eq!(state.thinking_level, ThinkingLevel::High);
-        assert!(state.thinking_level.use_critique());
     }
 
     #[test]

@@ -616,34 +616,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_field_model_without_provider() {
-        let mut config = AppConfig::default();
-        config.model_thinking = Some("gpt-4o-thinking".to_string());
-        // model_thinking_provider left as None
-        let warnings = ConfigLoader::validate_cross_field(&config);
-        assert!(
-            warnings
-                .iter()
-                .any(|w| w.contains("model_thinking") && w.contains("model_thinking_provider")),
-            "Should warn about missing thinking provider: {:?}",
-            warnings
-        );
-    }
-
-    #[test]
-    fn test_cross_field_model_with_provider_no_warning() {
-        let mut config = AppConfig::default();
-        config.model_thinking = Some("gpt-4o".to_string());
-        config.model_thinking_provider = Some("openai".to_string());
-        let warnings = ConfigLoader::validate_cross_field(&config);
-        assert!(
-            !warnings.iter().any(|w| w.contains("model_thinking")),
-            "Should not warn when provider is set: {:?}",
-            warnings
-        );
-    }
-
-    #[test]
     fn test_cross_field_playbook_weights_sum() {
         let mut config = AppConfig::default();
         config.playbook.scoring_weights.effectiveness = 0.9;
@@ -776,12 +748,11 @@ mod tests {
     #[test]
     fn test_cross_field_multiple_warnings() {
         let mut config = AppConfig::default();
-        config.model_thinking = Some("test".to_string());
         config.bash_timeout = 0;
         config.max_context_tokens = 100;
         let warnings = ConfigLoader::validate_cross_field(&config);
         assert!(
-            warnings.len() >= 3,
+            warnings.len() >= 2,
             "Should have multiple warnings: {:?}",
             warnings
         );

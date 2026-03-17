@@ -59,18 +59,10 @@ impl AgentEventCallback for TuiEventCallback {
         let _ = self.tx.send(AppEvent::AgentChunk(text.to_string()));
     }
 
-    fn on_thinking(&self, content: &str) {
-        let _ = self.tx.send(AppEvent::ThinkingTrace(content.to_string()));
-    }
-
-    fn on_critique(&self, content: &str) {
-        let _ = self.tx.send(AppEvent::CritiqueTrace(content.to_string()));
-    }
-
-    fn on_thinking_refined(&self, content: &str) {
+    fn on_reasoning(&self, content: &str) {
         let _ = self
             .tx
-            .send(AppEvent::RefinedThinkingTrace(content.to_string()));
+            .send(AppEvent::ReasoningContent(content.to_string()));
     }
 
     fn on_context_usage(&self, pct: f64) {

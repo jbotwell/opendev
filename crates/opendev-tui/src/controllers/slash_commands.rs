@@ -81,11 +81,7 @@ pub const BUILTIN_COMMANDS: &[SlashCommand] = &[
         name: "plugins",
         description: "manage plugins and marketplaces",
     },
-    // Thinking and autonomy
-    SlashCommand {
-        name: "thinking",
-        description: "set thinking level (off/low/medium/high)",
-    },
+    // Autonomy
     SlashCommand {
         name: "autonomy",
         description: "set autonomy level (manual/semi-auto/auto)",
@@ -149,7 +145,6 @@ mod tests {
 
     #[test]
     fn test_builtin_count() {
-        // Ensure we have all 19 commands
-        assert_eq!(BUILTIN_COMMANDS.len(), 19);
+        assert_eq!(BUILTIN_COMMANDS.len(), 18);
     }
 }

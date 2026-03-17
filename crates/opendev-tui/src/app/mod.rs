@@ -1,7 +1,7 @@
 //! Main TUI application struct and event loop.
 //!
 //! This module is split into focused sub-modules:
-//! - [`enums`] — OperationMode, AutonomyLevel, ThinkingLevel
+//! - [`enums`] — OperationMode, AutonomyLevel
 //! - [`types`] — DisplayMessage, DisplayRole, RoleStyle, DisplayToolCall, ToolState, ToolExecution
 //! - [`state`] — AppState struct and Default impl
 //! - [`cache`] — Conversation message caching and incremental rebuild
@@ -21,7 +21,7 @@ mod state;
 mod tick;
 mod types;
 
-pub use enums::{AutonomyLevel, OperationMode, ThinkingLevel};
+pub use enums::{AutonomyLevel, OperationMode};
 pub use state::AppState;
 pub use types::{
     DisplayMessage, DisplayRole, DisplayToolCall, RoleStyle, ToolExecution, ToolState,

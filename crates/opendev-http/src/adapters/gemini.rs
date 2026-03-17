@@ -193,11 +193,34 @@ impl GeminiAdapter {
             .cloned()
             .unwrap_or_default();
 
-        // Extract text parts
+        // Extract text parts (skip parts that are thought-only)
         let text_parts: Vec<String> = parts
             .iter()
-            .filter_map(|p| p.get("text").and_then(|t| t.as_str()).map(String::from))
+            .filter_map(|p| {
+                // Skip parts that have thought=true (Gemini thinking)
+                if p.get("thought").and_then(|t| t.as_bool()) == Some(true) {
+                    return None;
+                }
+                p.get("text").and_then(|t| t.as_str()).map(String::from)
+            })
             .collect();
+
+        // Extract thinking/reasoning content from thought parts
+        let thinking_parts: Vec<String> = parts
+            .iter()
+            .filter_map(|p| {
+                if p.get("thought").and_then(|t| t.as_bool()) == Some(true) {
+                    p.get("text").and_then(|t| t.as_str()).map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let reasoning_content = if thinking_parts.is_empty() {
+            None
+        } else {
+            Some(thinking_parts.join("\n\n"))
+        };
 
         // Extract function calls
         let tool_calls: Vec<Value> = parts
@@ -249,6 +272,9 @@ impl GeminiAdapter {
 
         if !tool_calls.is_empty() {
             message["tool_calls"] = Value::Array(tool_calls);
+        }
+        if let Some(ref reasoning) = reasoning_content {
+            message["reasoning_content"] = Value::String(reasoning.clone());
         }
 
         // Usage

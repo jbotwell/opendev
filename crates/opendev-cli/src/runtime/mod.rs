@@ -398,6 +398,7 @@ impl AgentRuntime {
                 None
             },
             max_tokens: Some(model_max_tokens),
+            reasoning_effort: None,
         });
 
         let react_loop = ReactLoop::new(ReactLoopConfig::default());

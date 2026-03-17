@@ -58,12 +58,6 @@ impl CommandCompleter {
                 ("plan", "Read-only tools, planning mode"),
                 ("normal", "Full tool access, normal mode"),
             ],
-            "thinking" => vec![
-                ("off", "Disable thinking"),
-                ("low", "Basic reasoning"),
-                ("medium", "Standard reasoning"),
-                ("high", "Deep reasoning with critique"),
-            ],
             "autonomy" => vec![
                 ("manual", "All commands require approval"),
                 ("semi-auto", "Safe commands auto-approved"),
@@ -331,13 +325,6 @@ mod tests {
         let results = c.complete_args("mode", "pl");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].label, "plan");
-    }
-
-    #[test]
-    fn test_arg_completion_thinking() {
-        let c = CommandCompleter::new(None);
-        let results = c.complete_args("thinking", "");
-        assert_eq!(results.len(), 4);
     }
 
     #[test]

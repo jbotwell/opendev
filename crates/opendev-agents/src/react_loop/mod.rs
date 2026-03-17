@@ -18,7 +18,7 @@ use std::sync::Mutex;
 
 use crate::response::ResponseCleaner;
 
-use types::{PARALLELIZABLE_TOOLS as PARALLEL, READONLY_TOOLS};
+use types::PARALLELIZABLE_TOOLS as PARALLEL;
 
 /// The ReAct (Reason-Act) execution loop.
 ///
@@ -29,12 +29,10 @@ use types::{PARALLELIZABLE_TOOLS as PARALLEL, READONLY_TOOLS};
 /// - Parallel execution of read-only tools
 /// - Todo completion checking
 /// - Doom-loop cycle detection
-/// - Thinking-skip heuristic
 pub struct ReactLoop {
     pub(super) config: ReactLoopConfig,
     _cleaner: ResponseCleaner,
     pub(super) parallelizable: HashSet<&'static str>,
-    pub(super) readonly_tools: HashSet<&'static str>,
     /// Accumulated per-iteration metrics over the session.
     pub(super) iteration_metrics: Mutex<Vec<IterationMetrics>>,
 }
@@ -47,7 +45,6 @@ impl ReactLoop {
             _cleaner: ResponseCleaner::new(),
             iteration_metrics: Mutex::new(Vec::new()),
             parallelizable: PARALLEL.iter().copied().collect(),
-            readonly_tools: READONLY_TOOLS.iter().copied().collect(),
         }
     }
 

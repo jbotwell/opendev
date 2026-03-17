@@ -3,29 +3,19 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use opendev_runtime::ThinkingLevel;
-
 use super::roles::AgentRole;
 
 /// Full definition of an agent's configuration.
 ///
-/// Combines a role with customizable system prompt, thinking level,
-/// tool access, and optional per-agent model overrides for the
-/// thinking and critique phases.
+/// Combines a role with customizable system prompt and tool access.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentDefinition {
     /// The agent's role.
     pub role: AgentRole,
     /// Custom system prompt (overrides the role default if set).
     pub system_prompt: Option<String>,
-    /// Thinking level (overrides the role default if set).
-    pub thinking_level: Option<ThinkingLevel>,
     /// Allowed tool names. Empty means all tools are available.
     pub tools: Vec<String>,
-    /// Optional model override for the thinking phase.
-    pub thinking_model: Option<String>,
-    /// Optional model override for the critique phase.
-    pub critique_model: Option<String>,
 }
 
 impl AgentDefinition {
@@ -34,10 +24,7 @@ impl AgentDefinition {
         Self {
             role,
             system_prompt: None,
-            thinking_level: None,
             tools: role.default_tools(),
-            thinking_model: None,
-            critique_model: None,
         }
     }
 
@@ -48,39 +35,15 @@ impl AgentDefinition {
             .unwrap_or_else(|| self.role.default_system_prompt())
     }
 
-    /// Get the effective thinking level (custom or role default).
-    pub fn effective_thinking_level(&self) -> ThinkingLevel {
-        self.thinking_level
-            .unwrap_or_else(|| self.role.default_thinking_level())
-    }
-
     /// Set a custom system prompt.
     pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(prompt.into());
         self
     }
 
-    /// Set a custom thinking level.
-    pub fn with_thinking_level(mut self, level: ThinkingLevel) -> Self {
-        self.thinking_level = Some(level);
-        self
-    }
-
     /// Set the tool allowlist.
     pub fn with_tools(mut self, tools: Vec<String>) -> Self {
         self.tools = tools;
-        self
-    }
-
-    /// Set the thinking model override.
-    pub fn with_thinking_model(mut self, model: impl Into<String>) -> Self {
-        self.thinking_model = Some(model.into());
-        self
-    }
-
-    /// Set the critique model override.
-    pub fn with_critique_model(mut self, model: impl Into<String>) -> Self {
-        self.critique_model = Some(model.into());
         self
     }
 
@@ -118,9 +81,6 @@ mod tests {
         let def = AgentDefinition::from_role(AgentRole::Code);
         assert_eq!(def.role, AgentRole::Code);
         assert!(def.system_prompt.is_none());
-        assert!(def.thinking_level.is_none());
-        assert!(def.thinking_model.is_none());
-        assert!(def.critique_model.is_none());
     }
 
     #[test]
@@ -129,23 +89,6 @@ mod tests {
         assert!(def.effective_system_prompt().contains("coding agent"));
         let def = def.with_system_prompt("Custom prompt");
         assert_eq!(def.effective_system_prompt(), "Custom prompt");
-    }
-
-    #[test]
-    fn test_agent_definition_effective_thinking_level() {
-        let def = AgentDefinition::from_role(AgentRole::Plan);
-        assert_eq!(def.effective_thinking_level(), ThinkingLevel::High);
-        let def = def.with_thinking_level(ThinkingLevel::Off);
-        assert_eq!(def.effective_thinking_level(), ThinkingLevel::Off);
-    }
-
-    #[test]
-    fn test_agent_definition_with_models() {
-        let def = AgentDefinition::from_role(AgentRole::Code)
-            .with_thinking_model("gpt-4o")
-            .with_critique_model("claude-3-haiku");
-        assert_eq!(def.thinking_model.as_deref(), Some("gpt-4o"));
-        assert_eq!(def.critique_model.as_deref(), Some("claude-3-haiku"));
     }
 
     #[test]
@@ -188,13 +131,9 @@ mod tests {
 
     #[test]
     fn test_agent_definition_serialization() {
-        let def = AgentDefinition::from_role(AgentRole::Test)
-            .with_thinking_model("gpt-4o")
-            .with_critique_model("claude-3-haiku");
+        let def = AgentDefinition::from_role(AgentRole::Test);
         let json = serde_json::to_string(&def).unwrap();
         let roundtrip: AgentDefinition = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtrip.role, AgentRole::Test);
-        assert_eq!(roundtrip.thinking_model.as_deref(), Some("gpt-4o"));
-        assert_eq!(roundtrip.critique_model.as_deref(), Some("claude-3-haiku"));
     }
 }

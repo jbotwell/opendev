@@ -57,9 +57,6 @@ impl AutonomyLevel {
     }
 }
 
-/// Re-export ThinkingLevel from opendev-runtime for convenience.
-pub use opendev_runtime::ThinkingLevel;
-
 #[cfg(test)]
 mod tests {
     use super::*;

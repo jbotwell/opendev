@@ -40,6 +40,7 @@ impl RecordedEvent {
             AppEvent::Tick => ("Tick".to_string(), serde_json::Value::Null),
             AppEvent::AgentStarted => ("AgentStarted".to_string(), serde_json::Value::Null),
             AppEvent::AgentChunk(s) => ("AgentChunk".to_string(), serde_json::json!({"chunk": s})),
+            AppEvent::ReasoningContent(s) => ("ReasoningContent".to_string(), serde_json::json!({"content": s})),
             AppEvent::AgentMessage(msg) => (
                 "AgentMessage".to_string(),
                 serde_json::to_value(msg).unwrap_or(serde_json::Value::Null),
@@ -162,16 +163,6 @@ impl RecordedEvent {
                     "output_tokens": output_tokens,
                 }),
             ),
-            AppEvent::ThinkingTrace(s) => {
-                ("ThinkingTrace".to_string(), serde_json::json!({"trace": s}))
-            }
-            AppEvent::CritiqueTrace(s) => {
-                ("CritiqueTrace".to_string(), serde_json::json!({"trace": s}))
-            }
-            AppEvent::RefinedThinkingTrace(s) => (
-                "RefinedThinkingTrace".to_string(),
-                serde_json::json!({"trace": s}),
-            ),
             AppEvent::TaskProgressStarted { description } => (
                 "TaskProgressStarted".to_string(),
                 serde_json::json!({"description": description}),
@@ -290,6 +281,10 @@ impl RecordedEvent {
             "AgentChunk" => {
                 let chunk = self.payload.get("chunk")?.as_str()?.to_string();
                 Some(AppEvent::AgentChunk(chunk))
+            }
+            "ReasoningContent" => {
+                let content = self.payload.get("content")?.as_str()?.to_string();
+                Some(AppEvent::ReasoningContent(content))
             }
             "AgentMessage" => {
                 let msg: ChatMessage = serde_json::from_value(self.payload.clone()).ok()?;
@@ -418,18 +413,8 @@ impl RecordedEvent {
                     output_tokens,
                 })
             }
-            "ThinkingTrace" => {
-                let trace = self.payload.get("trace")?.as_str()?.to_string();
-                Some(AppEvent::ThinkingTrace(trace))
-            }
-            "CritiqueTrace" => {
-                let trace = self.payload.get("trace")?.as_str()?.to_string();
-                Some(AppEvent::CritiqueTrace(trace))
-            }
-            "RefinedThinkingTrace" => {
-                let trace = self.payload.get("trace")?.as_str()?.to_string();
-                Some(AppEvent::RefinedThinkingTrace(trace))
-            }
+            // Legacy thinking traces — no longer used, skip during replay
+            "ThinkingTrace" | "CritiqueTrace" | "RefinedThinkingTrace" => None,
             "TaskProgressStarted" => {
                 let description = self.payload.get("description")?.as_str()?.to_string();
                 Some(AppEvent::TaskProgressStarted { description })

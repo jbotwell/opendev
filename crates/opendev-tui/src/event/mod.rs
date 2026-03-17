@@ -127,13 +127,9 @@ pub enum AppEvent {
         output_tokens: u64,
     },
 
-    // -- Thinking events --
-    /// A thinking trace was produced before the action phase.
-    ThinkingTrace(String),
-    /// A self-critique was produced (High thinking level only).
-    CritiqueTrace(String),
-    /// A refined thinking trace was produced after critique (High thinking level only).
-    RefinedThinkingTrace(String),
+    // -- Reasoning events --
+    /// Native reasoning content from LLM response (inline thinking).
+    ReasoningContent(String),
 
     // -- Task progress events --
     /// Agent started working on a task (shows progress bar).

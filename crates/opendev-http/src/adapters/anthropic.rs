@@ -196,6 +196,17 @@ impl AnthropicAdapter {
                         {
                             let mut content_blocks: Vec<Value> = Vec::new();
 
+                            // Echo thinking blocks back (required by Anthropic API)
+                            if let Some(reasoning) =
+                                msg.get("reasoning_content").and_then(|r| r.as_str())
+                                && !reasoning.is_empty()
+                            {
+                                content_blocks.push(json!({
+                                    "type": "thinking",
+                                    "thinking": reasoning
+                                }));
+                            }
+
                             // Add text content if present
                             if let Some(text) = msg.get("content").and_then(|c| c.as_str())
                                 && !text.is_empty()
@@ -229,7 +240,32 @@ impl AnthropicAdapter {
                                 "content": content_blocks
                             }));
                         } else {
-                            converted.push(msg.clone());
+                            // Non-tool-call assistant messages may also have reasoning
+                            if let Some(reasoning) =
+                                msg.get("reasoning_content").and_then(|r| r.as_str())
+                                && !reasoning.is_empty()
+                            {
+                                let text = msg
+                                    .get("content")
+                                    .and_then(|c| c.as_str())
+                                    .unwrap_or("");
+                                let mut content_blocks = vec![json!({
+                                    "type": "thinking",
+                                    "thinking": reasoning
+                                })];
+                                if !text.is_empty() {
+                                    content_blocks.push(json!({
+                                        "type": "text",
+                                        "text": text
+                                    }));
+                                }
+                                converted.push(json!({
+                                    "role": "assistant",
+                                    "content": content_blocks
+                                }));
+                            } else {
+                                converted.push(msg.clone());
+                            }
                         }
                     }
                     "tool" => {
@@ -319,6 +355,23 @@ impl AnthropicAdapter {
             .collect::<Vec<_>>()
             .join("");
 
+        // Extract thinking blocks → reasoning_content
+        let thinking_parts: Vec<String> = blocks
+            .iter()
+            .filter_map(|b| {
+                if b.get("type").and_then(|t| t.as_str()) == Some("thinking") {
+                    b.get("thinking").and_then(|t| t.as_str()).map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let reasoning_content = if thinking_parts.is_empty() {
+            None
+        } else {
+            Some(thinking_parts.join("\n\n"))
+        };
+
         // Extract tool_use blocks → Chat Completions tool_calls
         let tool_calls: Vec<Value> = blocks
             .iter()
@@ -367,6 +420,9 @@ impl AnthropicAdapter {
         if !tool_calls.is_empty() {
             message["tool_calls"] = json!(tool_calls);
         }
+        if let Some(ref reasoning) = reasoning_content {
+            message["reasoning_content"] = json!(reasoning);
+        }
 
         json!({
             "id": response.get("id").cloned().unwrap_or(json!("")),
@@ -389,6 +445,17 @@ impl AnthropicAdapter {
     }
 }
 
+/// Check if a model supports extended thinking (Claude 3.7+).
+fn supports_thinking(model: &str) -> bool {
+    let m = model.to_lowercase();
+    m.starts_with("claude-3-7")
+        || m.starts_with("claude-3.7")
+        || m.starts_with("claude-4")
+        || m.starts_with("claude-opus")
+        || m.starts_with("claude-sonnet-4")
+        || m.starts_with("claude-sonnet-5")
+}
+
 impl Default for AnthropicAdapter {
     fn default() -> Self {
         Self::new()
@@ -402,11 +469,50 @@ impl super::base::ProviderAdapter for AnthropicAdapter {
     }
 
     fn convert_request(&self, mut payload: Value) -> Value {
+        // Extract and handle reasoning effort before other conversions
+        let reasoning_effort = payload
+            .as_object_mut()
+            .and_then(|obj| obj.remove("_reasoning_effort"))
+            .and_then(|v| v.as_str().map(String::from));
+
         Self::extract_system(&mut payload);
         Self::convert_image_blocks(&mut payload);
         Self::convert_tools(&mut payload);
         Self::convert_tool_messages(&mut payload);
         Self::ensure_max_tokens(&mut payload);
+
+        // Configure extended thinking if requested and supported
+        let model = payload
+            .get("model")
+            .and_then(|m| m.as_str())
+            .unwrap_or("")
+            .to_string();
+        if let Some(ref effort) = reasoning_effort
+            && effort != "none"
+            && supports_thinking(&model)
+        {
+            let budget_tokens: u64 = match effort.as_str() {
+                "low" => 4096,
+                "medium" => 10000,
+                "high" => 20000,
+                _ => 10000,
+            };
+            payload["thinking"] = json!({
+                "type": "enabled",
+                "budget_tokens": budget_tokens
+            });
+            // Anthropic requires temperature=1 for extended thinking
+            payload["temperature"] = json!(1);
+            // Ensure max_tokens >= budget_tokens + 1024
+            let current_max = payload
+                .get("max_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(16384);
+            let min_max = budget_tokens + 1024;
+            if current_max < min_max {
+                payload["max_tokens"] = json!(min_max);
+            }
+        }
 
         if self.enable_caching {
             Self::add_cache_control(&mut payload);
@@ -433,8 +539,15 @@ impl super::base::ProviderAdapter for AnthropicAdapter {
 
     fn extra_headers(&self) -> Vec<(String, String)> {
         let mut headers = vec![("anthropic-version".into(), ANTHROPIC_VERSION.into())];
+        // Build beta features list
+        let mut beta_features = Vec::new();
         if self.enable_caching {
-            headers.push(("anthropic-beta".into(), "prompt-caching-2024-07-31".into()));
+            beta_features.push("prompt-caching-2024-07-31");
+        }
+        // Always include thinking beta — harmless when thinking isn't enabled
+        beta_features.push("interleaved-thinking-2025-05-14");
+        if !beta_features.is_empty() {
+            headers.push(("anthropic-beta".into(), beta_features.join(",")));
         }
         headers
     }
@@ -472,7 +585,9 @@ mod tests {
                 .iter()
                 .any(|(k, v)| k == "anthropic-version" && v == ANTHROPIC_VERSION)
         );
-        assert!(headers.iter().any(|(k, _)| k == "anthropic-beta"));
+        assert!(headers.iter().any(|(k, v)| k == "anthropic-beta"
+            && v.contains("prompt-caching-2024-07-31")
+            && v.contains("interleaved-thinking-2025-05-14")));
     }
 
     #[test]
@@ -480,7 +595,9 @@ mod tests {
         let adapter = AnthropicAdapter::new().with_caching(false);
         let headers = adapter.extra_headers();
         assert!(headers.iter().any(|(k, _)| k == "anthropic-version"));
-        assert!(!headers.iter().any(|(k, _)| k == "anthropic-beta"));
+        // Still has beta header for thinking
+        assert!(headers.iter().any(|(k, v)| k == "anthropic-beta"
+            && v.contains("interleaved-thinking-2025-05-14")));
     }
 
     #[test]
@@ -577,5 +694,124 @@ mod tests {
         });
         let result = AnthropicAdapter::response_to_chat_completions(response);
         assert_eq!(result["choices"][0]["finish_reason"], "tool_calls");
+    }
+
+    #[test]
+    fn test_response_extracts_thinking_blocks() {
+        let response = json!({
+            "id": "msg_789",
+            "model": "claude-sonnet-4-20250514",
+            "content": [
+                {"type": "thinking", "thinking": "Let me think about this..."},
+                {"type": "thinking", "thinking": "Step 2 of thinking"},
+                {"type": "text", "text": "The answer is 42."}
+            ],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 10, "output_tokens": 50}
+        });
+        let result = AnthropicAdapter::response_to_chat_completions(response);
+        assert_eq!(result["choices"][0]["message"]["content"], "The answer is 42.");
+        assert_eq!(
+            result["choices"][0]["message"]["reasoning_content"],
+            "Let me think about this...\n\nStep 2 of thinking"
+        );
+    }
+
+    #[test]
+    fn test_response_no_thinking_blocks() {
+        let response = json!({
+            "id": "msg_100",
+            "model": "claude-3-opus",
+            "content": [{"type": "text", "text": "Hello!"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 5, "output_tokens": 3}
+        });
+        let result = AnthropicAdapter::response_to_chat_completions(response);
+        assert!(result["choices"][0]["message"].get("reasoning_content").is_none());
+    }
+
+    #[test]
+    fn test_supports_thinking() {
+        assert!(supports_thinking("claude-3-7-sonnet-20250219"));
+        assert!(supports_thinking("claude-3.7-sonnet"));
+        assert!(supports_thinking("claude-4-opus-20250514"));
+        assert!(supports_thinking("claude-opus-4-20250514"));
+        assert!(supports_thinking("claude-sonnet-4-20250514"));
+        assert!(!supports_thinking("claude-3-opus-20240229"));
+        assert!(!supports_thinking("claude-3-5-sonnet"));
+        assert!(!supports_thinking("gpt-4o"));
+    }
+
+    #[test]
+    fn test_convert_request_with_thinking() {
+        let adapter = AnthropicAdapter::new().with_caching(false);
+        let payload = json!({
+            "model": "claude-sonnet-4-20250514",
+            "messages": [{"role": "user", "content": "Think about this"}],
+            "_reasoning_effort": "medium"
+        });
+        let result = adapter.convert_request(payload);
+        assert_eq!(result["thinking"]["type"], "enabled");
+        assert_eq!(result["thinking"]["budget_tokens"], 10000);
+        assert_eq!(result["temperature"], 1);
+        // _reasoning_effort should be stripped
+        assert!(result.get("_reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn test_convert_request_thinking_unsupported_model() {
+        let adapter = AnthropicAdapter::new().with_caching(false);
+        let payload = json!({
+            "model": "claude-3-opus-20240229",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "_reasoning_effort": "high"
+        });
+        let result = adapter.convert_request(payload);
+        assert!(result.get("thinking").is_none());
+    }
+
+    #[test]
+    fn test_convert_tool_messages_echoes_thinking() {
+        let mut payload = json!({
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": "Let me read that file.",
+                    "reasoning_content": "I should read the file first.",
+                    "tool_calls": [{
+                        "id": "tc-1",
+                        "function": {"name": "read_file", "arguments": "{\"path\": \"test.rs\"}"}
+                    }]
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "tc-1",
+                    "content": "file contents"
+                }
+            ]
+        });
+        AnthropicAdapter::convert_tool_messages(&mut payload);
+        let messages = payload["messages"].as_array().unwrap();
+        let assistant_content = messages[0]["content"].as_array().unwrap();
+        // First block should be thinking
+        assert_eq!(assistant_content[0]["type"], "thinking");
+        assert_eq!(assistant_content[0]["thinking"], "I should read the file first.");
+        // Then text, then tool_use
+        assert_eq!(assistant_content[1]["type"], "text");
+        assert_eq!(assistant_content[2]["type"], "tool_use");
+    }
+
+    #[test]
+    fn test_convert_request_thinking_ensures_min_max_tokens() {
+        let adapter = AnthropicAdapter::new().with_caching(false);
+        let payload = json!({
+            "model": "claude-sonnet-4-20250514",
+            "messages": [{"role": "user", "content": "Think"}],
+            "_reasoning_effort": "high",
+            "max_tokens": 1024
+        });
+        let result = adapter.convert_request(payload);
+        // budget_tokens for "high" is 20000, so max_tokens should be at least 21024
+        assert!(result["max_tokens"].as_u64().unwrap() >= 21024);
     }
 }

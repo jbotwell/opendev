@@ -4,7 +4,7 @@
 //! - [`app`] -- Main TUI application struct and event loop
 //! - [`event`] -- Event types (keyboard, mouse, resize, agent messages)
 //! - [`widgets`] -- UI widgets (conversation, input, status bar, tool display,
-//!   spinner, progress, thinking, nested tool, todo panel)
+//!   spinner, progress, nested tool, todo panel)
 //! - [`controllers`] -- Message handling, slash commands, approval prompts
 //! - [`formatters`] -- Output formatting (markdown, display, tool colors)
 
@@ -17,7 +17,7 @@ pub mod history;
 pub mod managers;
 pub mod widgets;
 
-pub use app::{App, AppState, AutonomyLevel, OperationMode, ThinkingLevel};
+pub use app::{App, AppState, AutonomyLevel, OperationMode};
 pub use controllers::{
     ApprovalController, BUILTIN_COMMANDS, SlashCommand, find_matching_commands, is_command,
 };
@@ -31,6 +31,6 @@ pub use formatters::{
     tool_color, truncate_output,
 };
 pub use widgets::{
-    NestedToolWidget, SpinnerState, SubagentDisplayState, TaskProgress, ThinkingBlock,
-    ThinkingPhase, TodoDisplayItem, TodoDisplayStatus, TodoPanelWidget,
+    NestedToolWidget, SpinnerState, SubagentDisplayState, TaskProgress, TodoDisplayItem,
+    TodoDisplayStatus, TodoPanelWidget,
 };

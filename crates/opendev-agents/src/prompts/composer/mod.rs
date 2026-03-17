@@ -488,16 +488,4 @@ mod tests {
             "Expected embedded security policy template"
         );
     }
-
-    #[test]
-    fn test_embedded_thinking_composer() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let composer = create_thinking_composer(dir.path());
-        let result = composer.compose(&HashMap::new());
-        // At least one thinking template should resolve from embedded
-        assert!(
-            !result.is_empty(),
-            "Thinking composer should produce output from embedded"
-        );
-    }
 }

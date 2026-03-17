@@ -424,15 +424,6 @@ mod tests {
     }
 
     #[test]
-    fn test_engine_arg_completion_thinking() {
-        let engine_dir = std::env::temp_dir();
-        let mut engine = AutocompleteEngine::new(engine_dir);
-        engine.update("/thinking ");
-        assert!(engine.is_visible());
-        assert_eq!(engine.items().len(), 4);
-    }
-
-    #[test]
     fn test_engine_arg_completion_model_names() {
         let engine_dir = std::env::temp_dir();
         let mut engine = AutocompleteEngine::new(engine_dir);

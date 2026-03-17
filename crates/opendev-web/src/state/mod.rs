@@ -51,8 +51,6 @@ pub(super) struct AppStateInner {
     pub(super) mode: RwLock<OperationMode>,
     /// Autonomy level.
     pub(super) autonomy_level: RwLock<String>,
-    /// Thinking level.
-    pub(super) thinking_level: RwLock<String>,
     /// Interrupt flag.
     pub(super) interrupt_requested: Mutex<bool>,
     /// Running sessions: session_id -> status.
@@ -193,7 +191,6 @@ impl AppState {
                 pending_plan_approvals: Mutex::new(HashMap::new()),
                 mode: RwLock::new(OperationMode::Normal),
                 autonomy_level: RwLock::new("Manual".to_string()),
-                thinking_level: RwLock::new("Medium".to_string()),
                 interrupt_requested: Mutex::new(false),
                 running_sessions: Mutex::new(HashMap::new()),
                 injection_queues: Mutex::new(HashMap::new()),
@@ -301,18 +298,6 @@ impl AppState {
     /// Set the autonomy level.
     pub async fn set_autonomy_level(&self, level: String) {
         *self.inner.autonomy_level.write().await = level;
-    }
-
-    // --- Thinking level ---
-
-    /// Get the current thinking level.
-    pub async fn thinking_level(&self) -> String {
-        self.inner.thinking_level.read().await.clone()
-    }
-
-    /// Set the thinking level.
-    pub async fn set_thinking_level(&self, level: String) {
-        *self.inner.thinking_level.write().await = level;
     }
 
     // --- Interrupt ---
@@ -460,14 +445,6 @@ mod tests {
         assert_eq!(state.autonomy_level().await, "Manual");
         state.set_autonomy_level("Auto".to_string()).await;
         assert_eq!(state.autonomy_level().await, "Auto");
-    }
-
-    #[tokio::test]
-    async fn test_thinking_level() {
-        let state = make_state();
-        assert_eq!(state.thinking_level().await, "Medium");
-        state.set_thinking_level("High".to_string()).await;
-        assert_eq!(state.thinking_level().await, "High");
     }
 
     #[tokio::test]

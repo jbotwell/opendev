@@ -1,9 +1,7 @@
-//! Status bar widget showing model, tokens, mode, autonomy, thinking, git branch, MCP, cost.
+//! Status bar widget showing model, tokens, mode, autonomy, git branch, MCP, cost.
 //!
-//! Mirrors the Python `StatusBar` widget which displays:
-//! - Mode (Normal/Plan) with Shift+Tab hint
+//! Displays:
 //! - Autonomy level (Manual/Semi-Auto/Auto) with Ctrl+Shift+A hint
-//! - Thinking level (Off/Low/Medium/High) with Ctrl+Shift+T hint
 //! - Repo path and git branch
 //! - MCP server status
 //! - Session cost
@@ -17,7 +15,7 @@ use ratatui::{
     widgets::Widget,
 };
 
-use crate::app::{AutonomyLevel, OperationMode, ThinkingLevel};
+use crate::app::{AutonomyLevel, OperationMode};
 use crate::formatters::style_tokens;
 
 /// Bottom status bar widget.
@@ -31,7 +29,6 @@ pub struct StatusBarWidget<'a> {
     mode: OperationMode,
     // New fields from Python StatusBar
     autonomy: AutonomyLevel,
-    thinking_level: ThinkingLevel,
     context_usage_pct: f64,
     session_cost: f64,
     mcp_status: Option<(usize, usize)>,
@@ -57,7 +54,6 @@ impl<'a> StatusBarWidget<'a> {
             tokens_limit,
             mode,
             autonomy: AutonomyLevel::Manual,
-            thinking_level: ThinkingLevel::Medium,
             context_usage_pct: 0.0,
             session_cost: 0.0,
             mcp_status: None,
@@ -69,11 +65,6 @@ impl<'a> StatusBarWidget<'a> {
 
     pub fn autonomy(mut self, autonomy: AutonomyLevel) -> Self {
         self.autonomy = autonomy;
-        self
-    }
-
-    pub fn thinking_level(mut self, level: ThinkingLevel) -> Self {
-        self.thinking_level = level;
         self
     }
 
@@ -141,34 +132,6 @@ impl Widget for StatusBarWidget<'_> {
         ));
         spans.push(Span::styled(
             " (Ctrl+Shift+A)",
-            Style::default().fg(style_tokens::GREY),
-        ));
-
-        // Separator
-        spans.push(Span::styled(
-            "  \u{2502}  ",
-            Style::default().fg(style_tokens::GREY),
-        ));
-
-        // Thinking level
-        let thinking_color = match self.thinking_level {
-            ThinkingLevel::Off => style_tokens::GREY,
-            ThinkingLevel::Low => style_tokens::CYAN,
-            ThinkingLevel::Medium => style_tokens::GREEN_BRIGHT,
-            ThinkingLevel::High => style_tokens::GOLD,
-        };
-        spans.push(Span::styled(
-            "Thinking: ",
-            Style::default().fg(style_tokens::GREY),
-        ));
-        spans.push(Span::styled(
-            self.thinking_level.to_string(),
-            Style::default()
-                .fg(thinking_color)
-                .add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::styled(
-            " (Ctrl+Shift+T)",
             Style::default().fg(style_tokens::GREY),
         ));
 
@@ -420,7 +383,6 @@ mod tests {
             OperationMode::Normal,
         )
         .autonomy(AutonomyLevel::Manual)
-        .thinking_level(ThinkingLevel::Medium)
         .context_usage_pct(25.0)
         .session_cost(0.05)
         .mcp_status(Some((2, 3)), false)
@@ -432,13 +394,5 @@ mod tests {
         assert_eq!(AutonomyLevel::Manual.to_string(), "Manual");
         assert_eq!(AutonomyLevel::SemiAuto.to_string(), "Semi-Auto");
         assert_eq!(AutonomyLevel::Auto.to_string(), "Auto");
-    }
-
-    #[test]
-    fn test_thinking_display() {
-        assert_eq!(ThinkingLevel::Off.to_string(), "Off");
-        assert_eq!(ThinkingLevel::Low.to_string(), "Low");
-        assert_eq!(ThinkingLevel::Medium.to_string(), "Medium");
-        assert_eq!(ThinkingLevel::High.to_string(), "High");
     }
 }

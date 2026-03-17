@@ -2,8 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use opendev_runtime::ThinkingLevel;
-
 /// Predefined agent roles for common development tasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AgentRole {
@@ -42,16 +40,6 @@ impl AgentRole {
                  and fix any build or lint errors. Focus on making the project build \
                  cleanly with zero warnings."
             }
-        }
-    }
-
-    /// Return the default thinking level for this role.
-    pub fn default_thinking_level(&self) -> ThinkingLevel {
-        match self {
-            AgentRole::Code => ThinkingLevel::Medium,
-            AgentRole::Plan => ThinkingLevel::High,
-            AgentRole::Test => ThinkingLevel::Low,
-            AgentRole::Build => ThinkingLevel::Low,
         }
     }
 
@@ -135,23 +123,6 @@ mod tests {
             AgentRole::Build
                 .default_system_prompt()
                 .contains("build agent")
-        );
-    }
-
-    #[test]
-    fn test_agent_role_default_thinking_level() {
-        assert_eq!(
-            AgentRole::Code.default_thinking_level(),
-            ThinkingLevel::Medium
-        );
-        assert_eq!(
-            AgentRole::Plan.default_thinking_level(),
-            ThinkingLevel::High
-        );
-        assert_eq!(AgentRole::Test.default_thinking_level(), ThinkingLevel::Low);
-        assert_eq!(
-            AgentRole::Build.default_thinking_level(),
-            ThinkingLevel::Low
         );
     }
 

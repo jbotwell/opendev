@@ -269,7 +269,7 @@ impl App {
                     }
                 }
             }
-            DisplayRole::Thinking => {
+            DisplayRole::Reasoning => {
                 for (i, content_line) in content.lines().enumerate() {
                     if i == 0 {
                         lines.push(Line::from(vec![

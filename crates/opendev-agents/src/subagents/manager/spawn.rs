@@ -17,7 +17,10 @@ use opendev_http::adapted_client::AdaptedClient;
 use opendev_tools_core::ToolRegistry;
 
 /// Select the appropriate runner for a subagent based on its type.
-fn select_runner(spec: &SubAgentSpec, task: &str) -> Box<dyn super::super::runner::SubagentRunner> {
+fn select_runner(
+    spec: &SubAgentSpec,
+    _task: &str,
+) -> Box<dyn super::super::runner::SubagentRunner> {
     use super::super::runner::{SimpleReactRunner, StandardReactRunner};
 
     match SubagentType::from_name(&spec.name) {
@@ -32,8 +35,6 @@ fn select_runner(spec: &SubAgentSpec, task: &str) -> Box<dyn super::super::runne
                 max_iterations,
                 max_nudge_attempts: 3,
                 max_todo_nudges: 2,
-                thinking_level: opendev_runtime::ThinkingLevel::Off,
-                original_task: Some(task.to_string()),
                 permission: spec.permission.clone(),
                 ..Default::default()
             }))
@@ -163,6 +164,7 @@ impl SubagentManager {
             model: model.clone(),
             temperature: Some(temperature),
             max_tokens: Some(spec.max_tokens.unwrap_or(parent_max_tokens as u32) as u64),
+            reasoning_effort: None,
         });
 
         // Build tool schemas (filtered to allowed tools)

@@ -3,7 +3,7 @@
 //! Mirrors `opendev/repl/repl.py::_handle_command`.
 
 use opendev_config::ModelRegistry;
-use opendev_runtime::{AutonomyLevel, ThinkingLevel};
+use opendev_runtime::AutonomyLevel;
 
 use crate::repl::{OperationMode, ReplState};
 
@@ -73,10 +73,6 @@ impl BuiltinCommands {
                 self.handle_session_models(args);
                 CommandOutcome::Handled
             }
-            "/thinking" => {
-                self.handle_thinking(args, state);
-                CommandOutcome::Handled
-            }
             "/autonomy" => {
                 self.handle_autonomy(args, state);
                 CommandOutcome::Handled
@@ -103,9 +99,8 @@ impl BuiltinCommands {
         println!("  /exit, /quit            Exit the REPL");
         println!("  /clear                  Clear conversation history");
         println!("  /mode [plan|normal]     Switch operation mode");
-        println!("  /thinking [off|low|medium|high]  Set thinking depth");
         println!("  /autonomy [manual|semi-auto|auto] Set approval level");
-        println!("  /status                 Show current mode/thinking/autonomy");
+        println!("  /status                 Show current status");
         println!("  /compact                Compact conversation context");
         println!("  /models                 Show model picker (from models.dev registry)");
         println!("  /mcp <subcommand>       Manage MCP servers");
@@ -340,9 +335,7 @@ impl BuiltinCommands {
             "" | "show" => {
                 println!("No session model overrides set.");
                 println!();
-                println!(
-                    "Available slots: model, model_thinking, model_vlm, model_critique, model_compact"
-                );
+                println!("Available slots: model, model_vlm, model_compact");
                 println!(
                     "Use /session-models set <slot> <value> to override a model for this session."
                 );
@@ -357,12 +350,8 @@ impl BuiltinCommands {
                     let valid_slots = [
                         "model",
                         "model_provider",
-                        "model_thinking",
-                        "model_thinking_provider",
                         "model_vlm",
                         "model_vlm_provider",
-                        "model_critique",
-                        "model_critique_provider",
                         "model_compact",
                         "model_compact_provider",
                     ];
@@ -380,31 +369,6 @@ impl BuiltinCommands {
             _ => {
                 println!("Unknown session-models subcommand: {}", subcommand);
                 println!("Usage: /session-models [show|set|clear] ...");
-            }
-        }
-    }
-
-    fn handle_thinking(&self, args: &str, state: &mut ReplState) {
-        let target = args.trim();
-        if target.is_empty() {
-            println!("Thinking level: {}", state.thinking_level);
-            println!("Usage: /thinking [off|low|medium|high]");
-            return;
-        }
-        match ThinkingLevel::from_str_loose(target) {
-            Some(level) => {
-                state.thinking_level = level;
-                let detail = match level {
-                    ThinkingLevel::Off => "(thinking disabled)",
-                    ThinkingLevel::Low => "(basic reasoning)",
-                    ThinkingLevel::Medium => "(standard reasoning)",
-                    ThinkingLevel::High => "(deep reasoning with critique)",
-                };
-                println!("Thinking level set to: {} {}", level, detail);
-            }
-            None => {
-                println!("Invalid thinking level: {}", target);
-                println!("Valid levels: off, low, medium, high");
             }
         }
     }
@@ -436,7 +400,6 @@ impl BuiltinCommands {
     fn handle_status(&self, state: &ReplState) {
         println!("Current status:");
         println!("  Mode:      {}", state.mode);
-        println!("  Thinking:  {}", state.thinking_level);
         println!("  Autonomy:  {}", state.autonomy_level);
     }
 
@@ -545,32 +508,6 @@ mod tests {
 
         assert_eq!(
             cmds.dispatch("/clear", "", &mut state),
-            CommandOutcome::Handled
-        );
-    }
-
-    #[test]
-    fn test_thinking_command() {
-        let cmds = BuiltinCommands::new();
-        let mut state = ReplState::default();
-        assert_eq!(state.thinking_level, ThinkingLevel::Medium);
-
-        cmds.dispatch("/thinking", "high", &mut state);
-        assert_eq!(state.thinking_level, ThinkingLevel::High);
-
-        cmds.dispatch("/thinking", "off", &mut state);
-        assert_eq!(state.thinking_level, ThinkingLevel::Off);
-
-        cmds.dispatch("/thinking", "low", &mut state);
-        assert_eq!(state.thinking_level, ThinkingLevel::Low);
-
-        // Invalid value should not change level
-        cmds.dispatch("/thinking", "garbage", &mut state);
-        assert_eq!(state.thinking_level, ThinkingLevel::Low);
-
-        // Empty shows current level
-        assert_eq!(
-            cmds.dispatch("/thinking", "", &mut state),
             CommandOutcome::Handled
         );
     }

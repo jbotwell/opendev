@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::event::AppEvent;
 
-use super::{App, AutonomyLevel, DisplayRole, OperationMode, ThinkingLevel};
+use super::{App, AutonomyLevel, OperationMode};
 
 impl App {
     fn next_char_boundary(s: &str, pos: usize) -> usize {
@@ -288,18 +288,6 @@ impl App {
                     AutonomyLevel::Auto => AutonomyLevel::Manual,
                 };
             }
-            // Ctrl+Shift+T — cycle thinking level
-            // Same Kitty vs legacy handling as above.
-            (m, KeyCode::Char('T' | 't'))
-                if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) =>
-            {
-                self.state.thinking_level = match self.state.thinking_level {
-                    ThinkingLevel::Off => ThinkingLevel::Low,
-                    ThinkingLevel::Low => ThinkingLevel::Medium,
-                    ThinkingLevel::Medium => ThinkingLevel::High,
-                    ThinkingLevel::High => ThinkingLevel::Off,
-                };
-            }
             // Tab — accept autocomplete suggestion
             (_, KeyCode::Tab) => {
                 if let Some((insert_text, delete_count)) = self.state.autocomplete.accept() {
@@ -369,16 +357,7 @@ impl App {
                         break;
                     }
                 }
-                // Priority 2: Most recent thinking block
-                if !toggled {
-                    for msg in self.state.messages.iter_mut().rev() {
-                        if msg.role == DisplayRole::Thinking && !msg.content.is_empty() {
-                            msg.collapsed = !msg.collapsed;
-                            self.state.message_generation += 1;
-                            break;
-                        }
-                    }
-                }
+                let _ = toggled; // suppress unused warning
             }
             // Ctrl+T — toggle todo panel expanded/collapsed
             (KeyModifiers::CONTROL, KeyCode::Char('t')) => {

@@ -12,17 +12,12 @@ use super::ReactLoop;
 use super::types::{IterationMetrics, TurnResult};
 
 impl ReactLoop {
-    /// Update per-query thinking context (original task and system prompt).
+    /// Set the user's original task text for completion nudge context.
     ///
-    /// Call this before each `run()` to set the user's original task text
-    /// and the pre-composed thinking system prompt.
-    pub fn set_thinking_context(
-        &mut self,
-        original_task: Option<String>,
-        thinking_system_prompt: Option<String>,
-    ) {
+    /// Call this before each `run()` so the implicit completion nudge
+    /// can verify the original request was fully addressed.
+    pub fn set_original_task(&mut self, original_task: Option<String>) {
         self.config.original_task = original_task;
-        self.config.thinking_system_prompt = thinking_system_prompt;
     }
 
     /// Return a snapshot of accumulated iteration metrics collected during `run()`.
@@ -171,8 +166,6 @@ mod tests {
     use crate::prompts::embedded;
     use crate::subagents::spec::{PermissionAction, PermissionRule};
     use crate::traits::{AgentError, AgentResult, LlmResponse};
-    use opendev_runtime::ThinkingLevel;
-
     fn make_loop() -> ReactLoop {
         ReactLoop::new(ReactLoopConfig {
             max_iterations: Some(10),
@@ -486,75 +479,6 @@ mod tests {
         assert_eq!(config.max_todo_nudges, 4);
     }
 
-    // --- Thinking skip heuristic tests ---
-
-    #[test]
-    fn test_should_skip_thinking_after_readonly() {
-        let rl = make_loop();
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "read a file"}),
-            serde_json::json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [{"id": "1", "function": {"name": "read_file", "arguments": "{}"}}]
-            }),
-            serde_json::json!({"role": "tool", "name": "read_file", "content": "file contents", "tool_call_id": "1"}),
-        ];
-        assert!(rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_should_not_skip_thinking_after_write() {
-        let rl = make_loop();
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "edit a file"}),
-            serde_json::json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [{"id": "1", "function": {"name": "edit_file", "arguments": "{}"}}]
-            }),
-            serde_json::json!({"role": "tool", "name": "edit_file", "content": "ok", "tool_call_id": "1"}),
-        ];
-        assert!(!rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_should_not_skip_thinking_on_error() {
-        let rl = make_loop();
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "read"}),
-            serde_json::json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [{"id": "1", "function": {"name": "read_file", "arguments": "{}"}}]
-            }),
-            serde_json::json!({"role": "tool", "name": "read_file", "content": "Error: file not found", "tool_call_id": "1"}),
-        ];
-        assert!(!rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_should_not_skip_thinking_no_tools() {
-        let rl = make_loop();
-        let messages = vec![serde_json::json!({"role": "user", "content": "hello"})];
-        assert!(!rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_should_skip_thinking_multiple_readonly() {
-        let rl = make_loop();
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "search"}),
-            serde_json::json!({"role": "assistant", "content": null, "tool_calls": [
-                {"id": "1", "function": {"name": "read_file", "arguments": "{}"}},
-                {"id": "2", "function": {"name": "search", "arguments": "{}"}}
-            ]}),
-            serde_json::json!({"role": "tool", "name": "read_file", "content": "ok", "tool_call_id": "1"}),
-            serde_json::json!({"role": "tool", "name": "search", "content": "results", "tool_call_id": "2"}),
-        ];
-        assert!(rl.should_skip_thinking(&messages));
-    }
-
     // --- Shallow subagent detection tests ---
 
     #[test]
@@ -604,144 +528,6 @@ mod tests {
     fn test_shallow_subagent_failed_no_warning() {
         let messages = vec![serde_json::json!({"role": "assistant", "content": "I failed."})];
         assert!(ReactLoop::shallow_subagent_warning(&messages, false).is_none());
-    }
-
-    // --- Thinking level configuration tests ---
-
-    #[test]
-    fn test_config_thinking_level_default() {
-        let config = ReactLoopConfig::default();
-        assert_eq!(config.thinking_level, ThinkingLevel::Medium);
-        assert!(config.thinking_level.is_enabled());
-        assert!(!config.thinking_level.use_critique());
-    }
-
-    #[test]
-    fn test_config_thinking_level_off_skips_thinking() {
-        let config = ReactLoopConfig {
-            thinking_level: ThinkingLevel::Off,
-            ..Default::default()
-        };
-        assert!(!config.thinking_level.is_enabled());
-    }
-
-    #[test]
-    fn test_config_thinking_level_high_enables_critique() {
-        let config = ReactLoopConfig {
-            thinking_level: ThinkingLevel::High,
-            ..Default::default()
-        };
-        assert!(config.thinking_level.is_enabled());
-        assert!(config.thinking_level.use_critique());
-    }
-
-    #[test]
-    fn test_thinking_skipped_after_readonly_tools() {
-        // When last tools were readonly, should_skip_thinking returns true
-        // meaning thinking won't run even if level is enabled
-        let rl = ReactLoop::new(ReactLoopConfig {
-            thinking_level: ThinkingLevel::Medium,
-            ..Default::default()
-        });
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "read something"}),
-            serde_json::json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [{"id": "1", "function": {"name": "read_file", "arguments": "{}"}}]
-            }),
-            serde_json::json!({"role": "tool", "name": "read_file", "content": "ok", "tool_call_id": "1"}),
-        ];
-        assert!(rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_should_skip_thinking_ignores_thinking_trace() {
-        // The thinking trace message (_thinking: true) should be invisible
-        // to should_skip_thinking — it should look through it at the real messages.
-        let rl = make_loop();
-        // Readonly tools followed by thinking trace → still skip
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "read something"}),
-            serde_json::json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [{"id": "1", "function": {"name": "read_file", "arguments": "{}"}}]
-            }),
-            serde_json::json!({"role": "tool", "name": "read_file", "content": "ok", "tool_call_id": "1"}),
-            serde_json::json!({"role": "user", "content": "<thinking_trace>...</thinking_trace>", "_thinking": true}),
-        ];
-        assert!(rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_should_not_skip_thinking_with_trace_after_write() {
-        // Write tool followed by thinking trace → don't skip
-        let rl = make_loop();
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "edit something"}),
-            serde_json::json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [{"id": "1", "function": {"name": "edit_file", "arguments": "{}"}}]
-            }),
-            serde_json::json!({"role": "tool", "name": "edit_file", "content": "ok", "tool_call_id": "1"}),
-            serde_json::json!({"role": "user", "content": "<thinking_trace>...</thinking_trace>", "_thinking": true}),
-        ];
-        assert!(!rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_should_not_skip_thinking_only_trace_no_tools() {
-        // Only thinking trace, no tool results → don't skip (retryable failure case)
-        let rl = make_loop();
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "hello"}),
-            serde_json::json!({"role": "user", "content": "<thinking_trace>...</thinking_trace>", "_thinking": true}),
-        ];
-        assert!(!rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_thinking_not_skipped_after_write_tools() {
-        let rl = ReactLoop::new(ReactLoopConfig {
-            thinking_level: ThinkingLevel::High,
-            ..Default::default()
-        });
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "edit something"}),
-            serde_json::json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [{"id": "1", "function": {"name": "edit_file", "arguments": "{}"}}]
-            }),
-            serde_json::json!({"role": "tool", "name": "edit_file", "content": "ok", "tool_call_id": "1"}),
-        ];
-        assert!(!rl.should_skip_thinking(&messages));
-    }
-
-    #[test]
-    fn test_critique_system_prompt_from_template() {
-        let critique_prompt = embedded::SYSTEM_CRITIQUE;
-        assert!(!critique_prompt.is_empty());
-        assert!(
-            critique_prompt.to_lowercase().contains("critique")
-                || critique_prompt.to_lowercase().contains("critic")
-        );
-    }
-
-    #[test]
-    fn test_config_thinking_system_prompt() {
-        let config = ReactLoopConfig {
-            thinking_system_prompt: Some("custom thinking prompt".into()),
-            original_task: Some("implement feature X".into()),
-            ..Default::default()
-        };
-        assert_eq!(
-            config.thinking_system_prompt.as_deref(),
-            Some("custom thinking prompt")
-        );
-        assert_eq!(config.original_task.as_deref(), Some("implement feature X"));
     }
 
     // --- Iteration metrics tests ---

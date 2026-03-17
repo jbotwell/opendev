@@ -189,12 +189,6 @@ pub struct AppConfig {
     #[serde(default = "default_model")]
     pub model: String,
 
-    // Thinking model
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_thinking: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_thinking_provider: Option<String>,
-
     // Vision/Multi-modal model
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_vlm: Option<String>,
@@ -351,8 +345,6 @@ impl Default for AppConfig {
         Self {
             model_provider: default_model_provider(),
             model: default_model(),
-            model_thinking: None,
-            model_thinking_provider: None,
             model_vlm: None,
             model_vlm_provider: None,
             model_critique: None,

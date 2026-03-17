@@ -135,44 +135,16 @@ impl App {
                 self.drain_next_pending_message();
             }
 
-            // Thinking events
-            AppEvent::ThinkingTrace(content) => {
-                // Replace previous thinking message if present (completion nudge
-                // can trigger thinking phase again in the same agent turn).
+            // Reasoning events
+            AppEvent::ReasoningContent(content) => {
+                // Replace previous reasoning message in this turn if present
                 if let Some(last) = self.state.messages.last_mut()
-                    && last.role == DisplayRole::Thinking
+                    && last.role == DisplayRole::Reasoning
                 {
                     last.content = content;
                 } else {
                     self.state.messages.push(DisplayMessage {
-                        role: DisplayRole::Thinking,
-                        content,
-                        tool_call: None,
-                        collapsed: false,
-                    });
-                }
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::CritiqueTrace(content) => {
-                self.state.messages.push(DisplayMessage {
-                    role: DisplayRole::Thinking,
-                    content,
-                    tool_call: None,
-                    collapsed: false,
-                });
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::RefinedThinkingTrace(content) => {
-                // Replace previous thinking/critique if the refinement supersedes them
-                if let Some(last) = self.state.messages.last_mut()
-                    && last.role == DisplayRole::Thinking
-                {
-                    last.content = content;
-                } else {
-                    self.state.messages.push(DisplayMessage {
-                        role: DisplayRole::Thinking,
+                        role: DisplayRole::Reasoning,
                         content,
                         tool_call: None,
                         collapsed: false,
