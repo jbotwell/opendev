@@ -188,6 +188,42 @@ impl SubdirInstructionTracker {
         results
     }
 
+    /// After compaction removes middle messages, allow subdirectory instructions
+    /// to be re-discovered on the next file read.
+    ///
+    /// Preserves startup files (root-level instructions in system prompt) and
+    /// any instructions whose content is still present in the remaining messages.
+    pub fn reset_after_compaction(
+        &mut self,
+        startup_files: &[PathBuf],
+        remaining_messages: &[serde_json::Value],
+    ) {
+        // Collect paths of instructions still present in remaining messages
+        let mut still_present = HashSet::new();
+        for msg in remaining_messages {
+            if let Some(content) = msg.get("content").and_then(|v| v.as_str()) {
+                for path in &self.injected {
+                    let path_str = path.display().to_string();
+                    if content.contains(&path_str)
+                        || content
+                            .contains(path.file_name().unwrap_or_default().to_str().unwrap_or(""))
+                    {
+                        still_present.insert(path.clone());
+                    }
+                }
+            }
+        }
+
+        self.injected = still_present;
+
+        // Always keep startup files marked as injected (they live in system prompt)
+        for path in startup_files {
+            if let Ok(canonical) = path.canonicalize() {
+                self.injected.insert(canonical);
+            }
+        }
+    }
+
     /// Return the number of instruction files currently tracked.
     pub fn injected_count(&self) -> usize {
         self.injected.len()
@@ -335,6 +371,108 @@ mod tests {
         let results = tracker.check_file_read(&file);
         assert_eq!(results.len(), 1);
         assert!(results[0].content.contains("TypeScript strict mode"));
+    }
+
+    #[test]
+    fn test_reset_after_compaction_clears_subdirectory_instructions() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+
+        let subdir = root.join("src").join("payments");
+        std::fs::create_dir_all(&subdir).unwrap();
+        std::fs::write(subdir.join("AGENTS.md"), "Payment rules").unwrap();
+        std::fs::write(subdir.join("checkout.rs"), "fn checkout() {}").unwrap();
+
+        let mut tracker = SubdirInstructionTracker::new(root.clone(), &[]);
+
+        // Inject instruction
+        let results = tracker.check_file_read(&subdir.join("checkout.rs"));
+        assert_eq!(results.len(), 1);
+
+        // Simulate compaction removing all messages
+        tracker.reset_after_compaction(&[], &[]);
+
+        // Should be able to re-inject
+        let results2 = tracker.check_file_read(&subdir.join("checkout.rs"));
+        assert_eq!(results2.len(), 1);
+    }
+
+    #[test]
+    fn test_reset_preserves_startup_files() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+
+        let agents_md = root.join("AGENTS.md");
+        std::fs::write(&agents_md, "root rules").unwrap();
+        std::fs::write(root.join("main.rs"), "fn main() {}").unwrap();
+
+        let startup = vec![agents_md.clone()];
+        let mut tracker = SubdirInstructionTracker::new(root.clone(), &startup);
+        assert_eq!(tracker.injected_count(), 1);
+
+        // Reset should preserve startup files
+        tracker.reset_after_compaction(&startup, &[]);
+        assert_eq!(tracker.injected_count(), 1);
+
+        // Root AGENTS.md should still not be re-injected
+        let results = tracker.check_file_read(&root.join("main.rs"));
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_reset_preserves_instructions_still_in_messages() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+
+        let subdir = root.join("src");
+        std::fs::create_dir_all(&subdir).unwrap();
+        std::fs::write(subdir.join("AGENTS.md"), "src rules").unwrap();
+        std::fs::write(subdir.join("lib.rs"), "").unwrap();
+
+        let mut tracker = SubdirInstructionTracker::new(root.clone(), &[]);
+
+        // Inject
+        let results = tracker.check_file_read(&subdir.join("lib.rs"));
+        assert_eq!(results.len(), 1);
+
+        // Simulate compaction that keeps the instruction in remaining messages
+        let remaining = vec![serde_json::json!({
+            "role": "user",
+            "content": format!("Instructions from AGENTS.md in {}", subdir.display()),
+        })];
+        tracker.reset_after_compaction(&[], &remaining);
+
+        // Should NOT re-inject since it's still in messages
+        let results2 = tracker.check_file_read(&subdir.join("lib.rs"));
+        assert_eq!(results2.len(), 0);
+    }
+
+    #[test]
+    fn test_reinjection_after_reset() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+
+        let sub_a = root.join("a");
+        let sub_b = root.join("b");
+        std::fs::create_dir_all(&sub_a).unwrap();
+        std::fs::create_dir_all(&sub_b).unwrap();
+        std::fs::write(sub_a.join("AGENTS.md"), "rules a").unwrap();
+        std::fs::write(sub_b.join("AGENTS.md"), "rules b").unwrap();
+        std::fs::write(sub_a.join("f.rs"), "").unwrap();
+        std::fs::write(sub_b.join("g.rs"), "").unwrap();
+
+        let mut tracker = SubdirInstructionTracker::new(root.clone(), &[]);
+
+        // Inject both
+        assert_eq!(tracker.check_file_read(&sub_a.join("f.rs")).len(), 1);
+        assert_eq!(tracker.check_file_read(&sub_b.join("g.rs")).len(), 1);
+
+        // Reset with empty messages — both cleared
+        tracker.reset_after_compaction(&[], &[]);
+
+        // Both should re-inject
+        assert_eq!(tracker.check_file_read(&sub_a.join("f.rs")).len(), 1);
+        assert_eq!(tracker.check_file_read(&sub_b.join("g.rs")).len(), 1);
     }
 
     #[test]

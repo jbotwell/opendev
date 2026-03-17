@@ -114,17 +114,16 @@ impl ReactLoop {
         // Per-subdirectory instruction injection tracker.
         // Initialized with the working dir as root; startup instruction
         // paths are discovered from existing instruction files.
-        let mut subdir_tracker = {
-            let startup_paths =
-                opendev_context::discover_instruction_files(&tool_context.working_dir)
-                    .into_iter()
-                    .map(|f| f.path)
-                    .collect::<Vec<_>>();
-            opendev_context::SubdirInstructionTracker::new(
-                tool_context.working_dir.clone(),
-                &startup_paths,
-            )
-        };
+        // startup_paths is kept accessible for reset_after_compaction().
+        let startup_paths: Vec<std::path::PathBuf> =
+            opendev_context::discover_instruction_files(&tool_context.working_dir)
+                .into_iter()
+                .map(|f| f.path)
+                .collect();
+        let mut subdir_tracker = opendev_context::SubdirInstructionTracker::new(
+            tool_context.working_dir.clone(),
+            &startup_paths,
+        );
 
         // Skill-driven model override: when a skill specifies model: in its
         // frontmatter, use that model for subsequent iterations until reset.
@@ -147,7 +146,54 @@ impl ReactLoop {
             let iter_start = Instant::now();
 
             if self.check_iteration_limit(iteration) {
-                info!(iteration, "Max iterations reached");
+                info!(
+                    iteration,
+                    "Max iterations reached — requesting wind-down summary"
+                );
+
+                // Inject a prompt asking for a structured summary
+                let summary_prompt = get_reminder("safety_limit_summary", &[]);
+                append_directive(messages, &summary_prompt);
+
+                // Build payload WITHOUT tools to force text-only response
+                let mut payload = caller.build_action_payload(messages, &[]);
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.remove("tool_choice");
+                    obj.remove("tools");
+                    // Don't waste tokens on reasoning during wind-down
+                    obj.remove("_reasoning_effort");
+                }
+
+                match http_client.post_json(&payload, cancel).await {
+                    Ok(http_result) if http_result.success => {
+                        if let Some(body) = http_result.body {
+                            let response = caller.parse_action_response(&body);
+
+                            // Track cost for wind-down call
+                            if let Some(ct) = cost_tracker
+                                && let Some(ref usage_json) = response.usage
+                            {
+                                let token_usage = TokenUsage::from_json(usage_json);
+                                if let Ok(mut tracker) = ct.lock() {
+                                    tracker.record_usage(&token_usage, None);
+                                }
+                            }
+
+                            if let Some(content) = &response.content {
+                                let wind_down_msg = format!(
+                                    "[Max iterations ({}) reached — summary below]\n\n{}",
+                                    iteration - 1,
+                                    content
+                                );
+                                return Ok(AgentResult::ok(wind_down_msg, messages.clone()));
+                            }
+                        }
+                    }
+                    Ok(_) | Err(_) => {
+                        warn!("Wind-down LLM call failed, returning hard-stop");
+                    }
+                }
+
                 return Ok(AgentResult::fail(
                     "Max iterations reached without completion",
                     messages.clone(),
@@ -174,6 +220,13 @@ impl ReactLoop {
                 let needs_llm = apply_staged_compaction(comp, messages);
                 if needs_llm {
                     do_llm_compaction(comp, messages, caller, http_client).await;
+                    // Reset instruction tracker so subdirectory instructions can
+                    // be re-injected if compaction removed them from context.
+                    subdir_tracker.reset_after_compaction(&startup_paths, messages);
+                    info!(
+                        injected_remaining = subdir_tracker.injected_count(),
+                        "Reset instruction tracker after LLM compaction"
+                    );
                 }
             }
 
@@ -314,6 +367,9 @@ impl ReactLoop {
                     return Ok(AgentResult::interrupted(messages.clone()));
                 }
                 TurnResult::MaxIterations => {
+                    // This path is reached from process_iteration's secondary
+                    // limit check. The primary wind-down happens above, but
+                    // this acts as a safety net.
                     iter_metrics.total_duration_ms = iter_start.elapsed().as_millis() as u64;
                     self.push_metrics(iter_metrics);
                     return Ok(AgentResult::fail(
