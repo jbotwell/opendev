@@ -7,21 +7,98 @@ use std::borrow::Cow;
 
 use super::style_tokens;
 use ratatui::{
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
 };
+
+/// A color palette for markdown rendering.
+/// The default uses the standard bright colors; `muted()` produces a
+/// subdued palette suitable for thinking/reasoning display.
+#[derive(Debug, Clone)]
+pub struct MdPalette {
+    pub heading: Color,
+    pub code_fg: Color,
+    pub code_bg: Color,
+    pub bullet: Color,
+    pub bold_fg: Color,
+    pub link: Color,
+    pub text: Color,
+    /// Extra modifier applied to every span (e.g. `ITALIC` for thinking).
+    pub base_modifier: Modifier,
+}
+
+impl Default for MdPalette {
+    fn default() -> Self {
+        Self {
+            heading: style_tokens::HEADING_1,
+            code_fg: style_tokens::CODE_FG,
+            code_bg: style_tokens::CODE_BG,
+            bullet: style_tokens::BULLET,
+            bold_fg: style_tokens::BOLD_FG,
+            link: style_tokens::BLUE_BRIGHT,
+            text: style_tokens::PRIMARY,
+            base_modifier: Modifier::empty(),
+        }
+    }
+}
+
+impl MdPalette {
+    /// Build a muted palette for thinking/reasoning display.
+    /// Uses the given `base` color for text and derives dimmed variants
+    /// for structural elements.
+    pub fn muted(base: Color) -> Self {
+        // Derive slightly brighter heading from the base for contrast
+        let heading = dim_color(style_tokens::HEADING_1, 0.45);
+        let code_fg = dim_color(style_tokens::CODE_FG, 0.45);
+        let bold_fg = dim_color(style_tokens::BOLD_FG, 0.50);
+        let link = dim_color(style_tokens::BLUE_BRIGHT, 0.45);
+        Self {
+            heading,
+            code_fg,
+            code_bg: style_tokens::CODE_BG,
+            bullet: base,
+            bold_fg,
+            link,
+            text: base,
+            base_modifier: Modifier::ITALIC,
+        }
+    }
+}
+
+/// Dim an RGB color by mixing it toward black. `factor` in 0.0..=1.0.
+fn dim_color(color: Color, factor: f32) -> Color {
+    match color {
+        Color::Rgb(r, g, b) => Color::Rgb(
+            (r as f32 * factor) as u8,
+            (g as f32 * factor) as u8,
+            (b as f32 * factor) as u8,
+        ),
+        other => other,
+    }
+}
 
 /// Renders markdown text into styled terminal lines.
 pub struct MarkdownRenderer;
 
 impl MarkdownRenderer {
-    /// Render markdown text into a vector of styled lines.
+    /// Render markdown text into a vector of styled lines using the default palette.
     ///
     /// Span content uses `Cow<'static, str>` where possible to reduce
     /// intermediate string allocations through the parsing pipeline.
     pub fn render(text: &str) -> Vec<Line<'static>> {
+        Self::render_with_palette(text, &MdPalette::default())
+    }
+
+    /// Render markdown with a muted palette (for thinking/reasoning display).
+    pub fn render_muted(text: &str, base_color: Color) -> Vec<Line<'static>> {
+        Self::render_with_palette(text, &MdPalette::muted(base_color))
+    }
+
+    /// Render markdown text with a given color palette.
+    pub fn render_with_palette(text: &str, palette: &MdPalette) -> Vec<Line<'static>> {
         let mut lines = Vec::new();
         let mut in_code_block = false;
+        let base_mod = palette.base_modifier;
 
         for raw_line in text.lines() {
             if raw_line.starts_with("```") {
@@ -33,7 +110,9 @@ impl MarkdownRenderer {
                         let hint: Cow<'static, str> = Cow::Owned(format!("--- {lang} ---"));
                         lines.push(Line::from(Span::styled(
                             hint,
-                            Style::default().fg(style_tokens::GREY),
+                            Style::default()
+                                .fg(style_tokens::GREY)
+                                .add_modifier(base_mod),
                         )));
                     }
                 }
@@ -45,8 +124,9 @@ impl MarkdownRenderer {
                 lines.push(Line::from(Span::styled(
                     code,
                     Style::default()
-                        .fg(style_tokens::CODE_FG)
-                        .bg(style_tokens::CODE_BG),
+                        .fg(palette.code_fg)
+                        .bg(palette.code_bg)
+                        .add_modifier(base_mod),
                 )));
                 continue;
             }
@@ -57,24 +137,24 @@ impl MarkdownRenderer {
                 lines.push(Line::from(Span::styled(
                     h,
                     Style::default()
-                        .fg(style_tokens::HEADING_3)
-                        .add_modifier(Modifier::BOLD),
+                        .fg(palette.heading)
+                        .add_modifier(Modifier::BOLD | base_mod),
                 )));
             } else if let Some(header) = raw_line.strip_prefix("## ") {
                 let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
                     h,
                     Style::default()
-                        .fg(style_tokens::HEADING_2)
-                        .add_modifier(Modifier::BOLD),
+                        .fg(palette.heading)
+                        .add_modifier(Modifier::BOLD | base_mod),
                 )));
             } else if let Some(header) = raw_line.strip_prefix("# ") {
                 let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
                     h,
                     Style::default()
-                        .fg(style_tokens::HEADING_1)
-                        .add_modifier(Modifier::BOLD),
+                        .fg(palette.heading)
+                        .add_modifier(Modifier::BOLD | base_mod),
                 )));
             } else if is_bullet_line(raw_line) {
                 // Bullet list (supports nesting)
@@ -89,9 +169,9 @@ impl MarkdownRenderer {
                 };
                 let mut spans = vec![Span::styled(
                     prefix,
-                    Style::default().fg(style_tokens::BULLET),
+                    Style::default().fg(palette.bullet).add_modifier(base_mod),
                 )];
-                spans.extend(parse_inline_spans(content));
+                spans.extend(parse_inline_spans_with_palette(content, palette));
                 lines.push(Line::from(spans));
             } else if is_ordered_list_line(raw_line) {
                 // Ordered list
@@ -105,13 +185,13 @@ impl MarkdownRenderer {
                     Cow::Owned(format!("{}  {}. ", "  ".repeat(indent_level), number));
                 let mut spans = vec![Span::styled(
                     prefix,
-                    Style::default().fg(style_tokens::BULLET),
+                    Style::default().fg(palette.bullet).add_modifier(base_mod),
                 )];
-                spans.extend(parse_inline_spans(content));
+                spans.extend(parse_inline_spans_with_palette(content, palette));
                 lines.push(Line::from(spans));
             } else {
                 // Regular text with inline formatting
-                lines.push(render_inline_line(raw_line));
+                lines.push(render_inline_line_with_palette(raw_line, palette));
             }
         }
 
@@ -119,10 +199,9 @@ impl MarkdownRenderer {
     }
 }
 
-/// Render inline formatting (bold, italic, code) in a single line.
-fn render_inline_line(text: &str) -> Line<'static> {
-    // Simple approach: split by backtick pairs for inline code
-    let spans = parse_inline_spans(text);
+/// Render inline formatting with a custom palette.
+fn render_inline_line_with_palette(text: &str, palette: &MdPalette) -> Line<'static> {
+    let spans = parse_inline_spans_with_palette(text, palette);
     Line::from(spans)
 }
 
@@ -144,69 +223,10 @@ fn is_ordered_list_line(line: &str) -> bool {
 
 /// Parse inline spans handling markdown links, backtick code, and bold markers.
 ///
-/// Uses `Cow<'static, str>` internally: substrings that require no
-/// transformation are converted to owned `String`s only once (at the Span
-/// boundary), which is unavoidable for `Span<'static>`. The `Cow` usage
-/// makes the intent clear and avoids redundant intermediate allocations
-/// when the same string passes through multiple parsing layers.
+/// Delegates to [`parse_inline_spans_with_palette`] with the default palette.
+#[cfg(test)]
 fn parse_inline_spans(text: &str) -> Vec<Span<'static>> {
-    let mut spans = Vec::new();
-    let mut remaining = text;
-
-    while !remaining.is_empty() {
-        // Find the next interesting marker: backtick or markdown link
-        let next_backtick = remaining.find('`');
-        let next_link = find_markdown_link(remaining);
-
-        // Determine which marker comes first
-        let use_link = match (next_backtick, &next_link) {
-            (_, None) => false,
-            (None, Some(_)) => true,
-            (Some(bt), Some((ls, _, _, _))) => *ls < bt,
-        };
-
-        if use_link {
-            let (link_start, link_text, _url, link_end) = next_link.unwrap();
-            if link_start > 0 {
-                spans.extend(parse_bold_spans(&remaining[..link_start]));
-            }
-            let display: Cow<'static, str> = Cow::Owned(link_text.to_string());
-            spans.push(Span::styled(
-                display,
-                Style::default()
-                    .fg(style_tokens::BLUE_BRIGHT)
-                    .add_modifier(Modifier::UNDERLINED),
-            ));
-            remaining = &remaining[link_end..];
-        } else if let Some(code_start) = next_backtick {
-            if code_start > 0 {
-                spans.extend(parse_bold_spans(&remaining[..code_start]));
-            }
-            let after_start = &remaining[code_start + 1..];
-            if let Some(code_end) = after_start.find('`') {
-                let code: Cow<'static, str> = Cow::Owned(after_start[..code_end].to_string());
-                spans.push(Span::styled(
-                    code,
-                    Style::default()
-                        .fg(style_tokens::CODE_FG)
-                        .bg(style_tokens::CODE_BG),
-                ));
-                remaining = &after_start[code_end + 1..];
-            } else {
-                spans.extend(parse_bold_spans(remaining));
-                break;
-            }
-        } else {
-            spans.extend(parse_bold_spans(remaining));
-            break;
-        }
-    }
-
-    if spans.is_empty() {
-        spans.push(Span::raw(Cow::Owned(String::new())));
-    }
-
-    spans
+    parse_inline_spans_with_palette(text, &MdPalette::default())
 }
 
 /// Find a markdown link `[text](url)` in the given text.
@@ -231,18 +251,90 @@ fn find_markdown_link(text: &str) -> Option<(usize, &str, &str, usize)> {
     Some((open_bracket, link_text, url, end))
 }
 
-/// Parse bold markers (**text**) within a segment of text.
-///
-/// Uses `Cow<'static, str>` for span content to make allocation points explicit.
-fn parse_bold_spans(text: &str) -> Vec<Span<'static>> {
+/// Parse inline spans with a custom palette.
+fn parse_inline_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let mut remaining = text;
+    let base_mod = palette.base_modifier;
+
+    while !remaining.is_empty() {
+        let next_backtick = remaining.find('`');
+        let next_link = find_markdown_link(remaining);
+
+        let use_link = match (next_backtick, &next_link) {
+            (_, None) => false,
+            (None, Some(_)) => true,
+            (Some(bt), Some((ls, _, _, _))) => *ls < bt,
+        };
+
+        if use_link {
+            let (link_start, link_text, _url, link_end) = next_link.unwrap();
+            if link_start > 0 {
+                spans.extend(parse_bold_spans_with_palette(
+                    &remaining[..link_start],
+                    palette,
+                ));
+            }
+            let display: Cow<'static, str> = Cow::Owned(link_text.to_string());
+            spans.push(Span::styled(
+                display,
+                Style::default()
+                    .fg(palette.link)
+                    .add_modifier(Modifier::UNDERLINED | base_mod),
+            ));
+            remaining = &remaining[link_end..];
+        } else if let Some(code_start) = next_backtick {
+            if code_start > 0 {
+                spans.extend(parse_bold_spans_with_palette(
+                    &remaining[..code_start],
+                    palette,
+                ));
+            }
+            let after_start = &remaining[code_start + 1..];
+            if let Some(code_end) = after_start.find('`') {
+                let code: Cow<'static, str> = Cow::Owned(after_start[..code_end].to_string());
+                spans.push(Span::styled(
+                    code,
+                    Style::default()
+                        .fg(palette.code_fg)
+                        .bg(palette.code_bg)
+                        .add_modifier(base_mod),
+                ));
+                remaining = &after_start[code_end + 1..];
+            } else {
+                spans.extend(parse_bold_spans_with_palette(remaining, palette));
+                break;
+            }
+        } else {
+            spans.extend(parse_bold_spans_with_palette(remaining, palette));
+            break;
+        }
+    }
+
+    if spans.is_empty() {
+        spans.push(Span::styled(
+            Cow::Owned(String::new()),
+            Style::default().add_modifier(base_mod),
+        ));
+    }
+
+    spans
+}
+
+/// Parse bold markers with a custom palette.
+fn parse_bold_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut remaining = text;
+    let base_mod = palette.base_modifier;
 
     while !remaining.is_empty() {
         if let Some(bold_start) = remaining.find("**") {
             if bold_start > 0 {
                 let plain: Cow<'static, str> = Cow::Owned(remaining[..bold_start].to_string());
-                spans.push(Span::raw(plain));
+                spans.push(Span::styled(
+                    plain,
+                    Style::default().fg(palette.text).add_modifier(base_mod),
+                ));
             }
             let after_start = &remaining[bold_start + 2..];
             if let Some(bold_end) = after_start.find("**") {
@@ -250,23 +342,37 @@ fn parse_bold_spans(text: &str) -> Vec<Span<'static>> {
                 spans.push(Span::styled(
                     bold_text,
                     Style::default()
-                        .fg(style_tokens::BOLD_FG)
-                        .add_modifier(Modifier::BOLD),
+                        .fg(palette.bold_fg)
+                        .add_modifier(Modifier::BOLD | base_mod),
                 ));
                 remaining = &after_start[bold_end + 2..];
             } else {
                 let rest: Cow<'static, str> = Cow::Owned(remaining.to_string());
-                spans.push(Span::raw(rest));
+                spans.push(Span::styled(
+                    rest,
+                    Style::default().fg(palette.text).add_modifier(base_mod),
+                ));
                 break;
             }
         } else {
             let rest: Cow<'static, str> = Cow::Owned(remaining.to_string());
-            spans.push(Span::raw(rest));
+            spans.push(Span::styled(
+                rest,
+                Style::default().fg(palette.text).add_modifier(base_mod),
+            ));
             break;
         }
     }
 
     spans
+}
+
+/// Parse bold markers (**text**) within a segment of text.
+///
+/// Delegates to [`parse_bold_spans_with_palette`] with the default palette.
+#[cfg(test)]
+fn parse_bold_spans(text: &str) -> Vec<Span<'static>> {
+    parse_bold_spans_with_palette(text, &MdPalette::default())
 }
 
 #[cfg(test)]
