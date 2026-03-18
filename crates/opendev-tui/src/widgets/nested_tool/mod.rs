@@ -103,10 +103,12 @@ impl Widget for NestedToolWidget<'_> {
             };
 
             let elapsed = subagent.elapsed_secs();
-            let task_preview = if subagent.task.len() > 60 {
-                format!("{}...", &subagent.task[..60])
+            let task_text =
+                crate::formatters::replace_wd_in_text(&subagent.task, self.working_dir);
+            let task_preview = if task_text.len() > 60 {
+                format!("{}...", &task_text[..60])
             } else {
-                subagent.task.clone()
+                task_text
             };
 
             // Format elapsed as Xm Ys or Xs

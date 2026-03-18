@@ -21,5 +21,6 @@ pub use factory::FormatterFactory;
 pub use markdown::MarkdownRenderer;
 pub use tool_registry::{
     GREEN_GRADIENT, ToolCategory, categorize_tool, format_tool_call_display,
-    format_tool_call_parts, format_tool_call_parts_with_wd, tool_color, tool_display_parts,
+    format_tool_call_parts, format_tool_call_parts_with_wd, replace_wd_in_text, tool_color,
+    tool_display_parts,
 };

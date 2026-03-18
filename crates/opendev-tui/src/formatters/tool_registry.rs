@@ -477,13 +477,48 @@ fn make_relative(path: &str, working_dir: Option<&str>) -> String {
     {
         let rel = path.strip_prefix(wd).unwrap_or(path);
         let rel = rel.strip_prefix('/').unwrap_or(rel);
-        if !rel.is_empty() {
-            return rel.to_string();
+        if rel.is_empty() {
+            return ".".to_string(); // path == working_dir
         }
+        return rel.to_string();
     }
     // Strip leading "./" for cleaner display — LLMs sometimes produce these
     let cleaned = path.strip_prefix("./").unwrap_or(path);
     cleaned.to_string()
+}
+
+/// Replace working directory paths in free-form text with relative equivalents.
+///
+/// Handles both `wd/subpath` → `subpath` and standalone `wd` → `.` replacements,
+/// with boundary awareness to avoid corrupting paths like `/project-v2` when wd is `/project`.
+pub fn replace_wd_in_text(text: &str, working_dir: Option<&str>) -> String {
+    let wd = match working_dir {
+        Some(w) if !w.is_empty() => w,
+        _ => return text.to_string(),
+    };
+    // Pass 1: replace "wd/" → "" (slash is a natural boundary)
+    let wd_slash = format!("{wd}/");
+    let result = text.replace(&wd_slash, "");
+    // Pass 2: replace standalone "wd" → "." only at path boundaries
+    // (not when followed by alphanumeric, '-', '_', '.' which extend path components)
+    let mut out = String::with_capacity(result.len());
+    let mut remaining = result.as_str();
+    while let Some(pos) = remaining.find(wd) {
+        out.push_str(&remaining[..pos]);
+        let after = &remaining[pos + wd.len()..];
+        let extends_path = after
+            .as_bytes()
+            .first()
+            .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.');
+        if extends_path {
+            out.push_str(wd); // not a boundary — keep original
+        } else {
+            out.push('.'); // boundary — replace with "."
+        }
+        remaining = after;
+    }
+    out.push_str(remaining);
+    out
 }
 
 /// Format a tool call into separate verb and arg parts.
@@ -500,6 +535,16 @@ pub fn format_tool_call_parts(
 /// Format a tool call into separate verb and arg parts, with optional working directory
 /// for displaying relative paths.
 pub fn format_tool_call_parts_with_wd(
+    tool_name: &str,
+    args: &HashMap<String, serde_json::Value>,
+    working_dir: Option<&str>,
+) -> (String, String) {
+    let (verb, arg) = format_parts_inner(tool_name, args, working_dir);
+    (verb, replace_wd_in_text(&arg, working_dir))
+}
+
+/// Inner implementation of tool call formatting (before universal path replacement).
+fn format_parts_inner(
     tool_name: &str,
     args: &HashMap<String, serde_json::Value>,
     working_dir: Option<&str>,
@@ -697,5 +742,62 @@ mod tests {
             ResultFormat::Directory
         );
         assert_eq!(lookup_tool("ask_user").result_format, ResultFormat::Generic);
+    }
+
+    #[test]
+    fn test_make_relative_path_equals_working_dir() {
+        // When path == working_dir, should return "." not the absolute path
+        assert_eq!(
+            make_relative("/Users/me/project", Some("/Users/me/project")),
+            "."
+        );
+    }
+
+    #[test]
+    fn test_replace_wd_in_text_embedded_path() {
+        let text = "Explore repo at /Users/me/project/src with focus on tests";
+        let result = replace_wd_in_text(text, Some("/Users/me/project"));
+        assert_eq!(result, "Explore repo at src with focus on tests");
+    }
+
+    #[test]
+    fn test_replace_wd_in_text_standalone_wd() {
+        let text = "List(/Users/me/project)";
+        let result = replace_wd_in_text(text, Some("/Users/me/project"));
+        assert_eq!(result, "List(.)");
+    }
+
+    #[test]
+    fn test_replace_wd_in_text_boundary_safety() {
+        // Should NOT corrupt "/project-v2" when wd is "/project"
+        let text = "Explore /project-v2/src";
+        let result = replace_wd_in_text(text, Some("/project"));
+        assert_eq!(result, "Explore /project-v2/src");
+    }
+
+    #[test]
+    fn test_replace_wd_in_text_no_working_dir() {
+        let text = "some text /Users/me/project/file.rs";
+        assert_eq!(replace_wd_in_text(text, None), text);
+        assert_eq!(replace_wd_in_text(text, Some("")), text);
+    }
+
+    #[test]
+    fn test_format_spawn_subagent_strips_paths() {
+        let mut args = HashMap::new();
+        args.insert(
+            "agent_type".to_string(),
+            serde_json::Value::String("Explore".to_string()),
+        );
+        args.insert(
+            "task".to_string(),
+            serde_json::Value::String(
+                "Explore repo at /Users/me/project with focus on tests".to_string(),
+            ),
+        );
+        let (verb, arg) =
+            format_tool_call_parts_with_wd("spawn_subagent", &args, Some("/Users/me/project"));
+        assert_eq!(verb, "Explore");
+        assert_eq!(arg, "Explore repo at . with focus on tests");
     }
 }

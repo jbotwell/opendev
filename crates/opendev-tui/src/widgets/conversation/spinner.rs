@@ -70,6 +70,8 @@ impl<'a> ConversationWidget<'a> {
                         (name.to_string(), task.to_string())
                     };
 
+                    let task_desc =
+                        crate::formatters::replace_wd_in_text(&task_desc, Some(self.working_dir));
                     let task_short = if task_desc.len() > 60 {
                         format!("{}...", &task_desc[..60])
                     } else {
