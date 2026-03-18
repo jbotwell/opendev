@@ -544,9 +544,6 @@ impl BaseTool for BashTool {
         // Resolve working directory: use `workdir` param if provided, else ctx.working_dir
         let working_dir = if let Some(wd) = args.get("workdir").and_then(|v| v.as_str()) {
             let path = crate::path_utils::resolve_dir_path(wd, &ctx.working_dir);
-            if let Err(msg) = crate::path_utils::validate_path_access(&path, &ctx.working_dir) {
-                return ToolResult::fail(msg);
-            }
             if !path.exists() {
                 return ToolResult::fail(format!(
                     "workdir path does not exist: {}",
