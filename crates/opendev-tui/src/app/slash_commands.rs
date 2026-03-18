@@ -162,7 +162,7 @@ impl App {
             "init" => {
                 let path = args.unwrap_or(".");
                 self.push_system_message(format!(
-                    "Analyzing codebase at '{path}' and generating OPENDEV.md...\n\
+                    "Analyzing codebase at '{path}' and generating AGENTS.md...\n\
                      Send a message to the agent to perform initialization."
                 ));
             }
@@ -307,7 +307,7 @@ impl App {
                         "  /tasks             — List background tasks",
                         "  /task <id>         — Show task output",
                         "  /kill <id>         — Kill a background task",
-                        "  /init [path]       — Generate OPENDEV.md",
+                        "  /init [path]       — Generate AGENTS.md",
                         "  /agents [list|create] — Manage custom agents",
                         "  /skills [list|create] — Manage custom skills",
                         "  /plugins [list|install|remove] — Manage plugins",
@@ -485,7 +485,7 @@ mod tests {
                 .last()
                 .unwrap()
                 .content
-                .contains("OPENDEV.md")
+                .contains("AGENTS.md")
         );
     }
 

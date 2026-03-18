@@ -105,7 +105,7 @@ Your response was not valid JSON. Please respond with ONLY a valid JSON object, 
 Your response was not valid JSON. Please respond with ONLY a valid JSON object containing the required fields. No markdown, no explanation, just the JSON object.
 
 --- init_complete_signal ---
-The OPENDEV.md file has been created at {path}. Provide a brief 1-sentence summary confirming what was generated.
+The AGENTS.md file has been created at {path}. Provide a brief 1-sentence summary confirming what was generated.
 
 --- plan_approved_signal ---
 <plan_approved>

@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 /// Recognized instruction file names (same order as environment.rs).
-const INSTRUCTION_FILENAMES: &[&str] = &["AGENTS.md", "CLAUDE.md", "OPENDEV.md", "CONTEXT.md"];
+const INSTRUCTION_FILENAMES: &[&str] = &["AGENTS.md", "CLAUDE.md", "CONTEXT.md"];
 
 /// Additional instruction files from other AI tools.
 const COMPAT_INSTRUCTION_FILES: &[&str] = &[".cursorrules", ".github/copilot-instructions.md"];

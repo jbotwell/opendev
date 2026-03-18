@@ -49,7 +49,7 @@ pub const BUILTIN_COMMANDS: &[SlashCommand] = &[
     // Advanced commands
     SlashCommand {
         name: "init",
-        description: "analyze codebase and generate OPENDEV.md",
+        description: "analyze codebase and generate AGENTS.md",
     },
     SlashCommand {
         name: "mcp",

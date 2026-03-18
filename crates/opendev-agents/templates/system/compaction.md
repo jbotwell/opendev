@@ -90,4 +90,4 @@ You MUST produce your summary using EXACTLY the following template. Include ever
 - Keep the total summary under 800 words — be concise but never sacrifice critical context
 - Use present tense for current state, past tense for completed actions
 - If the conversation contains multiple distinct tasks, separate them clearly under the Objective section
-- If OPENDEV.md contains compact instructions, follow them in addition to these rules
+- If AGENTS.md contains compact instructions, follow them in addition to these rules

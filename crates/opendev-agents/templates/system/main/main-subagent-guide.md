@@ -17,7 +17,7 @@ Subagents are specialized agents with focused capabilities. Each has a specific 
 **When to use**: Understanding code architecture, finding specific implementations, tracing code patterns, or researching implementation details in LOCAL files.
 
 ## Project-Init
-**Purpose**: Analyze a codebase and generate an OPENDEV.md project instruction file.
+**Purpose**: Analyze a codebase and generate an AGENTS.md project instruction file.
 **When to use**: Setting up a new project, generating build/test/lint commands, documenting project structure.
 
 ## Planner

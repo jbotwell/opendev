@@ -22,7 +22,7 @@ pub const PLUGIN_CACHE_DIR_NAME: &str = "cache";
 pub const SETTINGS_FILE_NAME: &str = "settings.json";
 pub const SESSIONS_INDEX_FILE_NAME: &str = "sessions-index.json";
 pub const AGENTS_FILE_NAME: &str = "agents.json";
-pub const CONTEXT_FILE_NAME: &str = "OPENDEV.md";
+pub const CONTEXT_FILE_NAME: &str = "AGENTS.md";
 pub const HISTORY_FILE_NAME: &str = "history.txt";
 pub const KNOWN_MARKETPLACES_FILE_NAME: &str = "known_marketplaces.json";
 pub const INSTALLED_PLUGINS_FILE_NAME: &str = "installed_plugins.json";
@@ -143,7 +143,7 @@ impl Paths {
         self.global_dir().join(AGENTS_FILE_NAME)
     }
 
-    /// Get global context file (OPENDEV.md) path.
+    /// Get global context file (AGENTS.md) path.
     pub fn global_context_file(&self) -> PathBuf {
         self.global_dir().join(CONTEXT_FILE_NAME)
     }
@@ -241,7 +241,7 @@ impl Paths {
         self.project_dir().join(COMMANDS_DIR_NAME)
     }
 
-    /// Get project context file (OPENDEV.md) path at project root.
+    /// Get project context file (AGENTS.md) path at project root.
     pub fn project_context_file(&self) -> PathBuf {
         self.working_dir.join(CONTEXT_FILE_NAME)
     }
@@ -355,7 +355,7 @@ mod tests {
         let paths = Paths::new(Some(PathBuf::from("/tmp/myproject")));
         assert_eq!(
             paths.project_context_file(),
-            PathBuf::from("/tmp/myproject/OPENDEV.md")
+            PathBuf::from("/tmp/myproject/AGENTS.md")
         );
     }
 

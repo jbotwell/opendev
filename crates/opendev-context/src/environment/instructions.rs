@@ -10,7 +10,7 @@ use std::process::Command;
 use super::InstructionFile;
 
 /// Instruction file names to search for, in priority order.
-const INSTRUCTION_FILENAMES: &[&str] = &["AGENTS.md", "CLAUDE.md", "OPENDEV.md"];
+const INSTRUCTION_FILENAMES: &[&str] = &["AGENTS.md", "CLAUDE.md"];
 
 /// Additional instruction file patterns from other AI tools.
 /// These are checked per-directory alongside the standard filenames.
@@ -27,7 +27,7 @@ const REMOTE_INSTRUCTION_TIMEOUT_SECS: u64 = 5;
 
 /// Discover project instruction files by walking up from `working_dir`.
 ///
-/// Searches for `AGENTS.md`, `CLAUDE.md`, `OPENDEV.md` in the working directory
+/// Searches for `AGENTS.md`, `CLAUDE.md` in the working directory
 /// and each parent up to the filesystem root (or git root). Also checks
 /// `.opendev/instructions.md` and `.claude/instructions.md` in each directory,
 /// and global config at `~/.opendev/instructions.md`, `~/.config/opendev/AGENTS.md`,

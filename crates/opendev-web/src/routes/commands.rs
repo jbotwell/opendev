@@ -30,7 +30,7 @@ fn command_list() -> serde_json::Value {
                     "name": "/init",
                     "args": "[path]",
                     "description":
-                        "Analyze codebase and generate OPENDEV.md with repository guidelines"
+                        "Analyze codebase and generate AGENTS.md with repository guidelines"
                 }
             ]
         },
