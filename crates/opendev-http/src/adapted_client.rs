@@ -241,7 +241,8 @@ impl AdaptedClient {
                                     usage_data = Some(usage.clone());
                                 }
                                 if let Some(delta) = data_json.get("delta")
-                                    && let Some(sr) = delta.get("stop_reason").and_then(|s| s.as_str())
+                                    && let Some(sr) =
+                                        delta.get("stop_reason").and_then(|s| s.as_str())
                                 {
                                     stop_reason = Some(sr.to_string());
                                 }
@@ -251,7 +252,11 @@ impl AdaptedClient {
                                 if let Some(cb) = data_json.get("content_block")
                                     && cb.get("type").and_then(|t| t.as_str()) == Some("tool_use")
                                 {
-                                    let idx = data_json.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                                    let idx = data_json
+                                        .get("index")
+                                        .and_then(|i| i.as_u64())
+                                        .unwrap_or(0)
+                                        as usize;
                                     tool_calls.push(serde_json::json!({
                                         "id": cb.get("id").and_then(|i| i.as_str()).unwrap_or(""),
                                         "type": "function",
@@ -266,10 +271,17 @@ impl AdaptedClient {
                             "content_block_delta" => {
                                 // Anthropic: accumulate tool input
                                 if let Some(delta) = data_json.get("delta")
-                                    && delta.get("type").and_then(|t| t.as_str()) == Some("input_json_delta")
+                                    && delta.get("type").and_then(|t| t.as_str())
+                                        == Some("input_json_delta")
                                 {
-                                    let idx = data_json.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
-                                    if let Some(partial) = delta.get("partial_json").and_then(|p| p.as_str()) {
+                                    let idx = data_json
+                                        .get("index")
+                                        .and_then(|i| i.as_u64())
+                                        .unwrap_or(0)
+                                        as usize;
+                                    if let Some(partial) =
+                                        delta.get("partial_json").and_then(|p| p.as_str())
+                                    {
                                         current_tool_args.entry(idx).or_default().push_str(partial);
                                     }
                                 }
@@ -359,8 +371,7 @@ impl AdaptedClient {
                     },
                 });
                 if !accumulated_reasoning.is_empty() {
-                    message["reasoning_content"] =
-                        serde_json::Value::String(accumulated_reasoning);
+                    message["reasoning_content"] = serde_json::Value::String(accumulated_reasoning);
                 }
                 // Finalize tool call arguments
                 if !tool_calls.is_empty() {
@@ -374,13 +385,14 @@ impl AdaptedClient {
                     }
                     message["tool_calls"] = serde_json::Value::Array(finalized);
                 }
-                let finish = stop_reason.as_deref().unwrap_or(
-                    if message.get("tool_calls").is_some() {
-                        "tool_calls"
-                    } else {
-                        "stop"
-                    },
-                );
+                let finish =
+                    stop_reason
+                        .as_deref()
+                        .unwrap_or(if message.get("tool_calls").is_some() {
+                            "tool_calls"
+                        } else {
+                            "stop"
+                        });
                 let response = serde_json::json!({
                     "id": "stream-accumulated",
                     "object": "chat.completion",
