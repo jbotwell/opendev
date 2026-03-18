@@ -166,10 +166,11 @@ impl SubagentManager {
             temperature: Some(temperature),
             max_tokens: Some(spec.max_tokens.unwrap_or(parent_max_tokens as u32) as u64),
             // Subagents use lower reasoning effort to avoid excessive thinking.
-            // Cap at "low" regardless of parent setting.
+            // Cap at "medium" — "high" parent becomes "medium" subagent;
+            // "medium" and "low" pass through unchanged.
             reasoning_effort: parent_reasoning_effort.map(|e| {
-                if e == "high" || e == "medium" {
-                    "low".to_string()
+                if e == "high" {
+                    "medium".to_string()
                 } else {
                     e
                 }
