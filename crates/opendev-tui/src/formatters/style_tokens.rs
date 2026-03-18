@@ -158,7 +158,7 @@ impl Theme {
             border_accent: Color::Rgb(147, 147, 255),
 
             grey: Color::Rgb(122, 126, 134),
-            thinking_bg: Color::Rgb(90, 94, 102),
+            thinking_bg: Color::Rgb(105, 105, 105),
             orange: Color::Rgb(255, 140, 0),
             green_light: Color::Rgb(137, 209, 133),
             green_bright: Color::Rgb(0, 255, 0),
@@ -168,7 +168,7 @@ impl Theme {
             cyan: Color::Rgb(0, 191, 255),
             dim_grey: Color::Rgb(107, 114, 128),
 
-            phase_thinking: Color::Rgb(90, 94, 102),
+            phase_thinking: Color::Rgb(105, 105, 105),
             phase_critique: Color::Rgb(255, 179, 71),
             phase_refinement: Color::Rgb(0, 191, 255),
 
@@ -290,7 +290,7 @@ pub const BORDER_ACCENT: Color = Color::Rgb(147, 147, 255);
 
 // Semantic colors (from Python style_tokens.py)
 pub const GREY: Color = Color::Rgb(122, 126, 134);
-pub const THINKING_BG: Color = Color::Rgb(90, 94, 102);
+pub const THINKING_BG: Color = Color::Rgb(105, 105, 105);
 pub const ORANGE: Color = Color::Rgb(255, 140, 0);
 pub const GREEN_LIGHT: Color = Color::Rgb(137, 209, 133);
 pub const GREEN_BRIGHT: Color = Color::Rgb(0, 255, 0);
@@ -301,7 +301,7 @@ pub const CYAN: Color = Color::Rgb(0, 191, 255);
 pub const DIM_GREY: Color = Color::Rgb(107, 114, 128);
 
 // Thinking phases
-pub const PHASE_THINKING: Color = Color::Rgb(90, 94, 102);
+pub const PHASE_THINKING: Color = Color::Rgb(105, 105, 105);
 pub const PHASE_CRITIQUE: Color = Color::Rgb(255, 179, 71);
 pub const PHASE_REFINEMENT: Color = Color::Rgb(0, 191, 255);
 
