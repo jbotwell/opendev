@@ -48,10 +48,10 @@ impl MdPalette {
     /// for structural elements.
     pub fn muted(base: Color) -> Self {
         // Derive slightly brighter heading from the base for contrast
-        let heading = dim_color(style_tokens::HEADING_1, 0.45);
-        let code_fg = dim_color(style_tokens::CODE_FG, 0.45);
-        let bold_fg = dim_color(style_tokens::BOLD_FG, 0.50);
-        let link = dim_color(style_tokens::BLUE_BRIGHT, 0.45);
+        let heading = dim_color(style_tokens::HEADING_1, 0.50);
+        let code_fg = dim_color(style_tokens::CODE_FG, 0.50);
+        let bold_fg = dim_color(style_tokens::BOLD_FG, 0.55);
+        let link = dim_color(style_tokens::BLUE_BRIGHT, 0.50);
         Self {
             heading,
             code_fg,
@@ -60,7 +60,7 @@ impl MdPalette {
             bold_fg,
             link,
             text: base,
-            base_modifier: Modifier::ITALIC,
+            base_modifier: Modifier::empty(),
         }
     }
 }
@@ -280,7 +280,7 @@ fn parse_inline_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<
                 display,
                 Style::default()
                     .fg(palette.link)
-                    .add_modifier(Modifier::UNDERLINED | base_mod),
+                    .add_modifier(base_mod),
             ));
             remaining = &remaining[link_end..];
         } else if let Some(code_start) = next_backtick {
@@ -489,10 +489,8 @@ mod tests {
         let spans = parse_inline_spans("visit [example](http://example.com) now");
         let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
         assert_eq!(text, "visit example now");
-        // The link span should be underlined
         let link_span = &spans[1];
         assert_eq!(link_span.content.as_ref(), "example");
-        assert!(link_span.style.add_modifier.contains(Modifier::UNDERLINED));
     }
 
     #[test]
