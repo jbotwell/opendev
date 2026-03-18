@@ -46,6 +46,16 @@ pub trait ProviderAdapter: Send + Sync + std::fmt::Debug {
     /// add provider-specific streaming flags (e.g., `stream: true`).
     fn enable_streaming(&self, _payload: &mut Value) {}
 
+    /// Get the streaming API URL, if different from the regular API URL.
+    ///
+    /// Some providers use a different endpoint for streaming (e.g., Gemini
+    /// uses `streamGenerateContent` instead of `generateContent`). Returns
+    /// `None` to use the client's default URL.
+    fn streaming_url(&self, base_url: &str) -> Option<String> {
+        let _ = base_url;
+        None
+    }
+
     /// Parse a single SSE event into a stream event.
     ///
     /// `event_type` is the SSE event name (from `event:` line).

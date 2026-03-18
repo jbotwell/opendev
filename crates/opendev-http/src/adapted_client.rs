@@ -143,7 +143,10 @@ impl AdaptedClient {
         let mut converted = adapter.convert_request(payload.clone());
         adapter.enable_streaming(&mut converted);
 
-        let url = adapter.api_url();
+        // Use streaming URL if the adapter provides one, otherwise fall back to client URL
+        let base_url = self.client.api_url();
+        let streaming_url_owned = adapter.streaming_url(base_url);
+        let url = streaming_url_owned.as_deref().unwrap_or(base_url);
 
         // Send request and get raw response for streaming
         debug!(url = %url, "Sending streaming request");
