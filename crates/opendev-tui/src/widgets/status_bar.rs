@@ -135,6 +135,18 @@ impl Widget for StatusBarWidget<'_> {
 
         let mut spans: Vec<Span> = Vec::new();
 
+        // Model name (first item)
+        spans.push(Span::styled(
+            format!("\u{25C6} {}", self.model),
+            Style::default()
+                .fg(style_tokens::CYAN)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            "  \u{2502}  ",
+            Style::default().fg(style_tokens::GREY),
+        ));
+
         // Autonomy level
         let autonomy_color = match self.autonomy {
             AutonomyLevel::Manual => style_tokens::ORANGE_CAUTION,
@@ -408,10 +420,7 @@ mod tests {
     fn test_shorten_display() {
         let ps = crate::formatters::PathShortener::default();
         assert_eq!(ps.shorten_display("/home/user"), "/home/user");
-        assert_eq!(
-            ps.shorten_display("/a/b/c/d/myapp"),
-            "…/d/myapp"
-        );
+        assert_eq!(ps.shorten_display("/a/b/c/d/myapp"), "…/d/myapp");
     }
 
     #[test]
