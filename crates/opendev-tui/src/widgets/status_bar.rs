@@ -409,8 +409,8 @@ mod tests {
         let ps = crate::formatters::PathShortener::default();
         assert_eq!(ps.shorten_display("/home/user"), "/home/user");
         assert_eq!(
-            ps.shorten_display("/home/user/projects/myapp"),
-            ".../projects/myapp"
+            ps.shorten_display("/a/b/c/d/myapp"),
+            "…/d/myapp"
         );
     }
 

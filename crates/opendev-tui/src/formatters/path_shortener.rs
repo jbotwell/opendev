@@ -55,14 +55,29 @@ impl PathShortener {
         self.replace_home_in_text(&result)
     }
 
-    /// Shorten a path for status bar display: home → ~, then last 2 components.
+    /// Shorten a path for status bar display: home → ~, then keep it compact.
+    ///
+    /// - Paths under home: `~/codes/opendev` stays as-is (≤3 components after ~),
+    ///   longer paths like `~/a/b/c/d` become `~/…/c/d`.
+    /// - Paths outside home with >3 components: `.../last/two`.
     pub fn shorten_display(&self, path: &str) -> String {
         let display = self.replace_home_prefix(path);
+
+        if let Some(after_tilde) = display.strip_prefix("~/") {
+            let parts: Vec<&str> = after_tilde.split('/').filter(|p| !p.is_empty()).collect();
+            if parts.len() <= 3 {
+                return display;
+            }
+            // ~/a/b/c/d → ~/…/c/d
+            return format!("~/…/{}", parts[parts.len() - 2..].join("/"));
+        }
+
+        // Non-home paths (e.g. /usr/local/share/app)
         let parts: Vec<&str> = display.split('/').filter(|p| !p.is_empty()).collect();
-        if parts.len() <= 2 {
+        if parts.len() <= 3 {
             return display;
         }
-        format!(".../{}", parts[parts.len() - 2..].join("/"))
+        format!("…/{}", parts[parts.len() - 2..].join("/"))
     }
 
     /// Replace the home directory prefix with `~` in a single path.
@@ -219,20 +234,30 @@ mod tests {
     }
 
     #[test]
-    fn test_shorten_display_long_path() {
+    fn test_shorten_display_long_non_home_path() {
         let ps = PathShortener::default();
         assert_eq!(
-            ps.shorten_display("/home/user/projects/myapp"),
-            ".../projects/myapp"
+            ps.shorten_display("/a/b/c/d/myapp"),
+            "…/d/myapp"
         );
     }
 
     #[test]
-    fn test_shorten_display_with_home() {
+    fn test_shorten_display_home_short() {
         let home = home();
         let ps = PathShortener::default();
-        let result = ps.shorten_display(&format!("{home}/projects/myapp"));
-        assert_eq!(result, ".../projects/myapp");
+        // ~/codes/opendev → stays as-is (≤3 parts after ~)
+        let result = ps.shorten_display(&format!("{home}/codes/opendev"));
+        assert_eq!(result, "~/codes/opendev");
+    }
+
+    #[test]
+    fn test_shorten_display_home_long() {
+        let home = home();
+        let ps = PathShortener::default();
+        // ~/a/b/c/d → ~/…/c/d
+        let result = ps.shorten_display(&format!("{home}/a/b/c/d"));
+        assert_eq!(result, "~/…/c/d");
     }
 
     #[test]
