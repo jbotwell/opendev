@@ -109,7 +109,7 @@ impl App {
                         "Session model override cleared. Using global model.".to_string(),
                     );
                 }
-                Some(model_name) => {
+                Some(model_name) if !model_name.is_empty() => {
                     self.state.model = model_name.to_string();
                     self.push_system_message(format!(
                         "Model set to: {} (session)",
@@ -119,7 +119,7 @@ impl App {
                         let _ = tx.send(format!("\x00__MODEL_CHANGE__{}", self.state.model));
                     }
                 }
-                None => {
+                _ => {
                     self.push_system_message(format!(
                         "Current model: {}\nUsage: /session-models <model-name>",
                         self.state.model
@@ -323,6 +323,38 @@ impl App {
                     }
                 }
             }
+            "undo" => {
+                if self.state.agent_active {
+                    self.push_system_message("Cannot undo while agent is running.".to_string());
+                } else if let Some(ref tx) = self.user_message_tx {
+                    let _ = tx.send("\x00__UNDO__".to_string());
+                } else {
+                    self.push_system_message("Undo not available.".to_string());
+                }
+            }
+            "redo" => {
+                if self.state.agent_active {
+                    self.push_system_message("Cannot redo while agent is running.".to_string());
+                } else if let Some(ref tx) = self.user_message_tx {
+                    let _ = tx.send("\x00__REDO__".to_string());
+                } else {
+                    self.push_system_message("Redo not available.".to_string());
+                }
+            }
+            "share" => {
+                if let Some(ref tx) = self.user_message_tx {
+                    let _ = tx.send("\x00__SHARE__".to_string());
+                } else {
+                    self.push_system_message("Share not available.".to_string());
+                }
+            }
+            "sessions" => {
+                // Open session picker
+                if let Some(ref tx) = self.user_message_tx {
+                    let _ = tx.send("\x00__LIST_SESSIONS__".to_string());
+                }
+                self.push_system_message("Loading sessions...".to_string());
+            }
             "help" => {
                 self.push_system_message(
                     [
@@ -333,6 +365,10 @@ impl App {
                         "  /autonomy [manual|semi-auto|auto] — Cycle or set autonomy",
                         "  /models [name]     — Open model picker or set model directly",
                         "  /session-models [name|clear] — Set model for session",
+                        "  /sessions          — List saved sessions",
+                        "  /undo              — Undo last file changes",
+                        "  /redo              — Redo undone changes",
+                        "  /share             — Share session as HTML",
                         "  /mcp [list|add|remove|enable|disable] — Manage MCP servers",
                         "  /tasks             — List background tasks",
                         "  /task <id>         — Show task output",
@@ -352,8 +388,12 @@ impl App {
                         "Keyboard shortcuts:",
                         "  Ctrl+C      — Clear input / interrupt / quit",
                         "  Ctrl+B      — Background running agent / toggle panel",
+                        "  Ctrl+D      — Toggle debug panel",
+                        "  Ctrl+R      — Open session picker",
+                        "  Ctrl+X ...  — Leader key (u=undo, r=redo, s=share, m=models, d=debug)",
                         "  Alt+B       — Toggle task watcher panel",
                         "  Escape      — Interrupt agent",
+                        "  Tab         — Accept autocomplete / toggle mode (when empty)",
                         "  Shift+Tab   — Toggle mode",
                         "  PageUp/Down — Scroll conversation",
                     ]
@@ -593,7 +633,7 @@ mod tests {
         // Check that all major commands appear
         for cmd in &[
             "mode", "autonomy", "models", "mcp", "tasks", "task", "kill", "agents", "skills",
-            "plugins",
+            "plugins", "undo", "redo", "share", "sessions",
         ] {
             assert!(help.contains(cmd), "Help text missing /{cmd}");
         }

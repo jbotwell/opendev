@@ -261,8 +261,93 @@ impl TuiRunner {
 
                 // Handle model change sentinel
                 if let Some(model) = msg.strip_prefix("\x00__MODEL_CHANGE__") {
-                    info!(model = model, "Model changed via /models");
-                    runtime.llm_caller.config.model = model.to_string();
+                    match runtime.switch_model(model) {
+                        Ok(name) => {
+                            info!(model = %name, "Model switched via /models");
+                        }
+                        Err(e) => {
+                            warn!(model = model, error = %e, "Model switch failed");
+                            let _ = event_tx.send(AppEvent::AgentError(e));
+                        }
+                    }
+                    continue;
+                }
+
+                // Handle undo sentinel
+                if msg == "\x00__UNDO__" {
+                    info!("TUI: undo requested");
+                    let result = if let Ok(mut mgr) = runtime.snapshot_manager.lock() {
+                        mgr.undo_last()
+                    } else {
+                        None
+                    };
+                    match result {
+                        Some(desc) => {
+                            let _ = event_tx.send(AppEvent::UndoResult {
+                                success: true,
+                                message: desc,
+                            });
+                        }
+                        None => {
+                            let _ = event_tx.send(AppEvent::UndoResult {
+                                success: false,
+                                message: "Nothing to undo.".to_string(),
+                            });
+                        }
+                    }
+                    continue;
+                }
+
+                // Handle redo sentinel
+                if msg == "\x00__REDO__" {
+                    info!("TUI: redo requested");
+                    // Redo: re-track current state, then there's no built-in redo in SnapshotManager
+                    // For now, show "not available"
+                    let _ = event_tx.send(AppEvent::RedoResult {
+                        success: false,
+                        message: "Redo not yet available.".to_string(),
+                    });
+                    continue;
+                }
+
+                // Handle share sentinel
+                if msg == "\x00__SHARE__" {
+                    info!("TUI: share requested");
+                    if let Some(session) = runtime.session_manager.current_session() {
+                        match opendev_history::sharing::share_session(session, "").await {
+                            Ok(url) => {
+                                let _ = event_tx.send(AppEvent::ShareResult { path: url });
+                            }
+                            Err(e) => {
+                                let _ = event_tx.send(AppEvent::AgentError(format!(
+                                    "Failed to share session: {e}"
+                                )));
+                            }
+                        }
+                    } else {
+                        let _ = event_tx.send(AppEvent::AgentError(
+                            "No active session to share.".to_string(),
+                        ));
+                    }
+                    continue;
+                }
+
+                // Handle list sessions sentinel
+                if msg == "\x00__LIST_SESSIONS__" {
+                    info!("TUI: list sessions requested");
+                    let sessions = runtime.session_manager.list_sessions(false);
+                    let mut lines = vec![format!("Sessions ({} total):", sessions.len())];
+                    for s in sessions.iter().take(20) {
+                        let title = s.title.as_deref().unwrap_or("(untitled)");
+                        let date = s.updated_at.format("%Y-%m-%d %H:%M").to_string();
+                        lines.push(format!(
+                            "  {} — {} ({})",
+                            &s.id[..8.min(s.id.len())],
+                            title,
+                            date
+                        ));
+                    }
+                    let _ = event_tx.send(AppEvent::AgentError(lines.join("\n")));
                     continue;
                 }
 
@@ -458,6 +543,15 @@ impl TuiRunner {
                     }
                     Ok(result) => {
                         let _ = event_tx.send(AppEvent::TaskProgressFinished);
+
+                        // Emit snapshot for undo stack after successful query
+                        if !result.interrupted
+                            && let Ok(mut mgr) = runtime.snapshot_manager.lock()
+                            && let Some(hash) = mgr.track()
+                        {
+                            let _ = event_tx.send(AppEvent::SnapshotTaken { hash });
+                        }
+
                         if result.interrupted {
                             let _ = event_tx.send(AppEvent::AgentInterrupted);
                         } else {

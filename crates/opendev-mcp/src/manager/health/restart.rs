@@ -89,7 +89,7 @@ impl McpManager {
 mod tests {
     use super::*;
     use crate::config::McpConfig;
-    use crate::manager::MAX_RESTART_ATTEMPTS;
+    use crate::manager::{MAX_RESTART_ATTEMPTS, ServerHealthState};
     use std::path::PathBuf;
 
     #[tokio::test]

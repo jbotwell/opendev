@@ -270,6 +270,64 @@ impl App {
             return;
         }
 
+        // Leader key dispatch (Ctrl+X was pressed, waiting for second key)
+        if self.state.leader_pending {
+            self.state.leader_pending = false;
+            self.state.leader_timestamp = None;
+            match key.code {
+                KeyCode::Char('u') => {
+                    // Undo
+                    self.execute_slash_command("/undo");
+                }
+                KeyCode::Char('r') => {
+                    // Redo
+                    self.execute_slash_command("/redo");
+                }
+                KeyCode::Char('s') => {
+                    // Share
+                    self.execute_slash_command("/share");
+                }
+                KeyCode::Char('m') => {
+                    // Models
+                    self.execute_slash_command("/models");
+                }
+                KeyCode::Char('p') => {
+                    // Sessions
+                    self.execute_slash_command("/sessions");
+                }
+                KeyCode::Char('d') => {
+                    // Debug panel
+                    self.state.debug_panel_open = !self.state.debug_panel_open;
+                }
+                KeyCode::Esc => {
+                    // Cancel leader
+                }
+                _ => {
+                    use crate::widgets::toast::{Toast, ToastLevel};
+                    self.state.toasts.push(Toast::new(
+                        format!("C-x {:?} — unknown", key.code),
+                        ToastLevel::Warning,
+                    ));
+                }
+            }
+            self.state.dirty = true;
+            return;
+        }
+
+        // Debug panel key handler
+        if self.state.debug_panel_open {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    self.state.debug_panel_open = false;
+                }
+                _ => {}
+            }
+            self.state.dirty = true;
+            if matches!(key.code, KeyCode::Esc | KeyCode::Char('q')) {
+                return;
+            }
+        }
+
         match (key.modifiers, key.code) {
             // Ctrl+C — quit or clear input
             (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
@@ -474,7 +532,7 @@ impl App {
                     let _ = tx.send(sentinel);
                 }
             }
-            // Tab — accept autocomplete suggestion
+            // Tab — accept autocomplete suggestion, or toggle mode when input is empty
             (_, KeyCode::Tab) => {
                 if let Some((insert_text, delete_count)) = self.state.autocomplete.accept() {
                     let start = self.state.input_cursor.saturating_sub(delete_count);
@@ -489,6 +547,18 @@ impl App {
                     // Add trailing space
                     self.state.input_buffer.insert(self.state.input_cursor, ' ');
                     self.state.input_cursor += 1;
+                } else if self.state.input_buffer.is_empty() {
+                    // Toggle mode like Shift+Tab when input is empty
+                    self.state.mode = match self.state.mode {
+                        OperationMode::Normal => {
+                            self.state.pending_plan_request = true;
+                            OperationMode::Plan
+                        }
+                        OperationMode::Plan => {
+                            self.state.pending_plan_request = false;
+                            OperationMode::Normal
+                        }
+                    };
                 }
             }
             // Up/Down arrow — autocomplete > command history > scroll
@@ -562,6 +632,19 @@ impl App {
                     self.state.task_watcher_focus = TaskWatcherFocus::List;
                 }
             }
+            // Ctrl+X — leader key prefix
+            (KeyModifiers::CONTROL, KeyCode::Char('x')) => {
+                self.state.leader_pending = true;
+                self.state.leader_timestamp = Some(std::time::Instant::now());
+            }
+            // Ctrl+D — toggle debug panel
+            (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+                self.state.debug_panel_open = !self.state.debug_panel_open;
+            }
+            // Ctrl+R — open session picker
+            (KeyModifiers::CONTROL, KeyCode::Char('r')) => {
+                self.execute_slash_command("/sessions");
+            }
             // Ctrl+B — background running agent (no-op when idle)
             (KeyModifiers::CONTROL, KeyCode::Char('b')) => {
                 if self.state.agent_active && !self.state.backgrounding_pending {
@@ -574,6 +657,10 @@ impl App {
                     } else if let Some(ref token) = self.interrupt_token {
                         token.request_background();
                         self.state.backgrounding_pending = true;
+                    } else {
+                        self.push_system_message(
+                            "Cannot background: agent token not ready yet.".to_string(),
+                        );
                     }
                 }
                 self.state.dirty = true;

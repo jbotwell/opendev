@@ -211,6 +211,18 @@ pub enum AppEvent {
         interrupt_token: InterruptToken,
     },
 
+    // -- Undo/Redo events --
+    /// Snapshot was taken (stores tree hash for undo stack).
+    SnapshotTaken { hash: String },
+    /// Undo result from the runtime.
+    UndoResult { success: bool, message: String },
+    /// Redo result from the runtime.
+    RedoResult { success: bool, message: String },
+    /// Share result from the runtime.
+    ShareResult { path: String },
+    /// File watcher detected changes.
+    FileChanged { paths: Vec<String> },
+
     /// Quit the application.
     Quit,
 }

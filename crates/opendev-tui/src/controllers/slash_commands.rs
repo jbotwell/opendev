@@ -95,6 +95,29 @@ pub const BUILTIN_COMMANDS: &[SlashCommand] = &[
         name: "compact",
         description: "manually compact conversation context",
     },
+    // Undo/Redo/Share
+    SlashCommand {
+        name: "undo",
+        description: "undo last file changes",
+    },
+    SlashCommand {
+        name: "redo",
+        description: "redo undone changes",
+    },
+    SlashCommand {
+        name: "share",
+        description: "share session as HTML",
+    },
+    // Session management
+    SlashCommand {
+        name: "sessions",
+        description: "list saved sessions",
+    },
+    // Background agents
+    SlashCommand {
+        name: "bg",
+        description: "manage background agents",
+    },
 ];
 
 /// Find commands matching a query prefix.
@@ -145,6 +168,6 @@ mod tests {
 
     #[test]
     fn test_builtin_count() {
-        assert_eq!(BUILTIN_COMMANDS.len(), 18);
+        assert_eq!(BUILTIN_COMMANDS.len(), 23);
     }
 }

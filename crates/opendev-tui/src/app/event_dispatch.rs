@@ -60,6 +60,8 @@ impl App {
                     || self.state.task_watcher_open
                     || self.state.last_task_completion.is_some()
                     || self.state.backgrounded_task_info.is_some()
+                    || !self.state.toasts.is_empty()
+                    || self.state.leader_pending
                 {
                     self.state.dirty = true;
                 }
@@ -783,6 +785,46 @@ impl App {
                 self.state
                     .bg_agent_manager
                     .add_task(task_id, query, session_id, interrupt_token);
+                self.state.dirty = true;
+            }
+
+            // Undo/Redo/Share events
+            AppEvent::SnapshotTaken { hash } => {
+                self.state.undo_stack.push(hash);
+                self.state.redo_stack.clear();
+            }
+            AppEvent::UndoResult { success, message } => {
+                use crate::widgets::toast::{Toast, ToastLevel};
+                let level = if success {
+                    ToastLevel::Success
+                } else {
+                    ToastLevel::Warning
+                };
+                self.state.toasts.push(Toast::new(message, level));
+                self.state.dirty = true;
+                self.state.message_generation += 1;
+            }
+            AppEvent::RedoResult { success, message } => {
+                use crate::widgets::toast::{Toast, ToastLevel};
+                let level = if success {
+                    ToastLevel::Success
+                } else {
+                    ToastLevel::Warning
+                };
+                self.state.toasts.push(Toast::new(message, level));
+                self.state.dirty = true;
+                self.state.message_generation += 1;
+            }
+            AppEvent::ShareResult { path } => {
+                use crate::widgets::toast::{Toast, ToastLevel};
+                self.state
+                    .toasts
+                    .push(Toast::new(format!("Shared: {path}"), ToastLevel::Success));
+                self.state.dirty = true;
+            }
+            AppEvent::FileChanged { paths } => {
+                // Just mark dirty — file changes are informational
+                let _ = paths;
                 self.state.dirty = true;
             }
 

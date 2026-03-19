@@ -89,7 +89,6 @@ mod tests {
         let mut svc = SpinnerService::new();
         svc.start("Working".into());
         // elapsed should be non-negative (just a sanity check)
-        let e = svc.elapsed();
-        assert!(e.as_nanos() >= 0);
+        let _e = svc.elapsed();
     }
 }

@@ -53,6 +53,21 @@ impl<'a> ConversationWidget<'a> {
                         .add_modifier(Modifier::ITALIC),
                 ),
             ]));
+        } else if self.backgrounding_pending {
+            // Backgrounding feedback takes priority over tool spinners so the user
+            // sees immediate confirmation that Ctrl+B was registered.
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{} ", self.spinner_char),
+                    Style::default().fg(style_tokens::BLUE_BRIGHT),
+                ),
+                Span::styled(
+                    "Sending to background\u{2026}",
+                    Style::default()
+                        .fg(style_tokens::SUBTLE)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]));
         } else if !active_unfinished.is_empty() {
             for tool in &active_unfinished {
                 let frame_idx = tool.tick_count % SPINNER_FRAMES.len();
@@ -139,19 +154,6 @@ impl<'a> ConversationWidget<'a> {
                     ]));
                 }
             }
-        } else if self.backgrounding_pending {
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("{} ", self.spinner_char),
-                    Style::default().fg(style_tokens::BLUE_BRIGHT),
-                ),
-                Span::styled(
-                    "Sending to background\u{2026}",
-                    Style::default()
-                        .fg(style_tokens::SUBTLE)
-                        .add_modifier(Modifier::ITALIC),
-                ),
-            ]));
         } else if let Some((task_id, _)) = self.backgrounded_task_info {
             lines.push(Line::from(vec![
                 Span::styled("\u{23f3} ", Style::default().fg(style_tokens::BLUE_BRIGHT)),

@@ -1,21 +1,28 @@
-//! File watcher with polling-based change detection and timeout protection.
+//! File watcher using the `notify` crate for native filesystem event detection.
 //!
-//! Monitors a working directory for file changes by polling file mtimes
-//! every 2 seconds. Includes a timeout guard that stops watching after
-//! 5 minutes of inactivity (no detected changes).
+//! Monitors a working directory for file changes using OS-level filesystem
+//! notifications (FSEvents on macOS, inotify on Linux, ReadDirectoryChanges on
+//! Windows). Events are debounced with a configurable interval (default 500ms).
+//! Includes an inactivity timeout that stops watching after a configurable
+//! period of no detected changes (default 5 minutes).
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::Arc;
+use std::time::Duration;
 
+use notify::RecursiveMode;
+use notify_debouncer_mini::new_debouncer;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
-/// Default polling interval for checking file changes.
-const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(2);
+/// Default debounce interval for filesystem events.
+const DEFAULT_DEBOUNCE: Duration = Duration::from_millis(500);
 
 /// Default inactivity timeout before the watcher shuts down.
 const DEFAULT_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes
+
+/// Directories to ignore by default.
+const DEFAULT_IGNORE_DIRS: &[&str] = &[".git", "target", "node_modules", ".opendev", ".DS_Store"];
 
 /// A file change detected by the watcher.
 #[derive(Debug, Clone)]
@@ -40,33 +47,29 @@ pub enum FileChangeKind {
 /// Configuration for the [`FileWatcher`].
 #[derive(Debug, Clone)]
 pub struct FileWatcherConfig {
-    /// How often to poll for changes.
-    pub poll_interval: Duration,
+    /// How long to debounce filesystem events before emitting.
+    pub debounce: Duration,
     /// How long without changes before the watcher stops.
     pub inactivity_timeout: Duration,
-    /// File patterns to ignore (glob-style, e.g., "*.tmp").
+    /// Directory names to ignore (e.g., ".git", "target").
     pub ignore_patterns: Vec<String>,
-    /// Maximum directory depth to scan (None = unlimited).
-    pub max_depth: Option<usize>,
 }
 
 impl Default for FileWatcherConfig {
     fn default() -> Self {
         Self {
-            poll_interval: DEFAULT_POLL_INTERVAL,
+            debounce: DEFAULT_DEBOUNCE,
             inactivity_timeout: DEFAULT_INACTIVITY_TIMEOUT,
-            ignore_patterns: vec![
-                ".git".to_string(),
-                "target".to_string(),
-                "node_modules".to_string(),
-                ".DS_Store".to_string(),
-            ],
-            max_depth: Some(5),
+            ignore_patterns: DEFAULT_IGNORE_DIRS
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
         }
     }
 }
 
-/// Monitors a working directory for file changes using polling.
+/// Monitors a working directory for file changes using OS-native filesystem
+/// notifications via the `notify` crate.
 ///
 /// The watcher runs as an async task and sends [`FileChange`] events through
 /// a channel. It automatically stops after a configurable inactivity timeout.
@@ -98,7 +101,7 @@ impl FileWatcher {
     /// Start watching and return a receiver for file changes.
     ///
     /// The watcher runs in a background tokio task. It will stop when:
-    /// - The inactivity timeout is reached (no changes for 5 minutes)
+    /// - The inactivity timeout is reached (no changes detected)
     /// - [`stop`] is called
     /// - The `FileWatcher` is dropped
     pub fn start(&self) -> mpsc::UnboundedReceiver<FileChange> {
@@ -108,24 +111,45 @@ impl FileWatcher {
         let mut cancel_rx = self.cancel.subscribe();
 
         tokio::spawn(async move {
-            let mut known_files: HashMap<PathBuf, SystemTime> = HashMap::new();
-            let mut last_change_time = Instant::now();
+            // Create a std mpsc channel for the notify debouncer callback.
+            let (notify_tx, notify_rx) = std::sync::mpsc::channel();
 
-            // Initial scan
-            scan_directory(&root, &config, &mut known_files);
+            let debouncer = new_debouncer(config.debounce, move |result| {
+                let _ = notify_tx.send(result);
+            });
+
+            let mut debouncer = match debouncer {
+                Ok(d) => d,
+                Err(e) => {
+                    warn!(error = %e, "Failed to create file watcher");
+                    return;
+                }
+            };
+
+            if let Err(e) = debouncer.watcher().watch(&root, RecursiveMode::Recursive) {
+                warn!(
+                    root = %root.display(),
+                    error = %e,
+                    "Failed to start watching directory"
+                );
+                return;
+            }
+
+            let ignore_patterns = Arc::new(config.ignore_patterns);
+
             info!(
                 root = %root.display(),
-                files = known_files.len(),
-                "FileWatcher started"
+                "FileWatcher started (notify)"
             );
 
-            let mut interval = tokio::time::interval(config.poll_interval);
+            let mut last_change = tokio::time::Instant::now();
+            let mut check_interval = tokio::time::interval(Duration::from_millis(100));
 
             loop {
                 tokio::select! {
-                    _ = interval.tick() => {
+                    _ = check_interval.tick() => {
                         // Check inactivity timeout
-                        if last_change_time.elapsed() >= config.inactivity_timeout {
+                        if last_change.elapsed() >= config.inactivity_timeout {
                             info!(
                                 timeout_secs = config.inactivity_timeout.as_secs(),
                                 "FileWatcher stopped: inactivity timeout"
@@ -133,15 +157,42 @@ impl FileWatcher {
                             break;
                         }
 
-                        // Poll for changes
-                        let changes = detect_changes(&root, &config, &mut known_files);
-                        if !changes.is_empty() {
-                            last_change_time = Instant::now();
-                            debug!(count = changes.len(), "File changes detected");
-                            for change in changes {
-                                if tx.send(change).is_err() {
-                                    debug!("FileWatcher channel closed, stopping");
-                                    return;
+                        // Drain all available events from the notify channel
+                        while let Ok(result) = notify_rx.try_recv() {
+                            match result {
+                                Ok(events) => {
+                                    for event in events {
+                                        let path = &event.path;
+
+                                        // Skip paths containing ignored directory names
+                                        if should_ignore(path, &ignore_patterns) {
+                                            continue;
+                                        }
+
+                                        let kind = if path.exists() {
+                                            FileChangeKind::Modified
+                                        } else {
+                                            FileChangeKind::Deleted
+                                        };
+
+                                        last_change = tokio::time::Instant::now();
+                                        debug!(
+                                            path = %path.display(),
+                                            kind = ?kind,
+                                            "File change detected"
+                                        );
+
+                                        if tx.send(FileChange {
+                                            path: path.clone(),
+                                            kind,
+                                        }).is_err() {
+                                            debug!("FileWatcher channel closed, stopping");
+                                            return;
+                                        }
+                                    }
+                                }
+                                Err(errors) => {
+                                    warn!(errors = ?errors, "File watcher errors");
                                 }
                             }
                         }
@@ -154,6 +205,8 @@ impl FileWatcher {
                     }
                 }
             }
+
+            // debouncer is dropped here, which stops the native watcher
         });
 
         rx
@@ -171,102 +224,15 @@ impl Drop for FileWatcher {
     }
 }
 
-/// Scan a directory and collect file paths with their mtimes.
-fn scan_directory(
-    root: &Path,
-    config: &FileWatcherConfig,
-    files: &mut HashMap<PathBuf, SystemTime>,
-) {
-    scan_recursive(root, config, files, 0);
-}
-
-fn scan_recursive(
-    current: &Path,
-    config: &FileWatcherConfig,
-    files: &mut HashMap<PathBuf, SystemTime>,
-    depth: usize,
-) {
-    if config.max_depth.is_some_and(|max| depth > max) {
-        return;
-    }
-
-    let entries = match std::fs::read_dir(current) {
-        Ok(entries) => entries,
-        Err(e) => {
-            debug!(path = %current.display(), error = %e, "Cannot read directory");
-            return;
-        }
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let file_name = entry.file_name();
-        let name = file_name.to_string_lossy();
-
-        // Check ignore patterns
-        if config
-            .ignore_patterns
-            .iter()
-            .any(|p| name.as_ref() == p.as_str())
-        {
-            continue;
-        }
-
-        if path.is_dir() {
-            scan_recursive(&path, config, files, depth + 1);
-        } else if path.is_file()
-            && let Ok(metadata) = std::fs::metadata(&path)
-            && let Ok(mtime) = metadata.modified()
-        {
-            files.insert(path, mtime);
+/// Check whether a path should be ignored based on the ignore patterns.
+fn should_ignore(path: &Path, ignore_patterns: &[String]) -> bool {
+    for component in path.components() {
+        let name = component.as_os_str().to_string_lossy();
+        if ignore_patterns.iter().any(|p| name.as_ref() == p.as_str()) {
+            return true;
         }
     }
-}
-
-/// Detect changes by comparing current state against known files.
-fn detect_changes(
-    root: &Path,
-    config: &FileWatcherConfig,
-    known: &mut HashMap<PathBuf, SystemTime>,
-) -> Vec<FileChange> {
-    let mut current: HashMap<PathBuf, SystemTime> = HashMap::new();
-    scan_directory(root, config, &mut current);
-
-    let mut changes = Vec::new();
-
-    // Check for new and modified files
-    for (path, mtime) in &current {
-        match known.get(path) {
-            None => {
-                changes.push(FileChange {
-                    path: path.clone(),
-                    kind: FileChangeKind::Created,
-                });
-            }
-            Some(old_mtime) if old_mtime != mtime => {
-                changes.push(FileChange {
-                    path: path.clone(),
-                    kind: FileChangeKind::Modified,
-                });
-            }
-            _ => {}
-        }
-    }
-
-    // Check for deleted files
-    for path in known.keys() {
-        if !current.contains_key(path) {
-            changes.push(FileChange {
-                path: path.clone(),
-                kind: FileChangeKind::Deleted,
-            });
-        }
-    }
-
-    // Update known state
-    *known = current;
-
-    changes
+    false
 }
 
 #[cfg(test)]
@@ -275,130 +241,36 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_scan_directory() {
-        let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().canonicalize().unwrap();
-        std::fs::write(tmp_path.join("a.txt"), "hello").unwrap();
-        std::fs::write(tmp_path.join("b.txt"), "world").unwrap();
-        std::fs::create_dir_all(tmp_path.join("sub")).unwrap();
-        std::fs::write(tmp_path.join("sub/c.txt"), "nested").unwrap();
-
-        let config = FileWatcherConfig::default();
-        let mut files = HashMap::new();
-        scan_directory(&tmp_path, &config, &mut files);
-
-        assert_eq!(files.len(), 3);
-        assert!(files.contains_key(&tmp_path.join("a.txt")));
-        assert!(files.contains_key(&tmp_path.join("b.txt")));
-        assert!(files.contains_key(&tmp_path.join("sub/c.txt")));
-    }
-
-    #[test]
-    fn test_scan_ignores_patterns() {
-        let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().canonicalize().unwrap();
-        std::fs::write(tmp_path.join("a.txt"), "hello").unwrap();
-        std::fs::create_dir_all(tmp_path.join(".git")).unwrap();
-        std::fs::write(tmp_path.join(".git/config"), "gitconfig").unwrap();
-        std::fs::create_dir_all(tmp_path.join("node_modules")).unwrap();
-        std::fs::write(tmp_path.join("node_modules/pkg.js"), "module").unwrap();
-
-        let config = FileWatcherConfig::default();
-        let mut files = HashMap::new();
-        scan_directory(&tmp_path, &config, &mut files);
-
-        assert_eq!(files.len(), 1);
-        assert!(files.contains_key(&tmp_path.join("a.txt")));
-    }
-
-    #[test]
-    fn test_detect_changes_created() {
-        let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().canonicalize().unwrap();
-        let config = FileWatcherConfig::default();
-        let mut known = HashMap::new();
-
-        // Initial scan (empty)
-        let changes = detect_changes(&tmp_path, &config, &mut known);
-        assert!(changes.is_empty());
-
-        // Create a file
-        std::fs::write(tmp_path.join("new.txt"), "new file").unwrap();
-        let changes = detect_changes(&tmp_path, &config, &mut known);
-        assert_eq!(changes.len(), 1);
-        assert_eq!(changes[0].kind, FileChangeKind::Created);
-    }
-
-    #[test]
-    fn test_detect_changes_deleted() {
-        let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().canonicalize().unwrap();
-        std::fs::write(tmp_path.join("gone.txt"), "will be deleted").unwrap();
-
-        let config = FileWatcherConfig::default();
-        let mut known = HashMap::new();
-        scan_directory(&tmp_path, &config, &mut known);
-
-        // Delete file
-        std::fs::remove_file(tmp_path.join("gone.txt")).unwrap();
-        let changes = detect_changes(&tmp_path, &config, &mut known);
-        assert_eq!(changes.len(), 1);
-        assert_eq!(changes[0].kind, FileChangeKind::Deleted);
-    }
-
-    #[test]
-    fn test_detect_changes_modified() {
-        let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().canonicalize().unwrap();
-        std::fs::write(tmp_path.join("mod.txt"), "original").unwrap();
-
-        let config = FileWatcherConfig::default();
-        let mut known = HashMap::new();
-        scan_directory(&tmp_path, &config, &mut known);
-
-        // Modify file - need to ensure mtime changes
-        std::thread::sleep(Duration::from_millis(50));
-        std::fs::write(tmp_path.join("mod.txt"), "modified content").unwrap();
-
-        // Force mtime update by using filetime or just checking the detection
-        let changes = detect_changes(&tmp_path, &config, &mut known);
-        // On some filesystems, mtime granularity might miss this.
-        // The change detection logic itself is correct regardless.
-        if !changes.is_empty() {
-            assert_eq!(changes[0].kind, FileChangeKind::Modified);
-        }
-    }
-
-    #[test]
-    fn test_max_depth_limit() {
-        let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.path().canonicalize().unwrap();
-        std::fs::write(tmp_path.join("root.txt"), "root").unwrap();
-        std::fs::create_dir_all(tmp_path.join("a/b/c/d/e/f")).unwrap();
-        std::fs::write(tmp_path.join("a/b/c/d/e/f/deep.txt"), "deep").unwrap();
-        std::fs::write(tmp_path.join("a/b/shallow.txt"), "shallow").unwrap();
-
-        let config = FileWatcherConfig {
-            max_depth: Some(3),
-            ..Default::default()
-        };
-        let mut files = HashMap::new();
-        scan_directory(&tmp_path, &config, &mut files);
-
-        // Should find root.txt and a/b/shallow.txt but not the deep file
-        assert!(files.contains_key(&tmp_path.join("root.txt")));
-        assert!(files.contains_key(&tmp_path.join("a/b/shallow.txt")));
-        assert!(!files.contains_key(&tmp_path.join("a/b/c/d/e/f/deep.txt")));
+    fn test_should_ignore_git() {
+        let patterns: Vec<String> = DEFAULT_IGNORE_DIRS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        assert!(should_ignore(Path::new("/project/.git/config"), &patterns));
+        assert!(should_ignore(
+            Path::new("/project/node_modules/pkg/index.js"),
+            &patterns
+        ));
+        assert!(should_ignore(
+            Path::new("/project/target/debug/binary"),
+            &patterns
+        ));
+        assert!(should_ignore(
+            Path::new("/project/.opendev/state.json"),
+            &patterns
+        ));
+        assert!(!should_ignore(Path::new("/project/src/main.rs"), &patterns));
     }
 
     #[test]
     fn test_file_watcher_config_default() {
         let config = FileWatcherConfig::default();
-        assert_eq!(config.poll_interval, Duration::from_secs(2));
+        assert_eq!(config.debounce, Duration::from_millis(500));
         assert_eq!(config.inactivity_timeout, Duration::from_secs(300));
         assert!(config.ignore_patterns.contains(&".git".to_string()));
         assert!(config.ignore_patterns.contains(&"target".to_string()));
-        assert_eq!(config.max_depth, Some(5));
+        assert!(config.ignore_patterns.contains(&"node_modules".to_string()));
+        assert!(config.ignore_patterns.contains(&".opendev".to_string()));
     }
 
     #[tokio::test]
@@ -410,20 +282,22 @@ mod tests {
         let watcher = FileWatcher::new(
             &tmp_path,
             FileWatcherConfig {
-                poll_interval: Duration::from_millis(50),
-                inactivity_timeout: Duration::from_secs(1),
+                debounce: Duration::from_millis(50),
+                inactivity_timeout: Duration::from_secs(5),
                 ..Default::default()
             },
         );
 
         let mut rx = watcher.start();
 
+        // Give the watcher time to initialize
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
         // Create a new file to trigger a change
-        tokio::time::sleep(Duration::from_millis(100)).await;
         std::fs::write(tmp_path.join("new.txt"), "new").unwrap();
 
         // Wait for the change to be detected
-        let change = tokio::time::timeout(Duration::from_secs(2), rx.recv()).await;
+        let change = tokio::time::timeout(Duration::from_secs(3), rx.recv()).await;
         assert!(change.is_ok(), "Should receive a change event");
 
         // Stop the watcher
@@ -438,16 +312,20 @@ mod tests {
         let watcher = FileWatcher::new(
             &tmp_path,
             FileWatcherConfig {
-                poll_interval: Duration::from_millis(50),
-                inactivity_timeout: Duration::from_millis(200),
+                debounce: Duration::from_millis(50),
+                inactivity_timeout: Duration::from_millis(500),
                 ..Default::default()
             },
         );
 
         let mut rx = watcher.start();
 
+        // Let initial FSEvents settle (macOS emits events on watch setup)
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        while rx.try_recv().is_ok() {}
+
         // Wait for timeout — the channel should close
-        let result = tokio::time::timeout(Duration::from_secs(2), async {
+        let result = tokio::time::timeout(Duration::from_secs(5), async {
             while rx.recv().await.is_some() {
                 // drain events
             }

@@ -443,6 +443,221 @@ impl AgentRuntime {
     }
 }
 
+impl AgentRuntime {
+    /// Switch to a new model, rebuilding the HTTP client if the provider changes.
+    ///
+    /// Returns the new model name for confirmation, or an error message.
+    pub fn switch_model(&mut self, new_model: &str) -> Result<String, String> {
+        let old_model = &self.llm_caller.config.model;
+
+        // Look up the new model in the registry
+        let paths = opendev_config::Paths::new(Some(self.working_dir.clone()));
+        let registry = opendev_config::ModelRegistry::load_from_cache(&paths.global_cache_dir());
+
+        let (new_provider_id, new_model_info) =
+            if let Some((provider_id, _key, model_info)) = registry.find_model_by_id(new_model) {
+                (provider_id.to_string(), Some(model_info.clone()))
+            } else {
+                // Model not in registry — allow it but warn; keep current provider
+                info!(
+                    model = new_model,
+                    "Model not found in registry, using as-is"
+                );
+                self.llm_caller.config.model = new_model.to_string();
+                return Ok(new_model.to_string());
+            };
+
+        // Detect current provider
+        let current_provider = {
+            if let Some((pid, _, _)) = registry.find_model_by_id(old_model) {
+                pid.to_string()
+            } else {
+                // Can't determine current provider — force rebuild
+                String::new()
+            }
+        };
+
+        // Update model name
+        self.llm_caller.config.model = new_model.to_string();
+
+        // Update model-specific config from registry
+        if let Some(ref info) = new_model_info {
+            self.llm_caller.config.temperature = if info.supports_temperature {
+                Some(self.config.temperature)
+            } else {
+                None
+            };
+            if let Some(max_tok) = info.max_tokens {
+                self.llm_caller.config.max_tokens = Some(max_tok);
+            }
+        }
+
+        // If provider changed, rebuild the HTTP client
+        if new_provider_id != current_provider {
+            let provider_info = registry.get_provider(&new_provider_id);
+            let api_key = if let Some(pi) = provider_info
+                && !pi.api_key_env.is_empty()
+            {
+                std::env::var(&pi.api_key_env).unwrap_or_default()
+            } else {
+                self.config.get_api_key().unwrap_or_default()
+            };
+
+            if api_key.is_empty() {
+                let env_hint = provider_info
+                    .map(|pi| pi.api_key_env.as_str())
+                    .unwrap_or("API_KEY");
+                return Err(format!(
+                    "No API key for provider '{}'. Set {} environment variable.",
+                    new_provider_id, env_hint
+                ));
+            }
+
+            let new_client = Self::build_http_client(&new_provider_id, &api_key, new_model, None)?;
+            self.http_client = Arc::new(new_client);
+            info!(
+                provider = %new_provider_id,
+                model = new_model,
+                "Rebuilt HTTP client for new provider"
+            );
+        }
+
+        Ok(new_model.to_string())
+    }
+
+    /// Build an HTTP client for a given provider and model.
+    fn build_http_client(
+        provider: &str,
+        api_key: &str,
+        model: &str,
+        api_base_url: Option<&str>,
+    ) -> Result<AdaptedClient, String> {
+        let (api_url, headers, adapter): (String, HeaderMap, Option<Box<dyn ProviderAdapter>>) =
+            match provider {
+                "anthropic" => {
+                    let adapter = opendev_http::adapters::anthropic::AnthropicAdapter::new();
+                    let url = api_base_url
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| adapter.api_url().to_string());
+                    let mut hdrs = HeaderMap::new();
+                    if let Ok(val) = HeaderValue::from_str(api_key) {
+                        hdrs.insert("x-api-key", val);
+                    }
+                    hdrs.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    for (key, value) in adapter.extra_headers() {
+                        if let (Ok(k), Ok(v)) = (
+                            reqwest::header::HeaderName::from_bytes(key.as_bytes()),
+                            HeaderValue::from_str(&value),
+                        ) {
+                            hdrs.insert(k, v);
+                        }
+                    }
+                    (
+                        url,
+                        hdrs,
+                        Some(Box::new(adapter) as Box<dyn ProviderAdapter>),
+                    )
+                }
+                "openai" => {
+                    let adapter = opendev_http::adapters::openai::OpenAiAdapter::new();
+                    let url = api_base_url
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| adapter.api_url().to_string());
+                    let mut hdrs = HeaderMap::new();
+                    if let Ok(val) = HeaderValue::from_str(&format!("Bearer {api_key}")) {
+                        hdrs.insert(AUTHORIZATION, val);
+                    }
+                    hdrs.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    (
+                        url,
+                        hdrs,
+                        Some(Box::new(adapter) as Box<dyn ProviderAdapter>),
+                    )
+                }
+                "gemini" | "google" => {
+                    let adapter = opendev_http::adapters::gemini::GeminiAdapter::new(model);
+                    let api_url = api_base_url
+                        .map(|base| opendev_http::adapters::gemini::gemini_api_url(base, model))
+                        .unwrap_or_else(|| {
+                            opendev_http::adapters::gemini::gemini_api_url(adapter.api_url(), model)
+                        });
+                    let mut hdrs = HeaderMap::new();
+                    if let Ok(val) = HeaderValue::from_str(api_key) {
+                        hdrs.insert("x-goog-api-key", val);
+                    }
+                    hdrs.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    (
+                        api_url,
+                        hdrs,
+                        Some(Box::new(adapter) as Box<dyn ProviderAdapter>),
+                    )
+                }
+                "azure" => {
+                    let base = api_base_url.unwrap_or("https://api.openai.com");
+                    let url = format!(
+                        "{}/openai/deployments/{model}/chat/completions?api-version=2024-10-21",
+                        base.trim_end_matches('/')
+                    );
+                    let mut hdrs = HeaderMap::new();
+                    if let Ok(val) = HeaderValue::from_str(api_key) {
+                        hdrs.insert("api-key", val);
+                    }
+                    hdrs.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    (url, hdrs, None)
+                }
+                _ => {
+                    // All other OpenAI-compatible providers
+                    let url = match provider {
+                        "fireworks" => "https://api.fireworks.ai/inference/v1/chat/completions",
+                        "groq" => "https://api.groq.com/openai/v1/chat/completions",
+                        "mistral" => "https://api.mistral.ai/v1/chat/completions",
+                        "deepinfra" => "https://api.deepinfra.com/v1/openai/chat/completions",
+                        "openrouter" => "https://openrouter.ai/api/v1/chat/completions",
+                        _ => "",
+                    };
+                    let url = if url.is_empty() {
+                        api_base_url
+                            .map(|base| {
+                                let trimmed = base.trim_end_matches('/');
+                                if trimmed.ends_with("/chat/completions") {
+                                    trimmed.to_string()
+                                } else {
+                                    format!("{trimmed}/chat/completions")
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                "https://api.openai.com/v1/chat/completions".to_string()
+                            })
+                    } else {
+                        url.to_string()
+                    };
+                    let mut hdrs = HeaderMap::new();
+                    if let Ok(val) = HeaderValue::from_str(&format!("Bearer {api_key}")) {
+                        hdrs.insert(AUTHORIZATION, val);
+                    }
+                    hdrs.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    if provider == "openrouter"
+                        && let Ok(val) = HeaderValue::from_str("https://opendev.ai")
+                    {
+                        hdrs.insert("HTTP-Referer", val);
+                    }
+                    (url, hdrs, None)
+                }
+            };
+
+        let circuit_breaker =
+            std::sync::Arc::new(opendev_http::CircuitBreaker::with_defaults(provider));
+        let raw = HttpClient::new(api_url, headers, None)
+            .map_err(|e| format!("Failed to create HTTP client: {e}"))?
+            .with_circuit_breaker(circuit_breaker);
+
+        Ok(match adapter {
+            Some(a) => AdaptedClient::with_adapter(raw, a),
+            None => AdaptedClient::new(raw),
+        })
+    }
+}
+
 impl std::fmt::Debug for AgentRuntime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AgentRuntime")

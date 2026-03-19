@@ -262,6 +262,25 @@ impl RecordedEvent {
                 "SetBackgroundAgentToken".to_string(),
                 serde_json::json!({"task_id": task_id}),
             ),
+            AppEvent::SnapshotTaken { hash } => (
+                "SnapshotTaken".to_string(),
+                serde_json::json!({"hash": hash}),
+            ),
+            AppEvent::UndoResult { success, message } => (
+                "UndoResult".to_string(),
+                serde_json::json!({"success": success, "message": message}),
+            ),
+            AppEvent::RedoResult { success, message } => (
+                "RedoResult".to_string(),
+                serde_json::json!({"success": success, "message": message}),
+            ),
+            AppEvent::ShareResult { path } => {
+                ("ShareResult".to_string(), serde_json::json!({"path": path}))
+            }
+            AppEvent::FileChanged { paths } => (
+                "FileChanged".to_string(),
+                serde_json::json!({"paths": paths}),
+            ),
             AppEvent::Quit => ("Quit".to_string(), serde_json::Value::Null),
         };
 

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::history::CommandHistory;
-use crate::widgets::{TaskWatcherFocus, TodoDisplayItem, WelcomePanelState};
+use crate::widgets::{TaskWatcherFocus, Toast, TodoDisplayItem, WelcomePanelState};
 
 use super::{AutonomyLevel, DisplayMessage, OperationMode, ReasoningLevel, ToolExecution};
 
@@ -139,6 +139,18 @@ pub struct AppState {
     pub task_watcher_focus: TaskWatcherFocus,
     /// Last task completion flash: (task_id, when).
     pub last_task_completion: Option<(String, Instant)>,
+    /// Active toast notifications.
+    pub toasts: Vec<Toast>,
+    /// Whether leader key (Ctrl+X) is pending.
+    pub leader_pending: bool,
+    /// Timestamp of leader key press (for timeout).
+    pub leader_timestamp: Option<Instant>,
+    /// Undo stack: tree hashes from snapshot manager.
+    pub undo_stack: Vec<String>,
+    /// Redo stack: tree hashes for redo.
+    pub redo_stack: Vec<String>,
+    /// Whether debug panel is open.
+    pub debug_panel_open: bool,
 }
 
 impl Default for AppState {
@@ -209,6 +221,12 @@ impl Default for AppState {
             task_watcher_output_scroll: 0,
             task_watcher_focus: TaskWatcherFocus::List,
             last_task_completion: None,
+            toasts: Vec::new(),
+            leader_pending: false,
+            leader_timestamp: None,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            debug_panel_open: false,
         }
     }
 }

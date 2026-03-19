@@ -129,6 +129,23 @@ impl App {
             self.state.backgrounded_task_info = None;
         }
 
+        // Expire old toasts
+        self.state.toasts.retain(|t| !t.is_expired());
+        if !self.state.toasts.is_empty() {
+            self.state.dirty = true;
+        }
+
+        // Auto-cancel leader key after 2 seconds
+        if self.state.leader_pending {
+            if let Some(ts) = self.state.leader_timestamp
+                && ts.elapsed() > Duration::from_secs(2)
+            {
+                self.state.leader_pending = false;
+                self.state.leader_timestamp = None;
+            }
+            self.state.dirty = true;
+        }
+
         // Auto-scroll if user hasn't manually scrolled up
         if !self.state.user_scrolled {
             self.state.scroll_offset = 0;

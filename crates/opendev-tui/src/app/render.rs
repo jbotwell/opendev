@@ -3,8 +3,8 @@
 use ratatui::layout;
 
 use crate::widgets::{
-    ConversationWidget, InputWidget, StatusBarWidget, TaskWatcherPanel, TodoPanelWidget,
-    UnifiedTaskItem, UnifiedTaskKind, WelcomePanelWidget,
+    ConversationWidget, InputWidget, StatusBarWidget, TaskWatcherPanel, ToastWidget,
+    TodoPanelWidget, UnifiedTaskItem, UnifiedTaskKind, WelcomePanelWidget,
 };
 
 use super::App;
@@ -152,6 +152,38 @@ impl App {
                 .map(|(id, _)| format!("[{id}] completed")),
         );
         frame.render_widget(status, chunks[3]);
+
+        // Toast notifications (top-right corner)
+        if !self.state.toasts.is_empty() {
+            let toast_widget = ToastWidget::new(&self.state.toasts);
+            frame.render_widget(toast_widget, area);
+        }
+
+        // Leader key indicator in status bar area
+        if self.state.leader_pending {
+            use ratatui::style::{Modifier, Style};
+            use ratatui::text::{Line, Span};
+            use ratatui::widgets::Paragraph;
+
+            let indicator = Paragraph::new(Line::from(Span::styled(
+                " C-x ",
+                Style::default()
+                    .fg(Self::PANEL_CYAN)
+                    .add_modifier(Modifier::BOLD),
+            )));
+            let indicator_area = layout::Rect {
+                x: area.width.saturating_sub(8),
+                y: area.height.saturating_sub(1),
+                width: 6,
+                height: 1,
+            };
+            frame.render_widget(indicator, indicator_area);
+        }
+
+        // Debug panel overlay (Ctrl+D)
+        if self.state.debug_panel_open {
+            self.render_debug_panel(frame, area);
+        }
 
         // Task watcher panel overlay (Ctrl+P / Alt+B)
         if self.state.task_watcher_open {
@@ -722,6 +754,86 @@ impl App {
             .border_style(Style::default().fg(Self::PANEL_CYAN))
             .title(Span::styled(
                 " Models ",
+                Style::default()
+                    .fg(Self::PANEL_CYAN)
+                    .add_modifier(Modifier::BOLD),
+            ));
+
+        let paragraph = Paragraph::new(lines).block(block);
+        frame.render_widget(ratatui::widgets::Clear, popup_area);
+        frame.render_widget(paragraph, popup_area);
+    }
+
+    /// Render the debug panel overlay.
+    pub(super) fn render_debug_panel(&self, frame: &mut ratatui::Frame, area: layout::Rect) {
+        use crate::formatters::style_tokens;
+        use ratatui::style::{Modifier, Style};
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
+
+        let mut lines: Vec<Line> = Vec::new();
+        lines.push(Line::from(""));
+
+        let label_style = Style::default().fg(style_tokens::DIM_GREY);
+        let value_style = Style::default()
+            .fg(Self::PANEL_CYAN)
+            .add_modifier(Modifier::BOLD);
+
+        let stats = [
+            ("Model", self.state.model.clone()),
+            (
+                "Tokens",
+                format!("{} / {}", self.state.tokens_used, self.state.tokens_limit),
+            ),
+            ("Context", format!("{:.1}%", self.state.context_usage_pct)),
+            ("Cost", format!("${:.4}", self.state.session_cost)),
+            ("Messages", format!("{}", self.state.messages.len())),
+            ("Active tools", format!("{}", self.state.active_tools.len())),
+            (
+                "Subagents",
+                format!("{}", self.state.active_subagents.len()),
+            ),
+            (
+                "Background tasks",
+                format!("{}", self.state.background_task_count),
+            ),
+            ("Mode", format!("{}", self.state.mode)),
+            ("Autonomy", format!("{}", self.state.autonomy)),
+            ("Reasoning", format!("{}", self.state.reasoning_level)),
+            (
+                "Terminal",
+                format!(
+                    "{}x{}",
+                    self.state.terminal_width, self.state.terminal_height
+                ),
+            ),
+            ("Undo stack", format!("{}", self.state.undo_stack.len())),
+        ];
+
+        for (label, value) in &stats {
+            lines.push(Line::from(vec![
+                Span::styled(format!("    {label}: "), label_style),
+                Span::styled(value.clone(), value_style),
+            ]));
+        }
+
+        lines.push(Line::from(""));
+
+        let panel_height = (lines.len() as u16 + 2).min(area.height.saturating_sub(4));
+        let panel_width = 50u16.min(area.width.saturating_sub(4));
+        let popup_area = layout::Rect {
+            x: (area.width.saturating_sub(panel_width)) / 2,
+            y: (area.height.saturating_sub(panel_height)) / 2,
+            width: panel_width,
+            height: panel_height,
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Self::PANEL_CYAN))
+            .title(Span::styled(
+                " Debug ",
                 Style::default()
                     .fg(Self::PANEL_CYAN)
                     .add_modifier(Modifier::BOLD),

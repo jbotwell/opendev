@@ -223,7 +223,7 @@ mod tests {
 
     fn temp_history() -> CommandHistory {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.into_path().join("history.json");
+        let path = dir.path().join("history.json");
         CommandHistory::with_path(path)
     }
 

@@ -18,6 +18,8 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 regex = { workspace = true }
 dirs-next = "2"
+notify = "8"
+notify-debouncer-mini = "0.7"
 rand = "0.8"
 
 [dev-dependencies]

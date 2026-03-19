@@ -228,6 +228,66 @@ impl LspWrapper {
         Ok(symbols)
     }
 
+    /// Get hover information for a symbol at a position.
+    pub async fn hover(
+        &mut self,
+        file_path: &Path,
+        line: u32,
+        character: u32,
+        workspace_root: &Path,
+    ) -> Result<Option<String>, LspError> {
+        let handler = self.ensure_handler(file_path, workspace_root).await?;
+        let uri = protocol::path_to_uri_string(file_path)
+            .ok_or_else(|| LspError::FileNotFound(file_path.display().to_string()))?;
+
+        notify_did_open(handler, file_path, &uri).await?;
+
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+
+        let result = handler.send_request("textDocument/hover", params).await?;
+
+        // Parse hover result — extract contents from the response
+        if result.is_null() {
+            return Ok(None);
+        }
+
+        let contents = result.get("contents");
+        let text = match contents {
+            Some(serde_json::Value::String(s)) => Some(s.clone()),
+            Some(serde_json::Value::Object(obj)) => {
+                // MarkedString or MarkupContent
+                obj.get("value")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            }
+            Some(serde_json::Value::Array(arr)) => {
+                // Array of MarkedString
+                let parts: Vec<String> = arr
+                    .iter()
+                    .filter_map(|item| match item {
+                        serde_json::Value::String(s) => Some(s.clone()),
+                        serde_json::Value::Object(obj) => obj
+                            .get("value")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        _ => None,
+                    })
+                    .collect();
+                if parts.is_empty() {
+                    None
+                } else {
+                    Some(parts.join("\n\n"))
+                }
+            }
+            _ => None,
+        };
+
+        Ok(text)
+    }
+
     /// Shutdown all running language servers.
     pub async fn shutdown_all(&mut self) {
         for (key, handler) in self.handlers.iter_mut() {
