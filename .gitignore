@@ -29,3 +29,9 @@ CLAUDE.md
 # Environment
 .env
 .env.local
+
+# Nix
+result
+result-*
+.direnv/
+*.drv
