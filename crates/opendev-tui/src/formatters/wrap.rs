@@ -178,26 +178,26 @@ fn wrap_spans(spans: Vec<Span<'_>>, max_width: usize) -> Vec<Vec<Span<'_>>> {
     // We'll use a simpler approach: accumulate a "current word" buffer
     // and flush words to lines.
 
-    // First, split all spans into word-level tokens preserving styles
+    // First, split all spans into word-level tokens preserving styles and byte offsets
     let tokens = tokenize_spans(&spans);
 
-    for token in tokens {
+    for (token, byte_offset) in tokens {
         let token_w = token
             .chars()
             .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
             .sum::<usize>();
+        let style = style_at_byte_offset(&spans, byte_offset);
 
         if line_width + token_w <= max_width {
             // Token fits on current line
             if let Some(last) = current_line.last_mut()
-                && last.style == find_style_for_pos(&spans, &token)
+                && last.style == style
             {
                 // Extend existing span with same style
                 let mut s = last.content.to_string();
                 s.push_str(&token);
                 *last = Span::styled(s, last.style);
             } else {
-                let style = find_style_for_pos(&spans, &token);
                 current_line.push(Span::styled(token, style));
             }
             line_width += token_w;
@@ -216,7 +216,6 @@ fn wrap_spans(spans: Vec<Span<'_>>, max_width: usize) -> Vec<Vec<Span<'_>>> {
                 line_width = 0;
             }
             // Split the oversized word character by character
-            let style = find_style_for_pos(&spans, &token);
             let mut chunk = String::new();
             let mut chunk_w = 0;
             for c in token.chars() {
@@ -238,7 +237,6 @@ fn wrap_spans(spans: Vec<Span<'_>>, max_width: usize) -> Vec<Vec<Span<'_>>> {
             if !current_line.is_empty() {
                 result.push(std::mem::take(&mut current_line));
             }
-            let style = find_style_for_pos(&spans, &token);
             current_line.push(Span::styled(token, style));
             line_width = token_w;
         }
@@ -256,48 +254,42 @@ fn wrap_spans(spans: Vec<Span<'_>>, max_width: usize) -> Vec<Vec<Span<'_>>> {
     result
 }
 
-/// Find the style that applies to a given token text by scanning the original spans.
-/// This is a heuristic: we find the first span that contains the token's first character.
-fn find_style_for_pos<'a>(spans: &[Span<'a>], token: &str) -> Style {
-    if token.is_empty() {
-        return Style::default();
-    }
-    // Simple approach: find first span whose content contains this token
-    // For correctness, we'd track byte positions, but for word-level tokens
-    // this works well enough since tokens come from splitting span content.
-    let first_char = token.chars().next().unwrap();
-    let token_first_bytes = &token[..first_char.len_utf8()];
-
-    let mut pos = 0usize;
+/// Find the style that applies at a given byte offset by scanning the original spans.
+/// Uses deterministic byte-offset mapping instead of content-matching heuristics.
+fn style_at_byte_offset(spans: &[Span<'_>], offset: usize) -> Style {
+    let mut span_start = 0usize;
     for span in spans {
-        let span_str = span.content.as_ref();
-        if let Some(idx) = span_str.find(token_first_bytes) {
-            let _ = idx;
+        let span_end = span_start + span.content.len();
+        if offset < span_end {
             return span.style;
         }
-        pos += span_str.len();
+        span_start = span_end;
     }
-    let _ = pos;
     spans.last().map(|s| s.style).unwrap_or_default()
 }
 
 /// Tokenize spans into words and whitespace, preserving the original text exactly.
-fn tokenize_spans(spans: &[Span<'_>]) -> Vec<String> {
+/// Returns `(token_text, byte_offset)` pairs for deterministic style lookup.
+fn tokenize_spans(spans: &[Span<'_>]) -> Vec<(String, usize)> {
     let full_text: String = spans.iter().map(|s| s.content.as_ref()).collect();
     let mut tokens = Vec::new();
     let mut current = String::new();
+    let mut current_start = 0usize;
+    let mut byte_pos = 0usize;
     let mut in_space = false;
 
     for c in full_text.chars() {
         let is_space = c == ' ';
         if is_space != in_space && !current.is_empty() {
-            tokens.push(std::mem::take(&mut current));
+            tokens.push((std::mem::take(&mut current), current_start));
+            current_start = byte_pos;
         }
         current.push(c);
+        byte_pos += c.len_utf8();
         in_space = is_space;
     }
     if !current.is_empty() {
-        tokens.push(current);
+        tokens.push((current, current_start));
     }
     tokens
 }
