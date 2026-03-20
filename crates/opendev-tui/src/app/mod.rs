@@ -205,23 +205,23 @@ impl App {
             self.state.terminal_width = size.width;
             self.state.terminal_height = size.height;
 
-            // Reset ratatui's diff buffers without sending ESC[2J to the terminal.
-            // terminal.clear() sends a screen-clear escape that macOS Terminal.app
-            // scrolls into alternate screen scrollback, creating ghost frame duplication.
-            // Double swap_buffers resets both internal buffers → next draw() rewrites
-            // every cell (full repaint) without any terminal escape sequences.
+            // Force a full screen repaint when needed (overlay close, focus regain, etc.).
             if self.state.force_clear {
-                tracing::warn!("[DIAG] processing force_clear, task_watcher_open={}", self.state.task_watcher_open);
                 // Re-enable alternate scroll mode after focus regain (some terminals
                 // reset it on focus change).
                 {
                     use std::io::Write;
                     let _ = terminal.backend_mut().write_all(b"\x1b[?1007h");
                 }
-                // Reset ratatui's diff buffers for a completely clean repaint.
-                // Double swap_buffers resets both internal buffers so the next draw()
-                // rewrites every cell without sending any terminal escape sequences.
-                terminal.swap_buffers();
+                // Full terminal clear: clear the backend screen AND reset both
+                // internal ratatui diff buffers so the next draw() rewrites every cell.
+                //
+                // terminal.clear() sends ESC[2J (visual clear) and resets the back buffer.
+                // swap_buffers() then resets the old current buffer (which may have stale
+                // overlay content) and swaps, leaving both buffers empty.
+                // This ensures the next draw() produces a complete diff with every cell
+                // updated, eliminating stale overlay artifacts.
+                let _ = terminal.clear();
                 terminal.swap_buffers();
                 self.state.force_clear = false;
                 self.state.dirty = true;

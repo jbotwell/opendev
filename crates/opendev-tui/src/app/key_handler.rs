@@ -108,16 +108,10 @@ impl App {
             return;
         }
 
-        // [DIAG] Log all keys received while task watcher is open
-        if self.state.task_watcher_open {
-            tracing::warn!("[DIAG] key while watcher open: code={:?} modifiers={:?} kind={:?}", key.code, key.modifiers, key.kind);
-        }
-
         // Ctrl+B — background agent: handle before any modal can swallow it
         if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('b') {
             // If task watcher is open, Ctrl+B closes it
             if self.state.task_watcher_open {
-                tracing::warn!("[DIAG] Ctrl+B closing task_watcher, was={}", self.state.task_watcher_open);
                 self.state.task_watcher_open = false;
                 self.state.force_clear = true;
                 self.state.dirty = true;
@@ -134,7 +128,6 @@ impl App {
         // Ctrl+P — toggle task watcher panel: handle before any modal can swallow it
         if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('p') {
             if self.state.task_watcher_open {
-                tracing::warn!("[DIAG] Ctrl+P closing task_watcher, was={}", self.state.task_watcher_open);
                 self.state.task_watcher_open = false;
                 self.state.force_clear = true;
             } else {
@@ -217,7 +210,6 @@ impl App {
                 (_, KeyCode::Char('q'))
                 | (_, KeyCode::Esc)
                 | (KeyModifiers::ALT, KeyCode::Char('b')) => {
-                    tracing::warn!("[DIAG] overlay q/Esc/Alt+B closing task_watcher, modifiers={:?} code={:?}", key.modifiers, key.code);
                     self.state.task_watcher_open = false;
                     self.state.force_clear = true;
                 }

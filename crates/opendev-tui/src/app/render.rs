@@ -227,7 +227,6 @@ impl App {
 
         // Task watcher overlay (Alt+B / Ctrl+P) — centered popup ~85%×80%
         if self.state.task_watcher_open {
-            tracing::warn!("[DIAG] rendering task watcher panel");
             // Compute bg_agent_manager task IDs that are "covered" by backgrounded subagents —
             // these parent tasks are redundant since each subagent already has its own panel.
             let covered_bg_task_ids: std::collections::HashSet<String> = self
