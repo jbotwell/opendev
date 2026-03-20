@@ -81,8 +81,14 @@ impl App {
         }
         if self.ask_user_controller.active() {
             // Send default answer to unblock
+            let fallback = self
+                .ask_user_controller
+                .default_value()
+                .unwrap_or_default();
             self.ask_user_controller.cancel();
-            self.ask_user_response_tx.take();
+            if let Some(tx) = self.ask_user_response_tx.take() {
+                let _ = tx.send(fallback);
+            }
         }
         if self.plan_approval_controller.active() {
             // Auto-approve the plan to unblock
@@ -107,6 +113,13 @@ impl App {
 
         // Ctrl+B — background agent: handle before any modal can swallow it
         if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('b') {
+            // If task watcher is open, Ctrl+B closes it
+            if self.state.task_watcher_open {
+                self.state.task_watcher_open = false;
+                self.state.force_clear = true;
+                self.state.dirty = true;
+                return;
+            }
             if self.try_background_agent() {
                 // Dismiss any active modal with a permissive response to unblock the react loop
                 self.dismiss_modals_for_background();
@@ -176,6 +189,7 @@ impl App {
                 | (_, KeyCode::Esc)
                 | (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
                     self.state.task_watcher_open = false;
+                    self.state.force_clear = true;
                 }
 
                 // Focus navigation: left
@@ -265,15 +279,21 @@ impl App {
                 KeyCode::Up => self.ask_user_controller.prev(),
                 KeyCode::Down => self.ask_user_controller.next(),
                 KeyCode::Enter => {
-                    if let Some(_answer) = self.ask_user_controller.confirm() {
-                        // confirm() already sent via the controller's internal oneshot.
-                        // Clean up our stored sender (already consumed by confirm).
-                        self.ask_user_response_tx.take();
+                    if let Some(answer) = self.ask_user_controller.confirm()
+                        && let Some(tx) = self.ask_user_response_tx.take()
+                    {
+                        let _ = tx.send(answer);
                     }
                 }
                 KeyCode::Esc => {
+                    let fallback = self
+                        .ask_user_controller
+                        .default_value()
+                        .unwrap_or_default();
                     self.ask_user_controller.cancel();
-                    self.ask_user_response_tx.take();
+                    if let Some(tx) = self.ask_user_response_tx.take() {
+                        let _ = tx.send(fallback);
+                    }
                     let _ = self.event_tx.send(AppEvent::Interrupt);
                 }
                 _ => {}
@@ -715,6 +735,7 @@ impl App {
             | (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
                 if self.state.task_watcher_open {
                     self.state.task_watcher_open = false;
+                    self.state.force_clear = true;
                 } else {
                     let has_bg_subagents =
                         self.state.active_subagents.iter().any(|s| s.backgrounded);

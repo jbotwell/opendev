@@ -1,9 +1,8 @@
 //! Ask-user prompt controller for the TUI.
 //!
-//! Mirrors `PlanApprovalController` — displays a question with numbered
-//! options and collects the user's selection via a oneshot channel.
-
-use tokio::sync::oneshot;
+//! Displays a question with numbered options and tracks the user's selection.
+//! The key handler is responsible for sending the answer through the response
+//! channel stored in `App::ask_user_response_tx`.
 
 /// Controller for displaying questions with selectable options.
 pub struct AskUserController {
@@ -12,7 +11,6 @@ pub struct AskUserController {
     default: Option<String>,
     selected: usize,
     active: bool,
-    response_tx: Option<oneshot::Sender<String>>,
 }
 
 impl AskUserController {
@@ -24,7 +22,6 @@ impl AskUserController {
             default: None,
             selected: 0,
             active: false,
-            response_tx: None,
         }
     }
 
@@ -48,24 +45,23 @@ impl AskUserController {
         self.selected
     }
 
+    /// The default value (used as fallback on cancel/Esc).
+    pub fn default_value(&self) -> Option<String> {
+        self.default.clone()
+    }
+
     /// Start the ask-user prompt.
-    ///
-    /// Returns a receiver that will yield the user's answer.
     pub fn start(
         &mut self,
         question: String,
         options: Vec<String>,
         default: Option<String>,
-    ) -> oneshot::Receiver<String> {
+    ) {
         self.question = question;
         self.options = options;
         self.default = default;
         self.selected = 0;
         self.active = true;
-
-        let (tx, rx) = oneshot::channel();
-        self.response_tx = Some(tx);
-        rx
     }
 
     /// Move selection to the next option (wrapping).
@@ -87,29 +83,22 @@ impl AskUserController {
     /// Confirm the current selection and deactivate.
     ///
     /// Returns the selected option text, or `None` if options list is empty.
+    /// The caller is responsible for sending the answer through the response channel.
     pub fn confirm(&mut self) -> Option<String> {
         if !self.active || self.options.is_empty() {
             return None;
         }
 
         let answer = self.options[self.selected].clone();
-
-        if let Some(tx) = self.response_tx.take() {
-            let _ = tx.send(answer.clone());
-        }
-
         self.cleanup();
         Some(answer)
     }
 
-    /// Cancel the prompt — sends the default (or empty string).
+    /// Cancel the prompt and deactivate.
+    /// The caller is responsible for sending the fallback through the response channel.
     pub fn cancel(&mut self) {
         if !self.active {
             return;
-        }
-        let fallback = self.default.clone().unwrap_or_default();
-        if let Some(tx) = self.response_tx.take() {
-            let _ = tx.send(fallback);
         }
         self.cleanup();
     }
@@ -121,7 +110,6 @@ impl AskUserController {
         self.options.clear();
         self.default = None;
         self.selected = 0;
-        self.response_tx = None;
     }
 }
 
@@ -145,54 +133,49 @@ mod tests {
         assert!(!ctrl.active());
     }
 
-    #[tokio::test]
-    async fn test_start_activates() {
+    #[test]
+    fn test_start_activates() {
         let mut ctrl = AskUserController::new();
-        let _rx = ctrl.start("Pick a language?".into(), sample_options(), None);
+        ctrl.start("Pick a language?".into(), sample_options(), None);
         assert!(ctrl.active());
         assert_eq!(ctrl.options().len(), 3);
         assert_eq!(ctrl.selected_index(), 0);
         assert!(ctrl.question().contains("language"));
     }
 
-    #[tokio::test]
-    async fn test_confirm_sends_selection() {
+    #[test]
+    fn test_confirm_returns_selection() {
         let mut ctrl = AskUserController::new();
-        let rx = ctrl.start("Pick?".into(), sample_options(), None);
+        ctrl.start("Pick?".into(), sample_options(), None);
         ctrl.next(); // index 1 = "Python"
         let answer = ctrl.confirm().unwrap();
         assert_eq!(answer, "Python");
         assert!(!ctrl.active());
-
-        let received = rx.await.unwrap();
-        assert_eq!(received, "Python");
     }
 
-    #[tokio::test]
-    async fn test_cancel_sends_default() {
+    #[test]
+    fn test_cancel_deactivates() {
         let mut ctrl = AskUserController::new();
-        let rx = ctrl.start("Pick?".into(), sample_options(), Some("Go".into()));
+        ctrl.start("Pick?".into(), sample_options(), Some("Go".into()));
         ctrl.cancel();
         assert!(!ctrl.active());
-
-        let received = rx.await.unwrap();
-        assert_eq!(received, "Go");
     }
 
-    #[tokio::test]
-    async fn test_cancel_no_default_sends_empty() {
+    #[test]
+    fn test_default_value() {
         let mut ctrl = AskUserController::new();
-        let rx = ctrl.start("Pick?".into(), sample_options(), None);
-        ctrl.cancel();
+        ctrl.start("Pick?".into(), sample_options(), Some("Go".into()));
+        assert_eq!(ctrl.default_value(), Some("Go".into()));
 
-        let received = rx.await.unwrap();
-        assert_eq!(received, "");
+        let mut ctrl2 = AskUserController::new();
+        ctrl2.start("Pick?".into(), sample_options(), None);
+        assert_eq!(ctrl2.default_value(), None);
     }
 
-    #[tokio::test]
-    async fn test_next_prev_wraps() {
+    #[test]
+    fn test_next_prev_wraps() {
         let mut ctrl = AskUserController::new();
-        let _rx = ctrl.start("Q?".into(), sample_options(), None);
+        ctrl.start("Q?".into(), sample_options(), None);
 
         ctrl.next();
         assert_eq!(ctrl.selected_index(), 1);
@@ -207,7 +190,7 @@ mod tests {
     #[test]
     fn test_confirm_empty_options() {
         let mut ctrl = AskUserController::new();
-        let _rx = ctrl.start("Q?".into(), vec![], None);
+        ctrl.start("Q?".into(), vec![], None);
         assert!(ctrl.confirm().is_none());
     }
 }
