@@ -51,12 +51,7 @@ impl AskUserController {
     }
 
     /// Start the ask-user prompt.
-    pub fn start(
-        &mut self,
-        question: String,
-        options: Vec<String>,
-        default: Option<String>,
-    ) {
+    pub fn start(&mut self, question: String, options: Vec<String>, default: Option<String>) {
         self.question = question;
         self.options = options;
         self.default = default;

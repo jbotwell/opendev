@@ -81,10 +81,7 @@ impl App {
         }
         if self.ask_user_controller.active() {
             // Send default answer to unblock
-            let fallback = self
-                .ask_user_controller
-                .default_value()
-                .unwrap_or_default();
+            let fallback = self.ask_user_controller.default_value().unwrap_or_default();
             self.ask_user_controller.cancel();
             if let Some(tx) = self.ask_user_response_tx.take() {
                 let _ = tx.send(fallback);
@@ -259,8 +256,7 @@ impl App {
 
                 // Page navigation: left
                 (KeyModifiers::SHIFT, KeyCode::Char('H')) => {
-                    self.state.task_watcher_page =
-                        self.state.task_watcher_page.saturating_sub(1);
+                    self.state.task_watcher_page = self.state.task_watcher_page.saturating_sub(1);
                 }
                 // Page navigation: right
                 (KeyModifiers::SHIFT, KeyCode::Char('L')) => {
@@ -286,10 +282,7 @@ impl App {
                     }
                 }
                 KeyCode::Esc => {
-                    let fallback = self
-                        .ask_user_controller
-                        .default_value()
-                        .unwrap_or_default();
+                    let fallback = self.ask_user_controller.default_value().unwrap_or_default();
                     self.ask_user_controller.cancel();
                     if let Some(tx) = self.ask_user_response_tx.take() {
                         let _ = tx.send(fallback);
@@ -747,10 +740,9 @@ impl App {
                         self.state.task_watcher_page = 0;
                     } else {
                         use crate::widgets::toast::{Toast, ToastLevel};
-                        self.state.toasts.push(Toast::new(
-                            "No background tasks",
-                            ToastLevel::Info,
-                        ));
+                        self.state
+                            .toasts
+                            .push(Toast::new("No background tasks", ToastLevel::Info));
                     }
                 }
             }

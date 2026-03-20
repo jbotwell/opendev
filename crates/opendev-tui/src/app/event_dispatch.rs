@@ -356,15 +356,10 @@ impl App {
                         .state
                         .active_subagents
                         .iter()
-                        .any(|s| {
-                            s.backgrounded
-                                && s.parent_tool_id.as_deref() == Some(&tool_id)
-                        })
+                        .any(|s| s.backgrounded && s.parent_tool_id.as_deref() == Some(&tool_id))
                 {
                     // Remove the backgrounded subagent from tracking
-                    self.state
-                        .active_tools
-                        .retain(|t| t.id != tool_id);
+                    self.state.active_tools.retain(|t| t.id != tool_id);
                     self.state.dirty = true;
                     return;
                 }
@@ -592,21 +587,16 @@ impl App {
                 // guaranteed ordering). Now we just fill in the subagent_id so subsequent
                 // SubagentToolCall/Finished events (which use subagent_id) can find it.
                 // Match by parent_tool_id first (reliable), then fall back to task text
-                let found = self
-                    .state
-                    .active_subagents
-                    .iter_mut()
-                    .find(|s| {
-                        s.subagent_id.is_empty()
-                            && (s.parent_tool_id.as_ref().is_some_and(|ptid| {
-                                self.state.active_tools.iter().any(|t| {
-                                    t.id == *ptid
-                                        && t.name == "spawn_subagent"
-                                        && t.args.get("task").and_then(|v| v.as_str())
-                                            == Some(&task)
-                                })
-                            }) || s.task == task)
-                    });
+                let found = self.state.active_subagents.iter_mut().find(|s| {
+                    s.subagent_id.is_empty()
+                        && (s.parent_tool_id.as_ref().is_some_and(|ptid| {
+                            self.state.active_tools.iter().any(|t| {
+                                t.id == *ptid
+                                    && t.name == "spawn_subagent"
+                                    && t.args.get("task").and_then(|v| v.as_str()) == Some(&task)
+                            })
+                        }) || s.task == task)
+                });
                 if let Some(sa) = found {
                     sa.subagent_id = subagent_id;
                     sa.name = subagent_name;
@@ -635,8 +625,7 @@ impl App {
                         .all_tasks()
                         .iter()
                         .find(|t| {
-                            t.is_running()
-                                && t.current_tool.as_deref() == Some("spawn_subagent")
+                            t.is_running() && t.current_tool.as_deref() == Some("spawn_subagent")
                         })
                         .map(|t| t.task_id.clone())
                     {
@@ -649,12 +638,11 @@ impl App {
                             format!("\u{25b8} {subagent_name}: {task}"),
                         );
                         // Create display entry so task watcher shows tool-level detail
-                        let mut sa =
-                            crate::widgets::nested_tool::SubagentDisplayState::new(
-                                subagent_id,
-                                subagent_name,
-                                task,
-                            );
+                        let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
+                            subagent_id,
+                            subagent_name,
+                            task,
+                        );
                         sa.backgrounded = true;
                         self.state.active_subagents.push(sa);
                     }
@@ -726,19 +714,17 @@ impl App {
                             self.state.bg_subagent_map.get(&subagent_id).cloned()
                     {
                         let icon = if success { "\u{2713}" } else { "\u{2717}" };
-                        self.state.bg_agent_manager.push_activity(
-                            &bg_task_id,
-                            format!("  {icon} {tool_name}"),
-                        );
+                        self.state
+                            .bg_agent_manager
+                            .push_activity(&bg_task_id, format!("  {icon} {tool_name}"));
                     }
                 } else if let Some(bg_task_id) =
                     self.state.bg_subagent_map.get(&subagent_id).cloned()
                 {
                     let icon = if success { "\u{2713}" } else { "\u{2717}" };
-                    self.state.bg_agent_manager.push_activity(
-                        &bg_task_id,
-                        format!("  {icon} {tool_name}"),
-                    );
+                    self.state
+                        .bg_agent_manager
+                        .push_activity(&bg_task_id, format!("  {icon} {tool_name}"));
                 }
                 self.state.dirty = true;
             }
@@ -757,10 +743,14 @@ impl App {
                     .find(|s| s.subagent_id == subagent_id)
                 {
                     let is_bg = subagent.backgrounded;
-                    subagent.finish(success, result_summary.clone(), tool_call_count, shallow_warning);
+                    subagent.finish(
+                        success,
+                        result_summary.clone(),
+                        tool_call_count,
+                        shallow_warning,
+                    );
                     if is_bg
-                        && let Some(bg_task_id) =
-                            self.state.bg_subagent_map.remove(&subagent_id)
+                        && let Some(bg_task_id) = self.state.bg_subagent_map.remove(&subagent_id)
                     {
                         let status = if success { "completed" } else { "failed" };
                         self.state.bg_agent_manager.push_activity(
@@ -768,9 +758,7 @@ impl App {
                             format!("  Subagent {status} ({tool_call_count} tools)"),
                         );
                     }
-                } else if let Some(bg_task_id) =
-                    self.state.bg_subagent_map.remove(&subagent_id)
-                {
+                } else if let Some(bg_task_id) = self.state.bg_subagent_map.remove(&subagent_id) {
                     let status = if success { "completed" } else { "failed" };
                     self.state.bg_agent_manager.push_activity(
                         &bg_task_id,
@@ -1155,7 +1143,8 @@ impl App {
         if self.approval_controller.active()
             || self.ask_user_controller.active()
             || self.plan_approval_controller.active()
-            || self.model_picker_controller
+            || self
+                .model_picker_controller
                 .as_ref()
                 .is_some_and(|p| p.active())
             || self.state.task_watcher_open
