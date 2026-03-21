@@ -13,8 +13,13 @@ Execute multiple tool invocations in a single call, either in parallel or serial
 
 ## Usage notes
 
-- Max 5 concurrent workers in parallel mode
+- Max 25 concurrent workers in parallel mode
 - Results are returned in the same order as the invocations, regardless of completion order
 - If one invocation fails in parallel mode, the others still complete — failures don't cancel sibling operations
 - Each invocation in the batch is a standard tool call with name and arguments
 - Use batch_tool to maximize efficiency when you need to perform multiple independent operations in a single turn
+
+## Restrictions
+
+- **spawn_subagent CANNOT be used inside batch_tool**. To run multiple subagents in parallel, make multiple spawn_subagent calls directly in the same response — they automatically execute concurrently.
+- batch_tool cannot contain other batch_tool calls or task_complete.
