@@ -1,7 +1,8 @@
 use super::types::SubAgentSpec;
 
 /// Tools available to the Explore subagent.
-pub const CODE_EXPLORER_TOOLS: &[&str] = &["read_file", "grep", "list_files", "run_command"];
+pub const CODE_EXPLORER_TOOLS: &[&str] =
+    &["read_file", "grep", "list_files", "run_command", "ast_grep"];
 
 /// Tools available to the Planner subagent.
 pub const PLANNER_TOOLS: &[&str] = &["read_file", "grep", "list_files", "write_file", "edit_file"];
@@ -124,6 +125,7 @@ mod tests {
         assert!(spec.has_tool_restriction());
         assert!(spec.tools.contains(&"read_file".to_string()));
         assert!(spec.tools.contains(&"grep".to_string()));
+        assert!(spec.tools.contains(&"ast_grep".to_string()));
         assert!(!spec.tools.contains(&"write_file".to_string()));
     }
 
