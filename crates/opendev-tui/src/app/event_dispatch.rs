@@ -9,44 +9,55 @@ use super::{
 };
 
 impl App {
-    /// Batch all pending background results into a single injection message
-    /// and send it silently to the LLM (not displayed in the conversation).
-    pub(super) fn drain_background_results(&mut self) {
-        if self.state.pending_bg_results.is_empty() {
+    /// Drain the next pending item from the unified queue.
+    /// User messages are sent one at a time. Consecutive background results are batched.
+    pub(super) fn drain_next_pending(&mut self) {
+        if self.state.pending_queue.is_empty() {
             return;
         }
-        let results = std::mem::take(&mut self.state.pending_bg_results);
-        let mut parts = Vec::new();
-        for r in &results {
-            parts.push(format!(
-                "[Background task [{id}] completed ({tools} tools)]\n\
-                 Task: {query}\n\n\
-                 {result}",
-                id = r.task_id,
-                tools = r.tool_call_count,
-                query = r.query,
-                result = r.result,
-            ));
-        }
-        let msg = parts.join("\n\n");
-        // Send directly to the LLM without displaying as a user message
-        self.state.agent_active = true;
-        self.state.message_generation += 1;
-        let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
-        self.state.dirty = true;
-    }
-
-    pub(super) fn drain_next_pending_message(&mut self) {
-        if let Some(queued_msg) = self.state.pending_messages.first().cloned() {
-            self.state.pending_messages.remove(0);
-            // Display the user message NOW (deferred from queue time)
-            self.message_controller
-                .handle_user_submit(&mut self.state, &queued_msg);
-            self.state.message_generation += 1;
-            // Send to agent backend
-            self.state.agent_active = true;
-            let _ = self.event_tx.send(AppEvent::UserSubmit(queued_msg));
-            self.state.dirty = true;
+        match self.state.pending_queue.front() {
+            Some(super::PendingItem::UserMessage(_)) => {
+                if let Some(super::PendingItem::UserMessage(msg)) =
+                    self.state.pending_queue.pop_front()
+                {
+                    // Display the user message NOW (deferred from queue time)
+                    self.message_controller
+                        .handle_user_submit(&mut self.state, &msg);
+                    self.state.message_generation += 1;
+                    self.state.agent_active = true;
+                    let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
+                    self.state.dirty = true;
+                }
+            }
+            Some(super::PendingItem::BackgroundResult { .. }) => {
+                // Batch all consecutive BackgroundResult items into one LLM call
+                let mut parts = Vec::new();
+                while matches!(
+                    self.state.pending_queue.front(),
+                    Some(super::PendingItem::BackgroundResult { .. })
+                ) {
+                    if let Some(super::PendingItem::BackgroundResult {
+                        task_id,
+                        query,
+                        result,
+                        tool_call_count,
+                        ..
+                    }) = self.state.pending_queue.pop_front()
+                    {
+                        parts.push(format!(
+                            "[Background task [{task_id}] completed ({tool_call_count} tools)]\n\
+                             Task: {query}\n\n\
+                             {result}"
+                        ));
+                    }
+                }
+                let msg = parts.join("\n\n");
+                self.state.agent_active = true;
+                self.state.message_generation += 1;
+                let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
+                self.state.dirty = true;
+            }
+            None => {}
         }
     }
 
@@ -185,7 +196,9 @@ impl App {
                 self.state.agent_active = true;
                 self.state.backgrounded_task_info = None;
                 // Clear finished (non-backgrounded) subagents from previous query
-                self.state.active_subagents.retain(|s| !s.finished || s.backgrounded);
+                self.state
+                    .active_subagents
+                    .retain(|s| !s.finished || s.backgrounded);
                 self.state.dirty = true;
             }
             AppEvent::AgentChunk(text) => {
@@ -204,12 +217,7 @@ impl App {
                 self.state.agent_active = false;
                 self.state.backgrounding_pending = false;
                 self.state.dirty = true;
-                // Priority: user messages first, then background results
-                if !self.state.pending_messages.is_empty() {
-                    self.drain_next_pending_message();
-                } else if !self.state.pending_bg_results.is_empty() {
-                    self.drain_background_results();
-                }
+                self.drain_next_pending();
             }
             AppEvent::AgentError(err) => {
                 self.state.agent_active = false;
@@ -222,8 +230,8 @@ impl App {
                 });
                 self.state.dirty = true;
                 self.state.message_generation += 1;
-                // Continue processing queued messages despite the error
-                self.drain_next_pending_message();
+                // Continue processing queued items despite the error
+                self.drain_next_pending();
             }
 
             // Reasoning events
@@ -350,11 +358,9 @@ impl App {
                     } else {
                         result_lines
                     };
-                    use crate::formatters::tool_registry::{categorize_tool, ToolCategory};
-                    let is_file_read =
-                        categorize_tool(&tool_name) == ToolCategory::FileRead;
-                    let collapse =
-                        is_file_read || (lines.len() > 5 && !is_diff_tool(&tool_name));
+                    use crate::formatters::tool_registry::{ToolCategory, categorize_tool};
+                    let is_file_read = categorize_tool(&tool_name) == ToolCategory::FileRead;
+                    let collapse = is_file_read || (lines.len() > 5 && !is_diff_tool(&tool_name));
                     (lines, collapse)
                 };
 
@@ -375,7 +381,7 @@ impl App {
                     return;
                 }
                 if tool_name == "spawn_subagent" {
-                    // Find matching subagent by parent_tool_id (reliable), fall back to task text
+                    // Remove matching subagent from active list (cleanup only, no summary display)
                     let subagent_idx = self
                         .state
                         .active_subagents
@@ -389,92 +395,9 @@ impl App {
                                 .iter()
                                 .position(|s| s.task == task_text)
                         });
-                    let stats = if let Some(idx) = subagent_idx {
-                        let subagent = self.state.active_subagents.remove(idx);
-                        let mut tc = subagent.tool_call_count;
-                        let tk = subagent.token_count;
-                        let elapsed = subagent.started_at.elapsed();
-
-                        // If bridge events haven't delivered stats yet, parse from
-                        // the output header that SpawnSubagentTool embeds reliably.
-                        if tc == 0
-                            && let Some(line) = output.lines().next()
-                            && let Some(rest) = line.strip_prefix("__subagent_stats__:")
-                        {
-                            for part in rest.split(',') {
-                                if let Some(val) = part.strip_prefix("tc=") {
-                                    tc = val.parse().unwrap_or(0);
-                                }
-                            }
-                        }
-                        (tc, tk, elapsed, subagent.success)
-                    } else {
-                        // No subagent found at all — try parsing from output header
-                        let mut tc = 0usize;
-                        if let Some(line) = output.lines().next()
-                            && let Some(rest) = line.strip_prefix("__subagent_stats__:")
-                        {
-                            for part in rest.split(',') {
-                                if let Some(val) = part.strip_prefix("tc=") {
-                                    tc = val.parse().unwrap_or(0);
-                                }
-                            }
-                        }
-                        (tc, 0, std::time::Duration::ZERO, success)
-                    };
-
-                    let summary = if !success {
-                        // Show first meaningful line of the output as error context
-                        let error_hint = output
-                            .lines()
-                            .find(|l| {
-                                !l.starts_with("__subagent_stats__:")
-                                    && !l.starts_with("task_id:")
-                                    && !l.trim().is_empty()
-                            })
-                            .unwrap_or("unknown error");
-                        let truncated = if error_hint.len() > 120 {
-                            format!("{}...", &error_hint[..120])
-                        } else {
-                            error_hint.to_string()
-                        };
-                        format!("Failed: {truncated}")
-                    } else {
-                        let elapsed_secs = stats.2.as_secs();
-                        let elapsed_str = if elapsed_secs >= 60 {
-                            format!("{}m {}s", elapsed_secs / 60, elapsed_secs % 60)
-                        } else {
-                            format!("{elapsed_secs}s")
-                        };
-                        let token_str = if stats.1 > 0 {
-                            let k = stats.1 as f64 / 1000.0;
-                            format!(" \u{00b7} {k:.1}k tokens")
-                        } else {
-                            String::new()
-                        };
-                        if stats.0 > 0 || stats.1 > 0 {
-                            format!(
-                                "Done ({} tool uses{} \u{00b7} {})",
-                                stats.0, token_str, elapsed_str
-                            )
-                        } else {
-                            "Done".to_string()
-                        }
-                    };
-                    self.state.messages.push(DisplayMessage {
-                        role: DisplayRole::Assistant,
-                        content: String::new(),
-                        tool_call: Some(DisplayToolCall {
-                            name: tool_name.clone(),
-                            arguments,
-                            summary: None,
-                            success,
-                            collapsed: false,
-                            result_lines: vec![summary],
-                            nested_calls: Vec::new(),
-                        }),
-                        collapsed: false,
-                    });
+                    if let Some(idx) = subagent_idx {
+                        self.state.active_subagents.remove(idx);
+                    }
                 } else if !display_lines.is_empty() {
                     self.state.messages.push(DisplayMessage {
                         role: DisplayRole::Assistant,
@@ -865,7 +788,9 @@ impl App {
                     }
                     self.state.agent_active = false;
                     self.state.backgrounding_pending = false;
-                    self.state.pending_messages.clear();
+                    self.state
+                        .pending_queue
+                        .retain(|item| !matches!(item, super::PendingItem::UserMessage(_)));
                 }
                 self.state.dirty = true;
             }
@@ -1045,8 +970,8 @@ impl App {
                         .map(|t| t.query.clone())
                         .unwrap_or_default();
                     self.state
-                        .pending_bg_results
-                        .push(super::PendingBackgroundResult {
+                        .pending_queue
+                        .push_back(super::PendingItem::BackgroundResult {
                             task_id: task_id.clone(),
                             query,
                             result: full_result,
@@ -1056,8 +981,8 @@ impl App {
                         });
 
                     // If idle, drain immediately
-                    if !self.state.agent_active && self.state.pending_messages.is_empty() {
-                        self.drain_background_results();
+                    if !self.state.agent_active {
+                        self.drain_next_pending();
                     }
                 }
 
@@ -1269,3 +1194,4 @@ impl App {
         }
     }
 }
+

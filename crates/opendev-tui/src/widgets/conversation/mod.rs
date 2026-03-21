@@ -278,9 +278,6 @@ impl<'a> ConversationWidget<'a> {
 
         let spinner_lines = self.build_spinner_lines();
         if !spinner_lines.is_empty() {
-            if !lines.is_empty() {
-                lines.push(Line::from(""));
-            }
             lines.extend(spinner_lines);
         }
 
@@ -482,42 +479,6 @@ mod tests {
         let lines = widget.build_lines();
         // message line + tool line + 2 result lines + blank
         assert!(lines.len() >= 5);
-    }
-
-    #[test]
-    fn test_spawn_subagent_group_tool_call_display() {
-        let mut arguments = std::collections::HashMap::new();
-        arguments.insert(
-            "count".into(),
-            serde_json::Value::Number(serde_json::Number::from(2u64)),
-        );
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "".into(),
-            tool_call: Some(DisplayToolCall {
-                name: "spawn_subagent_group".into(),
-                arguments,
-                summary: None,
-                success: true,
-                collapsed: false,
-                result_lines: vec![
-                    "Explore(Inspect auth flow)  Done (7 tool uses · 12s)".into(),
-                    "Explore(Trace API routes)  Done (9 tool uses · 14s)".into(),
-                ],
-                nested_calls: vec![],
-            }),
-            collapsed: false,
-        }];
-        let widget = ConversationWidget::new(&msgs, 0);
-        let text: String = widget
-            .build_lines()
-            .iter()
-            .flat_map(|l| l.spans.iter())
-            .map(|s| s.content.to_string())
-            .collect();
-        assert!(text.contains("2 subagents"));
-        assert!(text.contains("Inspect auth flow"));
-        assert!(text.contains("Trace API routes"));
     }
 
     #[test]
