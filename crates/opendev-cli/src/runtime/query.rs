@@ -248,15 +248,29 @@ impl AgentRuntime {
             warn!("Failed to save session: {e}");
         }
 
-        // Step 9: Auto-detect session title (only when session has no title yet)
+        // Step 9: Auto-detect session title (1st message + every 5th user message)
         if self.topic_detector.is_enabled() {
-            let needs_title = self
+            let (should_detect, current_title) = self
                 .session_manager
                 .current_session()
-                .map(|s| !s.metadata.contains_key("title"))
-                .unwrap_or(false);
+                .map(|s| {
+                    let has_title = s.metadata.contains_key("title");
+                    let user_msg_count = s
+                        .messages
+                        .iter()
+                        .filter(|m| m.role == Role::User)
+                        .count();
+                    let should = !has_title || (user_msg_count > 1 && user_msg_count % 5 == 0);
+                    let title = s
+                        .metadata
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .map(|t| t.to_string());
+                    (should, title)
+                })
+                .unwrap_or((false, None));
 
-            if needs_title {
+            if should_detect {
                 let simple_msgs: Vec<SimpleMessage> = self
                     .session_manager
                     .current_session()
@@ -281,15 +295,26 @@ impl AgentRuntime {
                     })
                     .unwrap_or_default();
 
-                if let Some(title) = self.topic_detector.detect_title(&simple_msgs).await
-                    && let Some(session) = self.session_manager.current_session()
+                if let Some(title) = self
+                    .topic_detector
+                    .detect_title(&simple_msgs, current_title.as_deref())
+                    .await
                 {
-                    let session_id = session.id.clone();
-                    if let Err(e) = self.session_manager.set_title(&session_id, &title) {
-                        debug!("Failed to set session title: {e}");
-                    } else {
-                        self.session_manager.save_current().ok();
-                        debug!(title, "Auto-detected session title");
+                    // Skip no-op updates
+                    let is_same = current_title
+                        .as_deref()
+                        .is_some_and(|ct| ct == title);
+
+                    if !is_same
+                        && let Some(session) = self.session_manager.current_session()
+                    {
+                        let session_id = session.id.clone();
+                        if let Err(e) = self.session_manager.set_title(&session_id, &title) {
+                            debug!("Failed to set session title: {e}");
+                        } else {
+                            self.session_manager.save_current().ok();
+                            debug!(title, "Auto-detected session title");
+                        }
                     }
                 }
             }

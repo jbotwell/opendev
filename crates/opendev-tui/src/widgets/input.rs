@@ -10,6 +10,26 @@ use ratatui::{
 
 use crate::formatters::style_tokens;
 
+/// Convert a title to kebab-case display: lowercase, spaces→dashes, strip special chars.
+fn to_kebab_display(title: &str) -> String {
+    let lower = title.to_lowercase();
+    let mut result = String::with_capacity(lower.len());
+    let mut last_was_dash = true;
+    for ch in lower.chars() {
+        if ch.is_ascii_alphanumeric() {
+            result.push(ch);
+            last_was_dash = false;
+        } else if !last_was_dash {
+            result.push('-');
+            last_was_dash = true;
+        }
+    }
+    if result.ends_with('-') {
+        result.pop();
+    }
+    result
+}
+
 /// Widget for the user input area.
 pub struct InputWidget<'a> {
     buffer: &'a str,
@@ -93,10 +113,11 @@ impl Widget for InputWidget<'_> {
             ));
         }
         if let Some(tag) = self.activity_tag {
-            let tag_display = if tag.len() > 30 {
-                format!("{}...", &tag[..27])
+            let kebab = to_kebab_display(tag);
+            let tag_display = if kebab.len() > 30 {
+                format!("{}...", &kebab[..27])
             } else {
-                tag.to_string()
+                kebab
             };
             let tag_section = format!(" {} ", tag_display);
             let trailing = "──";
@@ -105,7 +126,9 @@ impl Widget for InputWidget<'_> {
             spans.push(Span::styled("─".repeat(fill), sep_style));
             spans.push(Span::styled(
                 tag_section,
-                Style::default().fg(style_tokens::DIM_GREY),
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(style_tokens::GOLD),
             ));
             spans.push(Span::styled(trailing, sep_style));
         } else {
@@ -270,8 +293,8 @@ mod tests {
             })
             .collect();
         assert!(
-            rendered.contains("implementing status bar"),
-            "Expected activity tag in separator line, got: {rendered:?}"
+            rendered.contains("implementing-status-bar"),
+            "Expected kebab-cased activity tag in separator line, got: {rendered:?}"
         );
     }
 
@@ -294,8 +317,21 @@ mod tests {
             "Expected queue indicator, got: {rendered:?}"
         );
         assert!(
-            rendered.contains("debugging login"),
-            "Expected activity tag, got: {rendered:?}"
+            rendered.contains("debugging-login"),
+            "Expected kebab-cased activity tag, got: {rendered:?}"
         );
+    }
+
+    #[test]
+    fn test_to_kebab_display() {
+        assert_eq!(to_kebab_display("Hello World"), "hello-world");
+        assert_eq!(to_kebab_display("Auth Refactor"), "auth-refactor");
+        assert_eq!(
+            to_kebab_display("Fix: login bug!"),
+            "fix-login-bug"
+        );
+        assert_eq!(to_kebab_display("  spaces  "), "spaces");
+        assert_eq!(to_kebab_display("already-kebab"), "already-kebab");
+        assert_eq!(to_kebab_display("MiXeD CaSe"), "mixed-case");
     }
 }

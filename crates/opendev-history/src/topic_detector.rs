@@ -41,12 +41,14 @@ const ENV_KEYS: &[(&str, &str)] = &[
 
 /// System prompt for topic detection.
 const TOPIC_DETECTION_PROMPT: &str = "\
-You are a conversation topic analyzer. Your job is to determine if the user's \
-latest message introduces a new conversation topic.
+You are a conversation topic analyzer. Determine whether the user's latest message \
+introduces or shifts to a new conversation topic.
 
-Analyze the conversation and respond with a JSON object containing exactly two fields:
-- \"isNewTopic\": boolean - true if the latest message starts a new topic
-- \"title\": string or null - a 2-3 word title if isNewTopic is true, null otherwise
+Respond with a JSON object containing exactly two fields:
+- \"isNewTopic\": boolean - true if the topic is new or has meaningfully changed
+- \"title\": string or null - a concise 2-4 word lowercase title if isNewTopic is true, null otherwise
+
+Title examples: \"auth middleware refactor\", \"debug login flow\", \"add search feature\".
 
 Output only the JSON object, no other text.";
 
@@ -133,7 +135,11 @@ impl TopicDetector {
     ///
     /// This is the async version — call it when you want the title directly
     /// without needing `Arc<Mutex<SessionManager>>`.
-    pub async fn detect_title(&self, messages: &[SimpleMessage]) -> Option<String> {
+    pub async fn detect_title(
+        &self,
+        messages: &[SimpleMessage],
+        current_title: Option<&str>,
+    ) -> Option<String> {
         if !self.enabled {
             return None;
         }
@@ -154,6 +160,7 @@ impl TopicDetector {
             &self.model,
             &self.api_key,
             &recent,
+            current_title,
         )
         .await
         {
@@ -233,7 +240,7 @@ async fn detect_and_update(
     session_id: &str,
     recent_messages: &[SimpleMessage],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let result = call_llm(client, provider, model, api_key, recent_messages).await?;
+    let result = call_llm(client, provider, model, api_key, recent_messages, None).await?;
 
     if result.is_new_topic
         && let Some(title) = result.title
@@ -262,6 +269,7 @@ async fn call_llm(
     model: &str,
     api_key: &str,
     recent_messages: &[SimpleMessage],
+    current_title: Option<&str>,
 ) -> Result<TopicResult, Box<dyn std::error::Error + Send + Sync>> {
     let endpoint = api_endpoint(provider);
 
@@ -278,9 +286,18 @@ async fn call_llm(
         }));
     }
 
+    let analysis_prompt = if let Some(title) = current_title {
+        format!(
+            "The current topic title is \"{title}\". \
+             Analyze the conversation above. Has the topic meaningfully changed?"
+        )
+    } else {
+        "Analyze the conversation above. Is the latest message a new topic?".to_string()
+    };
+
     api_messages.push(serde_json::json!({
         "role": "user",
-        "content": "Analyze the conversation above. Is the latest message a new topic?",
+        "content": analysis_prompt,
     }));
 
     let payload = serde_json::json!({
