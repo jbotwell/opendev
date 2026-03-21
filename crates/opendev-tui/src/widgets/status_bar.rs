@@ -15,6 +15,8 @@ use ratatui::{
     widgets::Widget,
 };
 
+use unicode_width::UnicodeWidthStr;
+
 use crate::app::{AutonomyLevel, OperationMode, ReasoningLevel};
 use crate::formatters::style_tokens;
 
@@ -326,13 +328,13 @@ impl Widget for StatusBarWidget<'_> {
         };
 
         // Calculate total left-side width for gap
-        let left_len: usize = spans.iter().map(|s| s.content.len()).sum();
+        let left_len: usize = spans.iter().map(|s| s.content.width()).sum();
         let right_text = if cost_str.is_empty() {
             format!("Context left {pct_str}%")
         } else {
             format!("Cost {cost_str}  \u{2502}  Context left {pct_str}%")
         };
-        let right_len = right_text.len();
+        let right_len = right_text.width();
 
         let available_width = area.width as usize;
         let gap = available_width.saturating_sub(left_len + right_len);
