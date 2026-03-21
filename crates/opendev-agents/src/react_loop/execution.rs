@@ -666,7 +666,7 @@ impl ReactLoop {
                     if all_subagents {
                         // Parallel subagent execution path using futures::join_all
                         // (no spawning needed — references are valid for the duration)
-                        let max_parallel: usize = 5;
+                        let max_parallel: usize = 25;
                         let semaphore = Arc::new(tokio::sync::Semaphore::new(max_parallel));
 
                         // Build futures for each tool call
