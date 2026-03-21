@@ -227,21 +227,6 @@ impl App {
             }
 
             // Reasoning events
-            AppEvent::ReasoningBlockStart => {
-                if let Some(last) = self.state.messages.last()
-                    && last.role == DisplayRole::Reasoning
-                    && !last.content.is_empty()
-                {
-                    self.state.messages.push(DisplayMessage {
-                        role: DisplayRole::Reasoning,
-                        content: String::new(),
-                        tool_call: None,
-                        collapsed: false,
-                    });
-                    self.state.dirty = true;
-                    self.state.message_generation += 1;
-                }
-            }
             AppEvent::ReasoningContent(content) => {
                 // Append to previous reasoning message in this turn (streaming sends deltas)
                 if let Some(last) = self.state.messages.last_mut()

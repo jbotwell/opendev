@@ -542,8 +542,7 @@ impl ReactLoop {
                         );
                         append_directive(
                             messages,
-                            "Your previous response was truncated due to output token limit. \
-                             Continue from where you left off.",
+                            &get_reminder("truncation_continue_directive", &[]),
                         );
                         iter_metrics.total_duration_ms = iter_start.elapsed().as_millis() as u64;
                         self.push_metrics(iter_metrics);
@@ -623,10 +622,7 @@ impl ReactLoop {
                                 iter_start.elapsed().as_millis() as u64;
                             self.push_metrics(iter_metrics);
                             return Ok(AgentResult::fail(
-                                "The agent was unable to make progress and has been \
-                                 stopped. Please try rephrasing your request or \
-                                 providing more specific guidance."
-                                    .to_string(),
+                                get_reminder("doom_loop_force_stop_message", &[]),
                                 messages.clone(),
                             ));
                         }
@@ -649,10 +645,7 @@ impl ReactLoop {
                                     warn!("Doom loop context compaction: {}", doom_warning);
                                     append_directive(
                                         messages,
-                                        "You appear to be stuck in a repeating loop. \
-                                         Summarize what you have learned so far, discard \
-                                         irrelevant details, and try a fundamentally \
-                                         different approach.",
+                                        &get_reminder("doom_loop_compact_directive", &[]),
                                     );
                                 }
                             }

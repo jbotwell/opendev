@@ -156,6 +156,21 @@ You have been reading files individually to explore the codebase. For multi-file
 
 Spawn a Explore subagent now with a clear question about what you need to understand. Explore is purpose-built for codebase exploration and will be more thorough and efficient.
 
+--- doom_loop_redirect_nudge ---
+You are repeating the same operation. STOP and try something different: use a different tool, change your arguments, or ask the user for help. Do NOT repeat the previous tool call.
+
+--- doom_loop_stepback_nudge ---
+You have been stuck in a loop despite a previous warning. Your current approach is not working. STOP entirely. Re-read the original task, identify which assumption is wrong, and choose a completely different strategy. If you cannot proceed, explain what is blocking you.
+
+--- truncation_continue_directive ---
+Your previous response was truncated due to output token limit. Continue from where you left off.
+
+--- doom_loop_compact_directive ---
+You appear to be stuck in a repeating loop. Summarize what you have learned so far, discard irrelevant details, and try a fundamentally different approach.
+
+--- doom_loop_force_stop_message ---
+The agent was unable to make progress and has been stopped. Please try rephrasing your request or providing more specific guidance.
+
 --- implicit_completion_nudge ---
 Before finishing, verify you have fully addressed the user's complete request:
 
