@@ -196,15 +196,27 @@ impl ModelRegistry {
     }
 
     /// Find a model by its full ID across all providers.
+    ///
+    /// When the same model ID exists under multiple providers, prefer providers
+    /// whose API key environment variable is set (i.e. usable providers).
     pub fn find_model_by_id(&self, model_id: &str) -> Option<(&str, &str, &ModelInfo)> {
+        let mut fallback: Option<(&str, &str, &ModelInfo)> = None;
         for (provider_id, provider) in &self.providers {
             for (model_key, model) in &provider.models {
                 if model.id == model_id {
-                    return Some((provider_id, model_key, model));
+                    // Prefer providers with an available API key
+                    if provider.api_key_env.is_empty()
+                        || std::env::var(&provider.api_key_env).is_ok()
+                    {
+                        return Some((provider_id, model_key, model));
+                    }
+                    if fallback.is_none() {
+                        fallback = Some((provider_id, model_key, model));
+                    }
                 }
             }
         }
-        None
+        fallback
     }
 
     /// List all models across all providers with optional filters.
@@ -295,5 +307,85 @@ mod tests {
         let mut ids = vec!["zebra", "openai", "alpha", "anthropic"];
         ids.sort_by(|a, b| provider_sort_key(a).cmp(&provider_sort_key(b)));
         assert_eq!(ids, vec!["openai", "anthropic", "alpha", "zebra"]);
+    }
+
+    #[test]
+    fn test_find_model_prefers_provider_with_api_key() {
+        let mut registry = ModelRegistry::new();
+
+        // Provider without API key set (use a unique env var name that won't exist)
+        let no_key_env = "OPENDEV_TEST_NO_KEY_SET_12345";
+
+        let mut models_a = HashMap::new();
+        models_a.insert(
+            "shared-model".to_string(),
+            ModelInfo {
+                id: "shared-model".to_string(),
+                name: "Shared Model".to_string(),
+                provider: "No Key Provider".to_string(),
+                context_length: 4096,
+                capabilities: vec!["text".to_string()],
+                pricing_input: 1.0,
+                pricing_output: 2.0,
+                pricing_unit: "per 1M tokens".to_string(),
+                recommended: false,
+                max_tokens: None,
+                supports_temperature: true,
+                serverless: false,
+                tunable: false,
+                api_type: "chat".to_string(),
+            },
+        );
+        registry.providers.insert(
+            "no-key-provider".to_string(),
+            ProviderInfo {
+                id: "no-key-provider".to_string(),
+                name: "No Key Provider".to_string(),
+                description: String::new(),
+                api_key_env: no_key_env.to_string(),
+                api_base_url: String::new(),
+                models: models_a,
+            },
+        );
+
+        // Provider with empty api_key_env (no key required — always usable)
+        let mut models_b = HashMap::new();
+        models_b.insert(
+            "shared-model".to_string(),
+            ModelInfo {
+                id: "shared-model".to_string(),
+                name: "Shared Model".to_string(),
+                provider: "Free Provider".to_string(),
+                context_length: 4096,
+                capabilities: vec!["text".to_string()],
+                pricing_input: 1.0,
+                pricing_output: 2.0,
+                pricing_unit: "per 1M tokens".to_string(),
+                recommended: false,
+                max_tokens: None,
+                supports_temperature: true,
+                serverless: false,
+                tunable: false,
+                api_type: "chat".to_string(),
+            },
+        );
+        registry.providers.insert(
+            "free-provider".to_string(),
+            ProviderInfo {
+                id: "free-provider".to_string(),
+                name: "Free Provider".to_string(),
+                description: String::new(),
+                api_key_env: String::new(),
+                api_base_url: String::new(),
+                models: models_b,
+            },
+        );
+
+        // Should prefer the provider that doesn't require a missing API key
+        let result = registry.find_model_by_id("shared-model").unwrap();
+        assert_eq!(
+            result.0, "free-provider",
+            "Should prefer provider with available API key over one without"
+        );
     }
 }

@@ -341,7 +341,10 @@ impl HttpClient {
     ///
     /// Unlike `post_json`, this does NOT read the response body. The caller
     /// is responsible for consuming the response (e.g., reading SSE lines).
-    /// Does NOT retry — retries are incompatible with streaming.
+    ///
+    /// Retries on transport errors and retryable HTTP status codes (429/503)
+    /// before any response body has been consumed. Once a successful response
+    /// is returned to the caller, no further retries are attempted.
     pub async fn send_streaming_request(
         &self,
         url: &str,
@@ -353,55 +356,142 @@ impl HttpClient {
             cb.check()?;
         }
 
-        let request_id = Uuid::new_v4().to_string();
-        debug!(request_id = %request_id, api_url = %url, "Sending streaming LLM request");
+        let mut last_error: Option<HttpError> = None;
 
-        let request = self
-            .client
-            .post(url)
-            .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-            .header(
-                HeaderName::from_static("x-request-id"),
-                HeaderValue::from_str(&request_id)
-                    .unwrap_or_else(|_| HeaderValue::from_static("unknown")),
-            )
-            .json(payload)
-            .send();
+        for attempt in 0..=self.retry_config.max_retries {
+            // Check cancellation before each attempt
+            if let Some(token) = cancel
+                && token.is_cancelled()
+            {
+                return Err(HttpError::Interrupted);
+            }
 
-        let response = match cancel {
-            Some(token) => {
-                tokio::select! {
-                    resp = request => resp,
-                    _ = token.cancelled() => {
-                        return Err(HttpError::Interrupted);
+            let request_id = Uuid::new_v4().to_string();
+            debug!(request_id = %request_id, api_url = %url, attempt, "Sending streaming LLM request");
+
+            let request = self
+                .client
+                .post(url)
+                .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+                .header(
+                    HeaderName::from_static("x-request-id"),
+                    HeaderValue::from_str(&request_id)
+                        .unwrap_or_else(|_| HeaderValue::from_static("unknown")),
+                )
+                .json(payload)
+                .send();
+
+            let response = match cancel {
+                Some(token) => {
+                    tokio::select! {
+                        resp = request => resp,
+                        _ = token.cancelled() => {
+                            return Err(HttpError::Interrupted);
+                        }
                     }
                 }
+                None => request.await,
+            };
+
+            match response {
+                Ok(resp) => {
+                    let status = resp.status().as_u16();
+
+                    if self.retry_config.is_retryable_status(status) {
+                        // Extract Retry-After headers before consuming the body
+                        let retry_after = resp
+                            .headers()
+                            .get("retry-after")
+                            .and_then(|v| v.to_str().ok())
+                            .map(String::from);
+                        let retry_after_ms = resp
+                            .headers()
+                            .get("retry-after-ms")
+                            .and_then(|v| v.to_str().ok())
+                            .map(String::from);
+                        let body = resp.text().await.unwrap_or_default();
+                        let error_msg = serde_json::from_str::<serde_json::Value>(&body)
+                            .ok()
+                            .and_then(|v| {
+                                v.get("error")
+                                    .and_then(|e| e.get("message"))
+                                    .and_then(|m| m.as_str())
+                                    .map(String::from)
+                            })
+                            .unwrap_or_else(|| format!("HTTP {status}"));
+
+                        last_error = Some(HttpError::Other(format!(
+                            "[request_id={request_id}] {error_msg}"
+                        )));
+
+                        if attempt < self.retry_config.max_retries {
+                            let delay = self.get_retry_delay(
+                                retry_after.as_deref(),
+                                retry_after_ms.as_deref(),
+                                attempt,
+                            );
+                            warn!(
+                                request_id = %request_id,
+                                status,
+                                attempt = attempt + 1,
+                                max = self.retry_config.max_retries,
+                                "Streaming request retryable status {status}, backing off for {:.1}s",
+                                delay.as_secs_f64()
+                            );
+                            self.interruptible_sleep(delay, cancel).await?;
+                            continue;
+                        }
+                        warn!(
+                            request_id = %request_id,
+                            status,
+                            "Streaming request exhausted {} retries",
+                            self.retry_config.max_retries
+                        );
+                    } else if status >= 400 {
+                        // Non-retryable error — fail immediately
+                        let body = resp.text().await.unwrap_or_default();
+                        let error_msg = serde_json::from_str::<serde_json::Value>(&body)
+                            .ok()
+                            .and_then(|v| {
+                                v.get("error")
+                                    .and_then(|e| e.get("message"))
+                                    .and_then(|m| m.as_str())
+                                    .map(String::from)
+                            })
+                            .unwrap_or_else(|| format!("HTTP {status}"));
+                        warn!(request_id = %request_id, status, error = %error_msg, "Streaming request failed");
+                        self.cb_record_failure();
+                        return Err(HttpError::Other(format!(
+                            "[request_id={request_id}] {error_msg}"
+                        )));
+                    } else {
+                        self.cb_record_success();
+                        return Ok(resp);
+                    }
+                }
+                Err(e) if is_retryable_error(&e) => {
+                    warn!(error = %e, attempt = attempt + 1, max = self.retry_config.max_retries, "Streaming request transport error");
+                    last_error = Some(HttpError::Request(e));
+                    if attempt < self.retry_config.max_retries {
+                        let delay = self.get_retry_delay(None, None, attempt);
+                        warn!(
+                            "Streaming request backing off for {:.1}s",
+                            delay.as_secs_f64()
+                        );
+                        self.interruptible_sleep(delay, cancel).await?;
+                        continue;
+                    }
+                }
+                Err(e) => {
+                    // Non-retryable transport error — fail immediately
+                    self.cb_record_failure();
+                    return Err(e.into());
+                }
             }
-            None => request.await,
-        };
-
-        let resp = response?;
-        let status = resp.status().as_u16();
-
-        if status >= 400 {
-            let body = resp.text().await.unwrap_or_default();
-            let error_msg = serde_json::from_str::<serde_json::Value>(&body)
-                .ok()
-                .and_then(|v| {
-                    v.get("error")
-                        .and_then(|e| e.get("message"))
-                        .and_then(|m| m.as_str())
-                        .map(String::from)
-                })
-                .unwrap_or_else(|| format!("HTTP {status}"));
-            warn!(request_id = %request_id, status, error = %error_msg, "Streaming request failed");
-            return Err(HttpError::Other(format!(
-                "[request_id={request_id}] {error_msg}"
-            )));
         }
 
-        self.cb_record_success();
-        Ok(resp)
+        self.cb_record_failure();
+        Err(last_error.unwrap_or_else(|| HttpError::Other("Streaming retries exhausted".into())))
     }
 
     /// Get the configured API URL.
@@ -424,7 +514,7 @@ impl std::fmt::Debug for HttpClient {
 
 /// Check if a reqwest error is transient and worth retrying.
 fn is_retryable_error(err: &reqwest::Error) -> bool {
-    err.is_connect() || err.is_timeout()
+    err.is_connect() || err.is_timeout() || err.is_request()
 }
 
 #[cfg(test)]
@@ -465,18 +555,19 @@ mod tests {
     #[test]
     fn test_get_retry_delay_fallback() {
         let client = HttpClient::new("https://example.com", HeaderMap::new(), None).unwrap();
-        let delay = client.get_retry_delay(None, None, 0);
-        assert_eq!(delay, Duration::from_secs(2)); // 2000ms initial
-        let delay = client.get_retry_delay(Some("invalid"), None, 1);
-        assert_eq!(delay, Duration::from_secs(4)); // 2000 * 2^1 = 4000ms
+        // Delays include ±25% jitter
+        let d0 = client.get_retry_delay(None, None, 0).as_millis() as u64;
+        assert!(d0 >= 1500 && d0 <= 2500, "attempt 0: {d0}ms not in [1500, 2500]");
+        let d1 = client.get_retry_delay(Some("invalid"), None, 1).as_millis() as u64;
+        assert!(d1 >= 3000 && d1 <= 5000, "attempt 1: {d1}ms not in [3000, 5000]");
     }
 
     #[test]
     fn test_get_retry_delay_capped() {
         let client = HttpClient::new("https://example.com", HeaderMap::new(), None).unwrap();
-        // Attempt 10: 2000 * 2^10 = 2,048,000ms, but capped at 30,000ms
-        let delay = client.get_retry_delay(None, None, 10);
-        assert_eq!(delay, Duration::from_millis(30000));
+        // Attempt 10: 2000 * 2^10 capped at 30,000ms, then ±25% jitter
+        let d = client.get_retry_delay(None, None, 10).as_millis() as u64;
+        assert!(d >= 22500 && d <= 37500, "attempt 10: {d}ms not in [22500, 37500]");
     }
 
     #[tokio::test]

@@ -279,7 +279,11 @@ impl App {
                     }
                 }
             }
-            DisplayRole::User | DisplayRole::System | DisplayRole::Interrupt => {
+            DisplayRole::User
+            | DisplayRole::System
+            | DisplayRole::Interrupt
+            | DisplayRole::SlashCommand
+            | DisplayRole::CommandResult => {
                 let rs = msg.role.style().unwrap();
                 for (i, line_text) in content.lines().enumerate() {
                     if i == 0 {

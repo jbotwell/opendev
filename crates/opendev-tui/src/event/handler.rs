@@ -2,7 +2,10 @@
 
 use std::time::{Duration, Instant};
 
-use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton,
+    MouseEventKind,
+};
 use tokio::sync::mpsc;
 
 use super::AppEvent;
@@ -31,14 +34,16 @@ impl EventHandler {
 
     /// Start the crossterm event reader loop.
     ///
-    /// Uses crossterm's async `EventStream` for zero-latency event delivery
-    /// instead of `spawn_blocking` + poll which adds up to 160ms delay.
+    /// Uses crossterm's async `EventStream` for zero-latency event delivery.
     ///
     /// Includes a debounce state machine that distinguishes touchpad/mouse scroll
-    /// (rapid-fire Up/Down arrows via xterm alternate scroll mode) from keyboard
-    /// arrow presses. Touchpad scroll generates arrows every 8-16ms in bursts;
-    /// keyboard presses are single events with ~300ms before repeat starts.
+    /// (rapid-fire Up/Down arrows via xterm alternate scroll mode `\x1b[?1007h`)
+    /// from keyboard arrow presses. Touchpad scroll generates arrows every 8-16ms
+    /// in bursts; keyboard presses are single events with ~300ms before repeat.
     /// A 25ms debounce window cleanly separates these two input sources.
+    ///
+    /// Also handles mouse events (click/drag/up for selection, scroll for terminals
+    /// that support mouse reporting) and FocusGained for triggering redraws.
     pub fn start(&self) {
         use futures::StreamExt;
         let tx = self.tx.clone();
@@ -138,13 +143,42 @@ impl EventHandler {
                                             break;
                                         }
                                     }
-                                    // Key repeat on arrows bypasses debounce (keyboard hold)
-                                    if tx.send(AppEvent::Key(key)).is_err() {
+                                    // Only forward press and repeat events
+                                    if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat)
+                                        && tx.send(AppEvent::Key(key)).is_err()
+                                    {
                                         break;
                                     }
                                 }
                             }
-                            Some(Ok(CrosstermEvent::Mouse(_))) => continue,
+                            Some(Ok(CrosstermEvent::Mouse(mouse))) => {
+                                let ev = match mouse.kind {
+                                    MouseEventKind::ScrollUp => Some(AppEvent::ScrollUp),
+                                    MouseEventKind::ScrollDown => Some(AppEvent::ScrollDown),
+                                    MouseEventKind::Down(MouseButton::Left) => {
+                                        Some(AppEvent::MouseDown { col: mouse.column, row: mouse.row })
+                                    }
+                                    MouseEventKind::Drag(MouseButton::Left) => {
+                                        Some(AppEvent::MouseDrag { col: mouse.column, row: mouse.row })
+                                    }
+                                    MouseEventKind::Up(MouseButton::Left) => {
+                                        Some(AppEvent::MouseUp { col: mouse.column, row: mouse.row })
+                                    }
+                                    _ => None,
+                                };
+                                if let Some(e) = ev {
+                                    // Flush pending arrow before mouse events
+                                    if let Some((prev_key, _)) = pending_arrow.take() {
+                                        scroll_burst = false;
+                                        if tx.send(AppEvent::Key(prev_key)).is_err() {
+                                            break;
+                                        }
+                                    }
+                                    if tx.send(e).is_err() {
+                                        break;
+                                    }
+                                }
+                            }
                             Some(Ok(CrosstermEvent::Resize(w, h))) => {
                                 // Flush pending arrow before resize
                                 if let Some((prev_key, _)) = pending_arrow.take() {
@@ -154,6 +188,18 @@ impl EventHandler {
                                     }
                                 }
                                 if tx.send(AppEvent::Resize(w, h)).is_err() {
+                                    break;
+                                }
+                            }
+                            Some(Ok(CrosstermEvent::FocusGained)) => {
+                                // Flush pending arrow before focus events
+                                if let Some((prev_key, _)) = pending_arrow.take() {
+                                    scroll_burst = false;
+                                    if tx.send(AppEvent::Key(prev_key)).is_err() {
+                                        break;
+                                    }
+                                }
+                                if tx.send(AppEvent::FocusGained).is_err() {
                                     break;
                                 }
                             }

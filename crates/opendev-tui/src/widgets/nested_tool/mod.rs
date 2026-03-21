@@ -12,29 +12,16 @@ pub use state::{CompletedToolCall, NestedToolCallState, SubagentDisplayState};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget, Wrap},
 };
 
 use crate::formatters::style_tokens;
 use crate::formatters::tool_registry::format_tool_call_parts_short;
-
-/// Tree connector characters (UTF-8 box drawing).
-const TREE_BRANCH: &str = "\u{251c}\u{2500}";
-const TREE_LAST: &str = "\u{2514}\u{2500}";
-const TREE_VERTICAL: &str = "\u{2502}";
-
-/// Spinner characters for cycling animation.
-const SPINNER_CHARS: &[char] = &['\u{25cb}', '\u{25cf}', '\u{25cb}', '\u{25ce}'];
-
-/// Green gradient colors for spinner animation.
-const GREEN_GRADIENT: &[Color] = &[
-    Color::Rgb(0, 180, 90),
-    Color::Rgb(0, 200, 100),
-    Color::Rgb(0, 220, 110),
-    Color::Rgb(0, 240, 120),
-];
+use crate::widgets::spinner::{
+    FAILURE_CHAR, SPINNER_FRAMES, SUCCESS_CHAR, TREE_BRANCH, TREE_LAST, TREE_VERTICAL,
+};
 
 /// Widget that renders the nested subagent tool display.
 pub struct NestedToolWidget<'a> {
@@ -94,27 +81,19 @@ impl Widget for NestedToolWidget<'_> {
 
             // Subagent header line
             let connector = if is_last { TREE_LAST } else { TREE_BRANCH };
-            let (status_icon, status_color) = if subagent.finished {
+            let (status_str, status_color) = if subagent.finished {
                 if subagent.success {
-                    ("\u{23fa}", style_tokens::SUCCESS)
+                    (SUCCESS_CHAR.to_string(), style_tokens::SUCCESS)
                 } else {
-                    ("\u{23fa}", style_tokens::ERROR)
+                    (FAILURE_CHAR.to_string(), style_tokens::ERROR)
                 }
             } else {
-                let spinner_idx = subagent.tick % SPINNER_CHARS.len();
-                let ch = SPINNER_CHARS[spinner_idx];
-                let color_idx = subagent.tick % GREEN_GRADIENT.len();
-                (&*format!("{ch}"), GREEN_GRADIENT[color_idx])
-            };
-
-            // Build a static string for the spinner character when not finished
-            let spinner_string;
-            let status_str = if subagent.finished {
-                status_icon
-            } else {
-                let spinner_idx = subagent.tick % SPINNER_CHARS.len();
-                spinner_string = SPINNER_CHARS[spinner_idx].to_string();
-                &spinner_string
+                let slow_tick = subagent.tick / 3;
+                let spinner_idx = slow_tick % SPINNER_FRAMES.len();
+                (
+                    SPINNER_FRAMES[spinner_idx].to_string(),
+                    style_tokens::BLUE_BRIGHT,
+                )
             };
 
             let elapsed = subagent.elapsed_secs();
@@ -148,7 +127,7 @@ impl Widget for NestedToolWidget<'_> {
 
             lines.push(Line::from(vec![
                 Span::styled(
-                    format!(" {connector} "),
+                    format!("  {connector} "),
                     Style::default().fg(style_tokens::SUBTLE),
                 ),
                 Span::styled(format!("{status_str} "), Style::default().fg(status_color)),
@@ -176,9 +155,9 @@ impl Widget for NestedToolWidget<'_> {
             for (j, tool_state) in subagent.active_tools.values().enumerate() {
                 let tool_is_last = j == active_count - 1 && subagent.completed_tools.is_empty();
                 let tool_connector = if tool_is_last { TREE_LAST } else { TREE_BRANCH };
-                let color_idx = tool_state.tick % GREEN_GRADIENT.len();
-                let spinner_idx = tool_state.tick % SPINNER_CHARS.len();
-                let spinner_ch = SPINNER_CHARS[spinner_idx];
+                let slow_tick = tool_state.tick / 3;
+                let spinner_idx = slow_tick % SPINNER_FRAMES.len();
+                let spinner_ch = SPINNER_FRAMES[spinner_idx];
                 let tool_elapsed = tool_state.started_at.elapsed().as_secs();
                 let (verb, arg) = format_tool_call_parts_short(
                     &tool_state.tool_name,
@@ -188,16 +167,16 @@ impl Widget for NestedToolWidget<'_> {
 
                 lines.push(Line::from(vec![
                     Span::styled(
-                        format!(" {vertical}{tool_connector} "),
+                        format!("  {vertical}{tool_connector} "),
                         Style::default().fg(style_tokens::SUBTLE),
                     ),
                     Span::styled(
                         format!("{spinner_ch} "),
-                        Style::default().fg(GREEN_GRADIENT[color_idx]),
+                        Style::default().fg(style_tokens::BLUE_BRIGHT),
                     ),
                     Span::styled(verb, Style::default().fg(style_tokens::SUBTLE)),
                     Span::styled(
-                        format!("({arg})"),
+                        format!(" {arg}"),
                         Style::default().fg(style_tokens::SUBTLE),
                     ),
                     Span::styled(
@@ -215,22 +194,22 @@ impl Widget for NestedToolWidget<'_> {
                 let is_last_tool = j == visible_completed.len() - 1;
                 let tool_connector = if is_last_tool { TREE_LAST } else { TREE_BRANCH };
                 let (icon, color) = if completed.success {
-                    ("\u{23fa}", style_tokens::SUCCESS)
+                    (SUCCESS_CHAR, style_tokens::SUCCESS)
                 } else {
-                    ("\u{23fa}", style_tokens::ERROR)
+                    (FAILURE_CHAR, style_tokens::ERROR)
                 };
                 let (verb, arg) =
                     format_tool_call_parts_short(&completed.tool_name, &completed.args, shortener);
 
                 lines.push(Line::from(vec![
                     Span::styled(
-                        format!(" {vertical}{tool_connector} "),
+                        format!("  {vertical}{tool_connector} "),
                         Style::default().fg(style_tokens::SUBTLE),
                     ),
                     Span::styled(format!("{icon} "), Style::default().fg(color)),
                     Span::styled(verb, Style::default().fg(style_tokens::SUBTLE)),
                     Span::styled(
-                        format!("({arg})"),
+                        format!(" {arg}"),
                         Style::default().fg(style_tokens::SUBTLE),
                     ),
                     Span::styled(
@@ -242,12 +221,14 @@ impl Widget for NestedToolWidget<'_> {
 
             // Show hidden count if there are more completed tools
             // Use tool_call_count (actual total) since completed_tools is capped at 100
-            let total_completed = subagent.tool_call_count.saturating_sub(subagent.active_tools.len());
+            let total_completed = subagent
+                .tool_call_count
+                .saturating_sub(subagent.active_tools.len());
             let visible_count = visible_completed.len();
             let hidden_count = total_completed.saturating_sub(visible_count);
             if hidden_count > 0 {
                 lines.push(Line::from(Span::styled(
-                    format!(" {vertical}   +{hidden_count} more tool uses"),
+                    format!("  {vertical}   +{hidden_count} more tool uses"),
                     Style::default()
                         .fg(style_tokens::SUBTLE)
                         .add_modifier(Modifier::ITALIC),
@@ -257,7 +238,7 @@ impl Widget for NestedToolWidget<'_> {
             // Show shallow warning if present
             if let Some(ref warning) = subagent.shallow_warning {
                 lines.push(Line::from(Span::styled(
-                    format!(" {vertical}   {warning}"),
+                    format!("  {vertical}   {warning}"),
                     Style::default().fg(style_tokens::WARNING),
                 )));
             }

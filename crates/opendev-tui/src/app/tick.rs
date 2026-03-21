@@ -23,9 +23,9 @@ impl App {
         self.state.scroll_last_time = Some(now);
 
         match self.state.scroll_accel_level {
-            0 => 3,
-            1 => 6,
-            _ => 12,
+            0 => 1,
+            1 => 2,
+            _ => 3,
         }
     }
 
@@ -83,9 +83,15 @@ impl App {
         // Keep finished subagents if a matching spawn_subagent tool is still active —
         // ToolResult will consume them and extract stats before cleanup
         let active_tools = &self.state.active_tools;
+        let task_watcher_open = self.state.task_watcher_open;
         self.state.active_subagents.retain(|s| {
             if !s.finished {
                 return true;
+            }
+            // Backgrounded subagents: keep with extended grace so task watcher shows them
+            if s.backgrounded {
+                let grace = if task_watcher_open { 60 } else { 5 };
+                return s.finished_at.is_some_and(|t| t.elapsed().as_secs() < grace);
             }
             // Keep if a matching spawn_subagent tool is still active (ToolResult will clean up).
             // Match by parent_tool_id (reliable) first, fall back to task text.
@@ -100,8 +106,9 @@ impl App {
             if has_active_tool {
                 return true;
             }
-            // No matching tool — 3s grace period for display
-            s.finished_at.is_some_and(|t| t.elapsed().as_secs() < 3)
+            // No matching tool — extended grace period when task watcher is open
+            let grace = if task_watcher_open { 60 } else { 1 };
+            s.finished_at.is_some_and(|t| t.elapsed().as_secs() < grace)
         });
 
         // Update task progress elapsed time from wall clock
@@ -109,14 +116,59 @@ impl App {
             progress.elapsed_secs = progress.started_at.elapsed().as_secs();
         }
 
-        // Update unified background task count (both managers)
+        // Update unified background task count (both managers + backgrounded subagents)
         let bg_agent_running = self.state.bg_agent_manager.running_count();
         let bg_process_running = if let Ok(mgr) = self.task_manager.try_lock() {
             mgr.running_count()
         } else {
             0
         };
-        self.state.background_task_count = bg_agent_running + bg_process_running;
+        let bg_subagent_running = self
+            .state
+            .active_subagents
+            .iter()
+            .filter(|s| s.backgrounded && !s.finished)
+            .count();
+        // Subtract parent bg_agent_manager tasks that are "covered" by backgrounded subagents
+        // to avoid double-counting (the subagents are already counted individually).
+        let covered_bg_count: usize = {
+            let covered_ids: std::collections::HashSet<&String> = self
+                .state
+                .active_subagents
+                .iter()
+                .filter(|s| s.backgrounded && !s.finished)
+                .filter_map(|s| self.state.bg_subagent_map.get(&s.subagent_id))
+                .collect();
+            covered_ids
+                .iter()
+                .filter(|id| {
+                    self.state
+                        .bg_agent_manager
+                        .get_task(id)
+                        .is_some_and(|t| t.is_running())
+                })
+                .count()
+        };
+        self.state.background_task_count =
+            bg_agent_running + bg_process_running + bg_subagent_running - covered_bg_count;
+
+        // Auto-close task watcher panel when all tasks finish (3s grace)
+        if self.state.task_watcher_open {
+            let has_running = self.state.background_task_count > 0;
+            if has_running {
+                self.state.task_watcher_all_done_at = None;
+            } else if self.state.task_watcher_all_done_at.is_none() {
+                self.state.task_watcher_all_done_at = Some(Instant::now());
+            } else if self
+                .state
+                .task_watcher_all_done_at
+                .is_some_and(|t| t.elapsed() > Duration::from_secs(3))
+            {
+                self.state.task_watcher_open = false;
+                self.state.task_watcher_all_done_at = None;
+                self.state.force_clear = true;
+            }
+        }
 
         // Clear task completion flash after 3 seconds
         if let Some((_, when)) = &self.state.last_task_completion
@@ -145,6 +197,23 @@ impl App {
             {
                 self.state.leader_pending = false;
                 self.state.leader_timestamp = None;
+            }
+            self.state.dirty = true;
+        }
+
+        // Auto-scroll during active selection drag near edges
+        if self.state.selection.active
+            && let Some(direction) = self.state.selection.auto_scroll_direction
+        {
+            if direction < 0 {
+                // Scroll up (increase offset = show earlier content)
+                self.state.scroll_offset = self.state.scroll_offset.saturating_add(1);
+                self.state.user_scrolled = true;
+            } else {
+                // Scroll down (decrease offset = show later content)
+                if self.state.scroll_offset > 0 {
+                    self.state.scroll_offset = self.state.scroll_offset.saturating_sub(1);
+                }
             }
             self.state.dirty = true;
         }

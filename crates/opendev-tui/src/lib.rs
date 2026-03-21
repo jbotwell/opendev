@@ -15,6 +15,7 @@ pub mod event;
 pub mod formatters;
 pub mod history;
 pub mod managers;
+pub mod selection;
 pub mod widgets;
 
 pub use app::{App, AppState, AutonomyLevel, OperationMode};

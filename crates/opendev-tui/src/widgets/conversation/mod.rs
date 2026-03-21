@@ -23,7 +23,8 @@ use ratatui::{
     style::Style,
     text::{Line, Span},
     widgets::{
-        Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget, Wrap,
+        Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget,
+        Wrap,
     },
 };
 
@@ -64,8 +65,6 @@ pub struct ConversationWidget<'a> {
     shortener: Option<&'a crate::formatters::PathShortener>,
     /// Whether backgrounding is in progress (waiting for agent to yield).
     backgrounding_pending: bool,
-    /// Info about a recently-backgrounded task: (task_id, when).
-    backgrounded_task_info: Option<&'a (String, std::time::Instant)>,
 }
 
 impl<'a> ConversationWidget<'a> {
@@ -84,7 +83,6 @@ impl<'a> ConversationWidget<'a> {
             active_subagents: &[],
             shortener: None,
             backgrounding_pending: false,
-            backgrounded_task_info: None,
         }
     }
 
@@ -138,14 +136,6 @@ impl<'a> ConversationWidget<'a> {
 
     pub fn backgrounding_pending(mut self, pending: bool) -> Self {
         self.backgrounding_pending = pending;
-        self
-    }
-
-    pub fn backgrounded_task_info(
-        mut self,
-        info: Option<&'a (String, std::time::Instant)>,
-    ) -> Self {
-        self.backgrounded_task_info = info;
         self
     }
 
@@ -222,7 +212,11 @@ impl<'a> ConversationWidget<'a> {
                         }
                     }
                 }
-                DisplayRole::User | DisplayRole::System | DisplayRole::Interrupt => {
+                DisplayRole::User
+                | DisplayRole::System
+                | DisplayRole::Interrupt
+                | DisplayRole::SlashCommand
+                | DisplayRole::CommandResult => {
                     let rs = msg.role.style().unwrap();
                     Self::render_simple_role(&content, &rs, &mut lines);
                 }
@@ -346,6 +340,11 @@ impl Widget for ConversationWidget<'_> {
         if area.height < 2 {
             return;
         }
+
+        // Clear entire area to prevent stale cell artifacts during scrolling.
+        // Ratatui's diff-based rendering can leave ghost content when scroll
+        // shifts text and the same characters appear at different positions.
+        Clear.render(area, buf);
 
         // Build spinner lines separately — these are rendered outside the
         // scrollable paragraph so that 60ms tick animation doesn't shift

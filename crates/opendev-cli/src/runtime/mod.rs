@@ -297,9 +297,7 @@ impl AgentRuntime {
                             format!("{trimmed}/chat/completions")
                         }
                     })
-                    .unwrap_or_else(|| {
-                        "https://api.openai.com/v1/chat/completions".to_string()
-                    });
+                    .unwrap_or_else(|| "https://api.openai.com/v1/chat/completions".to_string());
 
                 let mut hdrs = HeaderMap::new();
                 if let Ok(val) = HeaderValue::from_str(&format!("Bearer {api_key}")) {
@@ -367,7 +365,6 @@ impl AgentRuntime {
                 working_dir.display().to_string(),
             )
             .with_event_sender(subagent_event_tx)
-            .with_tool_approval_tx(tool_approval_tx.clone())
             .with_parent_max_tokens(model_max_tokens)
             .with_parent_reasoning_effort(if config.reasoning_effort == "none" {
                 None

@@ -27,10 +27,18 @@ pub enum AppEvent {
     Key(KeyEvent),
     /// Terminal resize.
     Resize(u16, u16),
-    /// Mouse-wheel scroll up (detected via arrow-key debounce from xterm alternate scroll).
+    /// Mouse-wheel scroll up.
     ScrollUp,
-    /// Mouse-wheel scroll down (detected via arrow-key debounce from xterm alternate scroll).
+    /// Mouse-wheel scroll down.
     ScrollDown,
+    /// Mouse button pressed at (col, row).
+    MouseDown { col: u16, row: u16 },
+    /// Mouse dragged to (col, row) while button held.
+    MouseDrag { col: u16, row: u16 },
+    /// Mouse button released at (col, row).
+    MouseUp { col: u16, row: u16 },
+    /// Terminal regained focus (user switched back to this tab/window).
+    FocusGained,
     /// Tick for periodic UI updates (spinner animation, etc.).
     Tick,
 
@@ -126,7 +134,6 @@ pub enum AppEvent {
         input_tokens: u64,
         output_tokens: u64,
     },
-
     // -- Reasoning events --
     /// Native reasoning content from LLM response (inline thinking).
     ReasoningContent(String),
@@ -192,6 +199,7 @@ pub enum AppEvent {
         task_id: String,
         success: bool,
         result_summary: String,
+        full_result: String,
         cost_usd: f64,
         tool_call_count: usize,
     },
@@ -203,6 +211,10 @@ pub enum AppEvent {
     },
     /// A background agent was killed.
     BackgroundAgentKilled { task_id: String },
+    /// LLM-generated nudge message after backgrounding agents.
+    BackgroundNudge { content: String },
+    /// Activity line from a background agent (tool call, reasoning, etc.).
+    BackgroundAgentActivity { task_id: String, line: String },
     /// Register a background agent task with its interrupt token (sent from tui_runner).
     SetBackgroundAgentToken {
         task_id: String,
@@ -222,6 +234,9 @@ pub enum AppEvent {
     ShareResult { path: String },
     /// File watcher detected changes.
     FileChanged { paths: Vec<String> },
+
+    /// Session title was auto-detected by the topic detector.
+    SessionTitleUpdated(String),
 
     /// Quit the application.
     Quit,

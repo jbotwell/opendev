@@ -29,8 +29,6 @@ pub struct SpawnSubagentTool {
     working_dir: String,
     /// Optional channel for sending progress events to the TUI.
     event_tx: Option<mpsc::UnboundedSender<SubagentEvent>>,
-    /// Optional tool approval sender for bash/run_command approval.
-    tool_approval_tx: Option<opendev_runtime::ToolApprovalSender>,
     /// Parent agent's max_tokens from model registry (subagents inherit this as fallback).
     parent_max_tokens: u64,
     /// Parent agent's reasoning effort (subagents inherit this).
@@ -55,7 +53,6 @@ impl SpawnSubagentTool {
             parent_model: parent_model.into(),
             working_dir: working_dir.into(),
             event_tx: None,
-            tool_approval_tx: None,
             parent_max_tokens: 16384,
             parent_reasoning_effort: None,
         }
@@ -64,12 +61,6 @@ impl SpawnSubagentTool {
     /// Set the event channel for progress reporting.
     pub fn with_event_sender(mut self, tx: mpsc::UnboundedSender<SubagentEvent>) -> Self {
         self.event_tx = Some(tx);
-        self
-    }
-
-    /// Set the tool approval sender for bash/run_command approval.
-    pub fn with_tool_approval_tx(mut self, tx: opendev_runtime::ToolApprovalSender) -> Self {
-        self.tool_approval_tx = Some(tx);
         self
     }
 
@@ -167,6 +158,11 @@ impl BaseTool for SpawnSubagentTool {
             );
         }
 
+        // Validate agent type exists before spawning background task
+        if self.manager.get(agent_type).is_none() {
+            return ToolResult::fail(format!("Unknown subagent type: {agent_type}"));
+        }
+
         let task_id = args.get("task_id").and_then(|v| v.as_str());
 
         info!(
@@ -232,7 +228,7 @@ impl BaseTool for SpawnSubagentTool {
                 Arc::new(opendev_agents::NoopProgressCallback)
             };
 
-        // Spawn the subagent
+        // Execute subagent synchronously — blocking until it completes
         let result = self
             .manager
             .spawn(
@@ -244,7 +240,7 @@ impl BaseTool for SpawnSubagentTool {
                 &wd,
                 progress,
                 None,
-                self.tool_approval_tx.as_ref(),
+                None,
                 self.parent_max_tokens,
                 self.parent_reasoning_effort.clone(),
             )
@@ -253,20 +249,34 @@ impl BaseTool for SpawnSubagentTool {
         match result {
             Ok(run_result) => {
                 // Save child session for future resume
-                self.save_child_session(
-                    &child_session_id,
-                    agent_type,
-                    task,
-                    ctx.session_id.as_deref(),
-                    &run_result,
-                );
+                let child_mgr = opendev_history::SessionManager::new(self.session_dir.clone());
+                if let Ok(child_mgr) = child_mgr {
+                    let mut session = opendev_models::session::Session::new();
+                    session.id = child_session_id.clone();
+                    session.parent_id = ctx.session_id.clone();
+                    session.working_directory = Some(self.working_dir.clone());
+                    session.metadata.insert(
+                        "title".to_string(),
+                        serde_json::json!(format!(
+                            "{} (@{})",
+                            task.chars().take(80).collect::<String>(),
+                            agent_type
+                        )),
+                    );
+                    session
+                        .metadata
+                        .insert("subagent_type".to_string(), serde_json::json!(agent_type));
+                    let messages = opendev_history::message_convert::api_values_to_chatmessages(
+                        &run_result.agent_result.messages,
+                    );
+                    session.messages = messages;
+                    let _ = child_mgr.save_session(&session);
+                }
 
-                // Embed stats as a parseable header so the TUI can extract them
-                // even if bridge events (SubagentToolCall/Finished) haven't arrived yet.
+                // Build output for injection
                 let mut output = format!("__subagent_stats__:tc={}\n", run_result.tool_call_count);
                 output.push_str(&format!("task_id: {child_session_id} (for resuming)\n\n"));
 
-                // Cap subagent result size to prevent context bloat (50 KB max).
                 const MAX_SUBAGENT_OUTPUT: usize = 50 * 1024;
                 let content = &run_result.agent_result.content;
                 if content.len() > MAX_SUBAGENT_OUTPUT {
@@ -281,105 +291,94 @@ impl BaseTool for SpawnSubagentTool {
                     output.push_str(content);
                 }
 
-                // Append shallow subagent warning if applicable
+                // Clean up markdown constructs that the TUI renderer can't handle
+                output = clean_subagent_output(&output);
+
                 if let Some(ref warning) = run_result.shallow_warning {
                     output.push_str(warning);
                 }
 
-                // Send finished event with full details
+                // Send finished event to TUI
                 if let Some(ref tx) = self.event_tx {
                     let _ = tx.send(SubagentEvent::Finished {
                         subagent_id: subagent_id.clone(),
                         subagent_name: agent_type.to_string(),
                         success: run_result.agent_result.success,
-                        result_summary: if output.len() > 200 {
-                            format!("{}...", &output[..200])
+                        result_summary: if content.len() > 200 {
+                            format!("{}...", &content[..200])
                         } else {
-                            output.clone()
+                            content.clone()
                         },
                         tool_call_count: run_result.tool_call_count,
-                        shallow_warning: run_result.shallow_warning.clone(),
+                        shallow_warning: run_result.shallow_warning,
                     });
                 }
 
-                if run_result.agent_result.success {
-                    let mut metadata = HashMap::new();
-                    metadata.insert(
-                        "tool_call_count".into(),
-                        serde_json::json!(run_result.tool_call_count),
-                    );
-                    metadata.insert("subagent_type".into(), serde_json::json!(agent_type));
-                    metadata.insert("task_id".into(), serde_json::json!(child_session_id));
-                    if run_result.agent_result.interrupted {
-                        metadata.insert("interrupted".into(), serde_json::json!(true));
-                    }
-                    ToolResult::ok_with_metadata(output, metadata)
-                } else if run_result.agent_result.interrupted {
-                    ToolResult::fail("Subagent was interrupted by user")
-                } else {
-                    ToolResult::fail(format!("Subagent failed: {output}"))
-                }
+                ToolResult::ok(output)
             }
             Err(e) => {
-                warn!(agent_type = %agent_type, error = %e, "Subagent spawn failed");
-                ToolResult::fail(format!("Failed to spawn subagent '{agent_type}': {e}"))
+                warn!(agent_type = %agent_type, error = %e, "Subagent failed");
+                // Send finished event to TUI
+                if let Some(ref tx) = self.event_tx {
+                    let _ = tx.send(SubagentEvent::Finished {
+                        subagent_id,
+                        subagent_name: agent_type.to_string(),
+                        success: false,
+                        result_summary: e.to_string(),
+                        tool_call_count: 0,
+                        shallow_warning: None,
+                    });
+                }
+                ToolResult::fail(format!("Subagent failed: {e}"))
             }
         }
     }
 }
 
-impl SpawnSubagentTool {
-    /// Save child session metadata to disk for future resume.
-    fn save_child_session(
-        &self,
-        child_session_id: &str,
-        agent_type: &str,
-        task: &str,
-        parent_session_id: Option<&str>,
-        run_result: &opendev_agents::SubagentRunResult,
-    ) {
-        // Create a lightweight session manager for saving child sessions
-        let child_mgr = match opendev_history::SessionManager::new(self.session_dir.clone()) {
-            Ok(mgr) => mgr,
-            Err(e) => {
-                warn!(error = %e, "Failed to create session manager for child session");
-                return;
-            }
-        };
-
-        // Build a minimal session with the subagent result
-        let mut session = opendev_models::session::Session::new();
-        session.id = child_session_id.to_string();
-        session.parent_id = parent_session_id.map(|s| s.to_string());
-        session.working_directory = Some(self.working_dir.clone());
-        session.metadata.insert(
-            "title".to_string(),
-            serde_json::json!(format!(
-                "{} (@{})",
-                task.chars().take(80).collect::<String>(),
-                agent_type
-            )),
-        );
-        session
-            .metadata
-            .insert("subagent_type".to_string(), serde_json::json!(agent_type));
-
-        // Convert agent result messages to ChatMessages
-        let messages = opendev_history::message_convert::api_values_to_chatmessages(
-            &run_result.agent_result.messages,
-        );
-        session.messages = messages;
-
-        if let Err(e) = child_mgr.save_session(&session) {
-            warn!(error = %e, "Failed to save child session");
-        } else {
-            info!(
-                child_session_id = %child_session_id,
-                parent_session_id = ?parent_session_id,
-                "Saved child session"
-            );
+/// Clean subagent output by stripping markdown constructs that the TUI
+/// renderer doesn't handle (horizontal rules, HTML tags, table syntax).
+fn clean_subagent_output(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    for line in text.lines() {
+        let trimmed = line.trim();
+        // Strip horizontal rules (---, ***, ___)
+        if (trimmed.starts_with("---") || trimmed.starts_with("***") || trimmed.starts_with("___"))
+            && trimmed
+                .chars()
+                .all(|c| c == '-' || c == '*' || c == '_' || c == ' ')
+            && trimmed.len() >= 3
+        {
+            result.push('\n');
+            continue;
         }
+        // Strip HTML tags (e.g. <br>, <div>, </div>)
+        if trimmed.starts_with('<') && trimmed.ends_with('>') {
+            continue;
+        }
+        // Simplify table rows: | col1 | col2 | → col1  col2
+        if trimmed.starts_with('|') && trimmed.ends_with('|') {
+            // Skip separator rows like |---|---|
+            if trimmed.contains("---") {
+                continue;
+            }
+            let cleaned: String = trimmed
+                .trim_matches('|')
+                .split('|')
+                .map(|cell| cell.trim())
+                .collect::<Vec<_>>()
+                .join("  ");
+            result.push_str(&cleaned);
+            result.push('\n');
+            continue;
+        }
+        result.push_str(line);
+        result.push('\n');
     }
+    // Remove trailing newline added by the loop
+    if result.ends_with('\n') && !text.ends_with('\n') {
+        result.pop();
+    }
+    result
 }
 
 #[cfg(test)]

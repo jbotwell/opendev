@@ -37,6 +37,19 @@ impl RecordedEvent {
             AppEvent::Resize(w, h) => ("Resize".to_string(), serde_json::json!({"w": w, "h": h})),
             AppEvent::ScrollUp => ("ScrollUp".to_string(), serde_json::Value::Null),
             AppEvent::ScrollDown => ("ScrollDown".to_string(), serde_json::Value::Null),
+            AppEvent::MouseDown { col, row } => (
+                "MouseDown".to_string(),
+                serde_json::json!({"col": col, "row": row}),
+            ),
+            AppEvent::MouseDrag { col, row } => (
+                "MouseDrag".to_string(),
+                serde_json::json!({"col": col, "row": row}),
+            ),
+            AppEvent::MouseUp { col, row } => (
+                "MouseUp".to_string(),
+                serde_json::json!({"col": col, "row": row}),
+            ),
+            AppEvent::FocusGained => ("FocusGained".to_string(), serde_json::Value::Null),
             AppEvent::Tick => ("Tick".to_string(), serde_json::Value::Null),
             AppEvent::AgentStarted => ("AgentStarted".to_string(), serde_json::Value::Null),
             AppEvent::AgentChunk(s) => ("AgentChunk".to_string(), serde_json::json!({"chunk": s})),
@@ -240,11 +253,12 @@ impl RecordedEvent {
                 task_id,
                 success,
                 result_summary,
+                full_result,
                 cost_usd,
                 tool_call_count,
             } => (
                 "BackgroundAgentCompleted".to_string(),
-                serde_json::json!({"task_id": task_id, "success": success, "result_summary": result_summary, "cost_usd": cost_usd, "tool_call_count": tool_call_count}),
+                serde_json::json!({"task_id": task_id, "success": success, "result_summary": result_summary, "full_result": full_result, "cost_usd": cost_usd, "tool_call_count": tool_call_count}),
             ),
             AppEvent::BackgroundAgentProgress {
                 task_id,
@@ -257,6 +271,14 @@ impl RecordedEvent {
             AppEvent::BackgroundAgentKilled { task_id } => (
                 "BackgroundAgentKilled".to_string(),
                 serde_json::json!({"task_id": task_id}),
+            ),
+            AppEvent::BackgroundNudge { content } => (
+                "BackgroundNudge".to_string(),
+                serde_json::json!({"content": content}),
+            ),
+            AppEvent::BackgroundAgentActivity { task_id, line } => (
+                "BackgroundAgentActivity".to_string(),
+                serde_json::json!({"task_id": task_id, "line": line}),
             ),
             AppEvent::SetBackgroundAgentToken { task_id, .. } => (
                 "SetBackgroundAgentToken".to_string(),
@@ -282,6 +304,10 @@ impl RecordedEvent {
                 serde_json::json!({"paths": paths}),
             ),
             AppEvent::Quit => ("Quit".to_string(), serde_json::Value::Null),
+            AppEvent::SessionTitleUpdated(title) => (
+                "SessionTitleUpdated".to_string(),
+                serde_json::json!({"title": title}),
+            ),
         };
 
         RecordedEvent {

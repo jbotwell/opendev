@@ -38,6 +38,8 @@ pub struct SubagentDisplayState {
     pub parent_tool_id: Option<String>,
     /// Short display label (from `description` param), used instead of full task in spinner.
     pub description: Option<String>,
+    /// Whether this subagent's parent was sent to background (Ctrl+B).
+    pub backgrounded: bool,
 }
 
 impl SubagentDisplayState {
@@ -60,6 +62,7 @@ impl SubagentDisplayState {
             finished_at: None,
             parent_tool_id: None,
             description: None,
+            backgrounded: false,
         }
     }
 
@@ -124,6 +127,9 @@ impl SubagentDisplayState {
         self.result_summary = result_summary;
         self.tool_call_count = tool_call_count.max(self.tool_call_count);
         self.shallow_warning = shallow_warning;
+        // Clear tool lists to reduce visual clutter — keep only header with "Done" status
+        self.active_tools.clear();
+        self.completed_tools.clear();
     }
 
     /// Advance the animation tick.

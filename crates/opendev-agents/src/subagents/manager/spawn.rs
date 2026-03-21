@@ -218,7 +218,7 @@ impl SubagentManager {
             tool_registry: &tool_registry,
             tool_context: &tool_context,
             event_callback: Some(bridge.as_ref() as &dyn crate::traits::AgentEventCallback),
-            cancel: None, // Subagents don't support cancellation tokens yet
+            cancel: tool_context.cancel_token.as_ref(),
             tool_approval_tx,
         };
 

@@ -23,6 +23,8 @@ pub struct ModelOption {
     pub pricing_output: f64,
     /// Whether this is a recommended model.
     pub recommended: bool,
+    /// Whether the provider's API key is available.
+    pub has_api_key: bool,
 }
 
 /// Controller for navigating and selecting a model from a list.
@@ -63,13 +65,15 @@ impl ModelPickerController {
         let registry = ModelRegistry::load_from_cache(cache_dir);
         let mut models = Vec::new();
 
-        // Get providers sorted by priority
-        let providers = registry.list_providers();
+        // Get providers sorted by priority, with API-key-available providers first
+        let mut providers = registry.list_providers();
+        providers.sort_by_key(|p| {
+            let has_key = p.api_key_env.is_empty() || std::env::var(&p.api_key_env).is_ok();
+            !has_key // false < true, so has_key=true sorts first
+        });
         for provider in &providers {
-            // Only include providers that have an API key set
-            if !provider.api_key_env.is_empty() && std::env::var(&provider.api_key_env).is_err() {
-                continue;
-            }
+            let has_api_key =
+                provider.api_key_env.is_empty() || std::env::var(&provider.api_key_env).is_ok();
             let mut provider_models: Vec<&ModelInfo> = provider.models.values().collect();
             // Sort: recommended first, then by context length descending
             provider_models.sort_by(|a, b| {
@@ -87,6 +91,7 @@ impl ModelPickerController {
                     pricing_input: model.pricing_input,
                     pricing_output: model.pricing_output,
                     recommended: model.recommended,
+                    has_api_key,
                 });
             }
         }
@@ -254,6 +259,7 @@ mod tests {
                 pricing_input: 3.0,
                 pricing_output: 15.0,
                 recommended: true,
+                has_api_key: true,
             },
             ModelOption {
                 id: "gpt-4o".into(),
@@ -264,6 +270,7 @@ mod tests {
                 pricing_input: 2.5,
                 pricing_output: 10.0,
                 recommended: true,
+                has_api_key: true,
             },
             ModelOption {
                 id: "gemini-2.5-pro".into(),
@@ -274,6 +281,7 @@ mod tests {
                 pricing_input: 1.25,
                 pricing_output: 5.0,
                 recommended: false,
+                has_api_key: false,
             },
         ]
     }
@@ -385,5 +393,27 @@ mod tests {
             "$3.00/$15.00"
         );
         assert_eq!(ModelPickerController::format_pricing(0.0, 0.0), "free");
+    }
+
+    #[test]
+    fn test_from_registry_loads_models() {
+        // Load from real cache (if available) to verify picker works end-to-end
+        let cache_dir = opendev_config::Paths::new(None).global_cache_dir();
+        let picker = ModelPickerController::from_registry(&cache_dir, "gpt-4.1-mini");
+        // In CI without cache, picker may have 0 models — that's OK.
+        // On dev machines with OPENAI_API_KEY set and cache populated, expect models.
+        if std::env::var("OPENAI_API_KEY").is_ok() {
+            eprintln!(
+                "Picker loaded {} models, active={}",
+                picker.filtered_count(),
+                picker.active()
+            );
+            // If we have the API key, we should have at least some OpenAI models
+            assert!(
+                picker.filtered_count() > 0,
+                "Expected models to load from cache when OPENAI_API_KEY is set"
+            );
+            assert!(picker.active());
+        }
     }
 }

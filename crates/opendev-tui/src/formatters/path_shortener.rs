@@ -236,10 +236,7 @@ mod tests {
     #[test]
     fn test_shorten_display_long_non_home_path() {
         let ps = PathShortener::default();
-        assert_eq!(
-            ps.shorten_display("/a/b/c/d/myapp"),
-            "…/d/myapp"
-        );
+        assert_eq!(ps.shorten_display("/a/b/c/d/myapp"), "…/d/myapp");
     }
 
     #[test]

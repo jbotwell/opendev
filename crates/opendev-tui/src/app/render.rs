@@ -3,8 +3,8 @@
 use ratatui::layout;
 
 use crate::widgets::{
-    ConversationWidget, InputWidget, StatusBarWidget, TaskWatcherPanel, ToastWidget,
-    TodoPanelWidget, UnifiedTaskItem, UnifiedTaskKind, WelcomePanelWidget,
+    ConversationWidget, InputWidget, StatusBarWidget, ToastWidget, TodoPanelWidget,
+    WelcomePanelWidget,
 };
 
 use super::App;
@@ -14,9 +14,7 @@ impl App {
     pub(super) fn render(&self, frame: &mut ratatui::Frame) {
         let area = frame.area();
 
-        // Layout: conversation (flexible) | todo panel (if active) | subagent display (if active)
-        //         | input | status bar
-        // Tool spinners and thinking progress are rendered inline in the conversation area.
+        // Layout: conversation (flexible) | todo panel (if active) | input | status bar
         let has_todos = !self.state.todo_items.is_empty();
         let todo_height: u16 = if has_todos {
             if self.state.todo_expanded {
@@ -29,6 +27,7 @@ impl App {
         } else {
             0
         };
+
         let chunks = layout::Layout::default()
             .direction(layout::Direction::Vertical)
             .constraints(
@@ -69,12 +68,51 @@ impl App {
                     .task_progress(self.state.task_progress.as_ref())
                     .spinner_char(self.state.spinner.current())
                     .compaction_active(self.state.compaction_active)
-                    .backgrounding_pending(self.state.backgrounding_pending)
-                    .backgrounded_task_info(self.state.backgrounded_task_info.as_ref());
+                    .backgrounding_pending(self.state.backgrounding_pending);
             if !self.state.cached_lines.is_empty() {
                 conversation = conversation.cached_lines(&self.state.cached_lines);
             }
             frame.render_widget(conversation, chunks[0]);
+
+            // Selection highlight: post-render buffer pass to swap fg/bg on selected cells
+            if let Some(range) = self.state.selection.range {
+                let conv_area = chunks[0];
+                let spinner_count = self.count_spinner_lines();
+                let reserved = 1 + spinner_count;
+                let content_height = conv_area.height.saturating_sub(reserved);
+                let content_width = conv_area.width.saturating_sub(1);
+                let sel_content_area = ratatui::layout::Rect {
+                    x: conv_area.x,
+                    y: conv_area.y,
+                    width: content_width,
+                    height: content_height,
+                };
+
+                let sel_total_lines: usize = self
+                    .state
+                    .cached_lines
+                    .iter()
+                    .map(|line| {
+                        let w = line.width();
+                        if w == 0 || content_width == 0 {
+                            1
+                        } else {
+                            w.div_ceil(content_width as usize)
+                        }
+                    })
+                    .sum();
+                let viewport_height = content_height as usize;
+                let max_scroll = sel_total_lines.saturating_sub(viewport_height);
+                let clamped = (self.state.scroll_offset as usize).min(max_scroll);
+                let sel_actual_scroll = max_scroll.saturating_sub(clamped);
+
+                Self::render_selection_highlight(
+                    frame,
+                    sel_content_area,
+                    sel_actual_scroll,
+                    &range,
+                );
+            }
         }
 
         // Todo panel (only if plan has todos)
@@ -89,11 +127,13 @@ impl App {
         }
 
         // Input
+        let activity_tag = self.activity_tag();
         let input = InputWidget::new(
             &self.state.input_buffer,
             self.state.input_cursor,
             mode_str,
             self.state.pending_messages.len(),
+            activity_tag,
         );
         frame.render_widget(input, chunks[2]);
 
@@ -185,119 +225,188 @@ impl App {
             self.render_debug_panel(frame, area);
         }
 
-        // Task watcher panel overlay (Ctrl+P / Alt+B)
+        // Task watcher overlay (Alt+B / Ctrl+P) — centered popup ~85%×80%
         if self.state.task_watcher_open {
-            let unified = self.collect_unified_tasks();
-            let selected = self
+            // Compute bg_agent_manager task IDs that are "covered" by backgrounded subagents —
+            // these parent tasks are redundant since each subagent already has its own panel.
+            let covered_bg_task_ids: std::collections::HashSet<String> = self
                 .state
-                .task_watcher_selected
-                .min(unified.len().saturating_sub(1));
-
-            // Read output for selected task
-            let output_lines: Vec<String> = if let Some(task) = unified.get(selected) {
-                match task.kind {
-                    UnifiedTaskKind::Process => {
-                        if let Ok(mgr) = self.task_manager.try_lock() {
-                            let raw = mgr.read_output(&task.task_id, 50);
-                            if raw.is_empty() {
-                                Vec::new()
-                            } else {
-                                raw.lines().map(|l| l.to_string()).collect()
-                            }
-                        } else {
-                            Vec::new()
-                        }
-                    }
-                    UnifiedTaskKind::Agent => {
-                        // For agents, show metadata as output
-                        let mut lines = Vec::new();
-                        if let Some(agent_task) =
-                            self.state.bg_agent_manager.get_task(&task.task_id)
-                        {
-                            lines.push(format!("Query: {}", agent_task.query));
-                            lines.push(format!("Session: {}", agent_task.session_id));
-                            if let Some(ref tool) = agent_task.current_tool {
-                                lines.push(format!("Current tool: {tool}"));
-                            }
-                            lines.push(format!("Tool calls: {}", agent_task.tool_call_count));
-                            lines.push(format!("Cost: ${:.4}", agent_task.cost_usd));
-                            if let Some(ref summary) = agent_task.result_summary {
-                                lines.push(String::new());
-                                lines.push(format!("Result: {summary}"));
-                            }
-                        }
-                        lines
-                    }
-                }
-            } else {
-                Vec::new()
-            };
-
-            let watcher = TaskWatcherPanel::new(
-                &unified,
-                selected,
-                self.state.task_watcher_focus,
-                &output_lines,
-                self.state.task_watcher_output_scroll,
+                .active_subagents
+                .iter()
+                .filter(|s| s.backgrounded && !s.finished)
+                .filter_map(|s| self.state.bg_subagent_map.get(&s.subagent_id))
+                .cloned()
+                .collect();
+            let watcher = crate::widgets::background_tasks::TaskWatcherPanel::new(
+                &self.state.active_subagents,
+                &self.state.bg_agent_manager,
+                &covered_bg_task_ids,
                 self.state.spinner.tick_count() as usize,
-            );
-            frame.render_widget(watcher, area);
+                &self.state.path_shortener,
+            )
+            .focus(self.state.task_watcher_focus)
+            .cell_scrolls(&self.state.task_watcher_cell_scrolls)
+            .page(self.state.task_watcher_page);
+            let w = ((area.width as f32 * 0.85) as u16).clamp(40, area.width);
+            let h = ((area.height as f32 * 0.80) as u16).clamp(12, area.height);
+            let x = area.x + (area.width.saturating_sub(w)) / 2;
+            let y = area.y + (area.height.saturating_sub(h)) / 2;
+            let panel_area = layout::Rect::new(x, y, w, h);
+            frame.render_widget(ratatui::widgets::Clear, panel_area);
+            frame.render_widget(watcher, panel_area);
         }
     }
 
-    /// Collect unified tasks from both managers, sorted running-first then newest-first.
-    pub(super) fn collect_unified_tasks(&self) -> Vec<UnifiedTaskItem> {
-        let mut items = Vec::new();
-
-        // Agent tasks
-        for task in self.state.bg_agent_manager.all_tasks() {
-            items.push(UnifiedTaskItem {
-                task_id: task.task_id.clone(),
-                kind: UnifiedTaskKind::Agent,
-                description: {
-                    let q: String = task.query.chars().take(50).collect();
-                    q
-                },
-                state: task.state.to_string(),
-                runtime_secs: task.runtime_seconds(),
-                tool_count: Some(task.tool_call_count),
-                cost_usd: Some(task.cost_usd),
-                current_tool: task.current_tool.clone(),
-                pid: None,
-                has_output: false,
-            });
+    /// Compute the high-level activity tag for the input separator.
+    /// Priority: active plan name > session title > nothing.
+    fn activity_tag(&self) -> Option<&str> {
+        if self.state.agent_active
+            && let Some(ref name) = self.state.plan_name
+        {
+            return Some(name);
         }
+        self.state.session_title.as_deref()
+    }
 
-        // Process tasks
-        if let Ok(mgr) = self.task_manager.try_lock() {
-            for task in mgr.all_tasks() {
-                items.push(UnifiedTaskItem {
-                    task_id: task.task_id.clone(),
-                    kind: UnifiedTaskKind::Process,
-                    description: task.description.clone(),
-                    state: task.state.to_string(),
-                    runtime_secs: task.runtime_seconds(),
-                    tool_count: None,
-                    cost_usd: None,
-                    current_tool: None,
-                    pid: task.pid,
-                    has_output: task.output_file.is_some(),
-                });
+    /// Update selection geometry from current layout state.
+    /// Called after render so mouse position mapping uses fresh data.
+    pub(super) fn update_selection_geometry(&mut self) {
+        // Recompute the conversation content area dimensions
+        let has_todos = !self.state.todo_items.is_empty();
+        let todo_height: u16 = if has_todos {
+            if self.state.todo_expanded {
+                (self.state.todo_items.len() as u16 + 3).min(12)
+            } else {
+                3
+            }
+        } else {
+            0
+        };
+        let input_lines = self.state.input_buffer.matches('\n').count() + 1;
+        let input_height = (input_lines as u16 + 1).min(8);
+
+        let total_height = self.state.terminal_height;
+        let conv_height = total_height
+            .saturating_sub(todo_height)
+            .saturating_sub(input_height)
+            .saturating_sub(2) // status bar
+            .max(5);
+
+        let spinner_count = self.count_spinner_lines();
+        let reserved = 1 + spinner_count;
+        let content_height = conv_height.saturating_sub(reserved);
+        let content_width = self.state.terminal_width.saturating_sub(1);
+
+        let content_area = ratatui::layout::Rect {
+            x: 0,
+            y: 0,
+            width: content_width,
+            height: content_height,
+        };
+
+        let total_lines: usize = self
+            .state
+            .cached_lines
+            .iter()
+            .map(|line| {
+                let w = line.width();
+                if w == 0 || content_width == 0 {
+                    1
+                } else {
+                    w.div_ceil(content_width as usize)
+                }
+            })
+            .sum();
+        let viewport_height = content_height as usize;
+        let max_scroll = total_lines.saturating_sub(viewport_height);
+        let clamped = (self.state.scroll_offset as usize).min(max_scroll);
+        let actual_scroll = max_scroll.saturating_sub(clamped);
+
+        self.state.selection.conversation_area = content_area;
+        self.state.selection.actual_scroll = actual_scroll;
+        self.state.selection.total_content_lines = total_lines;
+    }
+
+    /// Estimate the number of spinner/progress lines rendered below the conversation.
+    /// Must match the ConversationWidget::build_spinner_lines() output count.
+    fn count_spinner_lines(&self) -> u16 {
+        let mut count: u16 = 0;
+        // Active tools: 1 line each + nested subagent lines
+        for tool in &self.state.active_tools {
+            if !tool.is_finished() {
+                count += 1;
+                // Each active subagent matched to this tool adds lines
+                for sub in &self.state.active_subagents {
+                    if sub.parent_tool_id.as_deref() == Some(&tool.id) {
+                        count += 1; // subagent header
+                        // Each tool call within the subagent
+                        count += sub.active_tools.len().min(3) as u16;
+                    }
+                }
             }
         }
+        // Task progress (thinking) when no active tools
+        if count == 0 && self.state.task_progress.is_some() {
+            count += 1;
+        }
+        // Compaction spinner
+        if self.state.compaction_active {
+            count += 1;
+        }
+        // Backgrounding pending
+        if self.state.backgrounding_pending {
+            count += 1;
+        }
+        count
+    }
 
-        // Sort: running first, then newest first
-        items.sort_by(|a, b| {
-            let a_running = a.state == "running";
-            let b_running = b.state == "running";
-            b_running.cmp(&a_running).then(
-                b.runtime_secs
-                    .partial_cmp(&a.runtime_secs)
-                    .unwrap_or(std::cmp::Ordering::Equal),
-            )
-        });
+    /// Render selection highlight by swapping fg/bg on selected buffer cells.
+    fn render_selection_highlight(
+        frame: &mut ratatui::Frame,
+        content_area: ratatui::layout::Rect,
+        actual_scroll: usize,
+        range: &crate::selection::SelectionRange,
+    ) {
+        let buf = frame.buffer_mut();
+        let (start, end) = range.ordered();
 
-        items
+        for screen_row in 0..content_area.height {
+            let line_idx = actual_scroll + screen_row as usize;
+            if line_idx < start.line_index || line_idx > end.line_index {
+                continue;
+            }
+
+            let col_start = if line_idx == start.line_index {
+                start.char_offset as u16
+            } else {
+                0
+            };
+            let col_end = if line_idx == end.line_index {
+                end.char_offset as u16
+            } else {
+                content_area.width
+            };
+
+            let y = content_area.y + screen_row;
+            for col in col_start..col_end.min(content_area.width) {
+                let x = content_area.x + col;
+                if let Some(cell) = buf.cell_mut(ratatui::layout::Position::new(x, y)) {
+                    // Swap foreground and background for highlight
+                    let fg = cell.fg;
+                    let bg = cell.bg;
+                    cell.set_fg(if bg == ratatui::style::Color::Reset {
+                        ratatui::style::Color::Black
+                    } else {
+                        bg
+                    });
+                    cell.set_bg(if fg == ratatui::style::Color::Reset {
+                        ratatui::style::Color::White
+                    } else {
+                        fg
+                    });
+                }
+            }
+        }
     }
 
     /// Shared helper that renders a popup panel matching the Python Textual style:
@@ -569,21 +678,49 @@ impl App {
             Style::default().fg(style_tokens::PRIMARY),
         ))];
 
-        let option_lines: Vec<Line> = ask_options
-            .iter()
-            .enumerate()
-            .map(|(i, opt)| Self::build_option_line(i == selected, &format!("{}.", i + 1), opt, ""))
-            .collect();
+        if ask_options.is_empty() {
+            // Free-text input mode
+            let text = self.ask_user_controller.text_input();
+            let input_line = Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(
+                    if text.is_empty() {
+                        "\u{2588}".to_string()
+                    } else {
+                        format!("{text}\u{2588}")
+                    },
+                    Style::default().fg(style_tokens::ACCENT),
+                ),
+            ]);
 
-        Self::render_popup_panel(
-            frame,
-            input_area,
-            " Question ",
-            &content_lines,
-            &option_lines,
-            "\u{2191}/\u{2193} choose \u{00b7} Enter confirm \u{00b7} Esc cancel",
-            None,
-        );
+            Self::render_popup_panel(
+                frame,
+                input_area,
+                " Question ",
+                &content_lines,
+                &[input_line],
+                "Type answer \u{00b7} Enter confirm \u{00b7} Esc cancel",
+                None,
+            );
+        } else {
+            let option_lines: Vec<Line> = ask_options
+                .iter()
+                .enumerate()
+                .map(|(i, opt)| {
+                    Self::build_option_line(i == selected, &format!("{}.", i + 1), opt, "")
+                })
+                .collect();
+
+            Self::render_popup_panel(
+                frame,
+                input_area,
+                " Question ",
+                &content_lines,
+                &option_lines,
+                "\u{2191}/\u{2193} choose \u{00b7} Enter confirm \u{00b7} Esc cancel",
+                None,
+            );
+        }
     }
 
     /// Render the model picker panel above the input area.
@@ -638,12 +775,23 @@ impl App {
             // Provider group header
             if model.provider != current_provider {
                 current_provider = model.provider.clone();
-                lines.push(Line::from(Span::styled(
+                let mut header_spans = vec![Span::styled(
                     format!("  {} {}", "\u{25cf}", model.provider_display),
                     Style::default()
-                        .fg(style_tokens::GREY)
+                        .fg(if model.has_api_key {
+                            style_tokens::GREY
+                        } else {
+                            style_tokens::DIM_GREY
+                        })
                         .add_modifier(Modifier::BOLD),
-                )));
+                )];
+                if !model.has_api_key {
+                    header_spans.push(Span::styled(
+                        "  \u{26a0} no key",
+                        Style::default().fg(Color::Rgb(120, 120, 120)),
+                    ));
+                }
+                lines.push(Line::from(header_spans));
             }
 
             let selected = *display_idx == selected_idx;
@@ -660,7 +808,9 @@ impl App {
             };
 
             // Model name
-            let name_style = if selected {
+            let name_style = if !model.has_api_key {
+                Style::default().fg(style_tokens::DIM_GREY)
+            } else if selected {
                 Style::default()
                     .fg(Self::PANEL_CYAN)
                     .add_modifier(Modifier::BOLD)

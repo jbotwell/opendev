@@ -54,8 +54,12 @@ impl RetryConfig {
     pub fn delay_for_attempt(&self, attempt: u32) -> std::time::Duration {
         if self.initial_delay_ms > 0 {
             let delay_ms = self.initial_delay_ms as f64 * self.backoff_factor.powi(attempt as i32);
-            let capped_ms = delay_ms.min(self.max_delay_ms as f64) as u64;
-            return std::time::Duration::from_millis(capped_ms);
+            let capped_ms = delay_ms.min(self.max_delay_ms as f64);
+            // Add ±25% random jitter to avoid thundering herd when parallel
+            // agents all retry at the same backoff intervals
+            let jitter_factor = 0.75 + fastrand::f64() * 0.5; // [0.75, 1.25]
+            let final_ms = (capped_ms * jitter_factor) as u64;
+            return std::time::Duration::from_millis(final_ms);
         }
         // Legacy fallback: use fixed delay array
         let idx = (attempt as usize).min(self.retry_delays.len().saturating_sub(1));
@@ -215,36 +219,26 @@ mod tests {
     #[test]
     fn test_retry_config_exponential_backoff() {
         let config = RetryConfig::default();
-        // 2000 * 2^0 = 2000ms
-        assert_eq!(
-            config.delay_for_attempt(0),
-            std::time::Duration::from_millis(2000)
-        );
-        // 2000 * 2^1 = 4000ms
-        assert_eq!(
-            config.delay_for_attempt(1),
-            std::time::Duration::from_millis(4000)
-        );
-        // 2000 * 2^2 = 8000ms
-        assert_eq!(
-            config.delay_for_attempt(2),
-            std::time::Duration::from_millis(8000)
-        );
-        // 2000 * 2^3 = 16000ms
-        assert_eq!(
-            config.delay_for_attempt(3),
-            std::time::Duration::from_millis(16000)
-        );
+        // Delays include ±25% jitter, so check ranges
+        let d0 = config.delay_for_attempt(0).as_millis() as u64;
+        assert!(d0 >= 1500 && d0 <= 2500, "attempt 0: {d0}ms not in [1500, 2500]");
+
+        let d1 = config.delay_for_attempt(1).as_millis() as u64;
+        assert!(d1 >= 3000 && d1 <= 5000, "attempt 1: {d1}ms not in [3000, 5000]");
+
+        let d2 = config.delay_for_attempt(2).as_millis() as u64;
+        assert!(d2 >= 6000 && d2 <= 10000, "attempt 2: {d2}ms not in [6000, 10000]");
+
+        let d3 = config.delay_for_attempt(3).as_millis() as u64;
+        assert!(d3 >= 12000 && d3 <= 20000, "attempt 3: {d3}ms not in [12000, 20000]");
     }
 
     #[test]
     fn test_retry_config_exponential_backoff_capped() {
         let config = RetryConfig::default();
-        // 2000 * 2^10 = 2,048,000ms > 30,000ms cap
-        assert_eq!(
-            config.delay_for_attempt(10),
-            std::time::Duration::from_millis(30000)
-        );
+        // 2000 * 2^10 = 2,048,000ms > 30,000ms cap, then ±25% jitter
+        let d = config.delay_for_attempt(10).as_millis() as u64;
+        assert!(d >= 22500 && d <= 37500, "attempt 10: {d}ms not in [22500, 37500]");
     }
 
     #[test]

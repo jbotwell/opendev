@@ -15,6 +15,27 @@ impl App {
         self.state.message_generation += 1;
     }
 
+    /// Push a slash command echo line (e.g. `❯ /mode plan`).
+    pub(super) fn push_slash_echo(&mut self, cmd: &str) {
+        self.state.messages.push(DisplayMessage {
+            role: DisplayRole::SlashCommand,
+            content: cmd.to_string(),
+            tool_call: None,
+            collapsed: false,
+        });
+    }
+
+    /// Push a command result line that attaches below the echo.
+    pub(super) fn push_command_result(&mut self, content: String) {
+        self.state.messages.push(DisplayMessage {
+            role: DisplayRole::CommandResult,
+            content,
+            tool_call: None,
+            collapsed: false,
+        });
+        self.state.message_generation += 1;
+    }
+
     /// Execute a slash command locally.
     pub(super) fn execute_slash_command(&mut self, cmd: &str) {
         let parts: Vec<&str> = cmd[1..].splitn(2, ' ').collect();
@@ -32,13 +53,14 @@ impl App {
                 self.state.message_generation += 1;
             }
             "mode" => {
+                self.push_slash_echo(cmd);
                 match args {
                     Some(arg) => {
                         if let Some(mode) = OperationMode::from_str_loose(arg) {
                             self.state.mode = mode;
                         } else {
-                            self.push_system_message(format!(
-                                "Unknown mode: '{arg}'. Use: normal, plan"
+                            self.push_command_result(format!(
+                                "Unknown mode '{arg}'. Use: normal, plan"
                             ));
                             return;
                         }
@@ -50,16 +72,17 @@ impl App {
                         };
                     }
                 }
-                self.push_system_message(format!("Mode: {}", self.state.mode));
+                self.push_command_result(format!("Mode set to {}", self.state.mode));
             }
             "autonomy" => {
+                self.push_slash_echo(cmd);
                 match args {
                     Some(arg) => {
                         if let Some(level) = AutonomyLevel::from_str_loose(arg) {
                             self.state.autonomy = level;
                         } else {
-                            self.push_system_message(format!(
-                                "Unknown autonomy level: '{arg}'. Use: manual, semi-auto, auto"
+                            self.push_command_result(format!(
+                                "Unknown autonomy level '{arg}'. Use: manual, semi-auto, auto"
                             ));
                             return;
                         }
@@ -72,7 +95,7 @@ impl App {
                         };
                     }
                 }
-                self.push_system_message(format!("Autonomy: {}", self.state.autonomy));
+                self.push_command_result(format!("Autonomy set to {}", self.state.autonomy));
             }
             "models" => {
                 // Always open interactive model picker
@@ -82,46 +105,50 @@ impl App {
                     &self.state.model,
                 );
                 if picker.filtered_count() == 0 {
-                    self.push_system_message(
-                        "No models available. Run `opendev setup` to configure providers."
+                    self.push_slash_echo(cmd);
+                    self.push_command_result(
+                        "No models available. Run 'opendev setup' to configure providers."
                             .to_string(),
                     );
                 } else {
                     self.model_picker_controller = Some(picker);
                 }
             }
-            "session-models" => match args {
-                Some("clear") => {
-                    self.push_system_message(
-                        "Session model override cleared. Using global model.".to_string(),
-                    );
-                }
-                Some(model_name) if !model_name.is_empty() => {
-                    self.state.model = model_name.to_string();
-                    self.push_system_message(format!(
-                        "Model set to: {} (session)",
-                        self.state.model
-                    ));
-                    if let Some(ref tx) = self.user_message_tx {
-                        let _ = tx.send(format!("\x00__MODEL_CHANGE__{}", self.state.model));
+            "session-models" => {
+                self.push_slash_echo(cmd);
+                match args {
+                    Some("clear") => {
+                        self.push_command_result("Session model override cleared".to_string());
+                    }
+                    Some(model_name) if !model_name.is_empty() => {
+                        self.state.model = model_name.to_string();
+                        self.push_command_result(format!(
+                            "Session model set to {}",
+                            self.state.model
+                        ));
+                        if let Some(ref tx) = self.user_message_tx {
+                            let _ = tx.send(format!("\x00__MODEL_CHANGE__{}", self.state.model));
+                        }
+                    }
+                    _ => {
+                        self.push_command_result(format!(
+                            "Current model: {}. Usage: /session-models <name>",
+                            self.state.model
+                        ));
                     }
                 }
-                _ => {
-                    self.push_system_message(format!(
-                        "Current model: {}\nUsage: /session-models <model-name>",
-                        self.state.model
-                    ));
-                }
-            },
+            }
             "mcp" => {
+                self.push_slash_echo(cmd);
                 let result = self.mcp_controller.handle_command(args.unwrap_or(""));
-                self.push_system_message(result);
+                self.push_command_result(result);
             }
             "tasks" => {
+                self.push_slash_echo(cmd);
                 let msg = if let Ok(mgr) = self.task_manager.try_lock() {
                     let tasks = mgr.all_tasks();
                     if tasks.is_empty() {
-                        "No background tasks.".to_string()
+                        "No background tasks".to_string()
                     } else {
                         let mut lines = vec![format!(
                             "Background tasks ({} total, {} running):",
@@ -142,87 +169,104 @@ impl App {
                 } else {
                     "Task manager busy. Try again.".to_string()
                 };
-                self.push_system_message(msg);
+                self.push_command_result(msg);
             }
-            "task" => match args {
-                Some(id) => {
-                    let msg = if let Ok(mgr) = self.task_manager.try_lock() {
-                        let output = mgr.read_output(id, 50);
-                        if output.is_empty() {
-                            format!("No output for task '{id}'.")
+            "task" => {
+                self.push_slash_echo(cmd);
+                match args {
+                    Some(id) => {
+                        let msg = if let Ok(mgr) = self.task_manager.try_lock() {
+                            let output = mgr.read_output(id, 50);
+                            if output.is_empty() {
+                                format!("No output for task '{id}'")
+                            } else {
+                                format!("Output for task {id}:\n{output}")
+                            }
                         } else {
-                            format!("Output for task {id}:\n{output}")
-                        }
-                    } else {
-                        "Task manager busy. Try again.".to_string()
-                    };
-                    self.push_system_message(msg);
+                            "Task manager busy. Try again.".to_string()
+                        };
+                        self.push_command_result(msg);
+                    }
+                    None => {
+                        self.push_command_result("Usage: /task <id>".to_string());
+                    }
                 }
-                None => {
-                    self.push_system_message("Usage: /task <id>".to_string());
+            }
+            "kill" => {
+                self.push_slash_echo(cmd);
+                match args {
+                    Some(id) => {
+                        let id = id.to_string();
+                        let _ = self.event_tx.send(AppEvent::KillTask(id));
+                    }
+                    None => {
+                        self.push_command_result("Usage: /kill <id>".to_string());
+                    }
                 }
-            },
-            "kill" => match args {
-                Some(id) => {
-                    let id = id.to_string();
-                    let _ = self.event_tx.send(AppEvent::KillTask(id));
-                }
-                None => {
-                    self.push_system_message("Usage: /kill <id>".to_string());
-                }
-            },
+            }
             "init" => {
+                self.push_slash_echo(cmd);
                 if self.state.agent_active {
-                    self.push_system_message(
-                        "Cannot run /init while the agent is active.".to_string(),
-                    );
+                    self.push_command_result("Cannot run /init while agent is active".to_string());
                     return;
                 }
                 let prompt =
                     opendev_agents::prompts::embedded::build_init_prompt(args.unwrap_or(""));
-                self.push_system_message("Generating AGENTS.md...".to_string());
+                self.push_command_result("Generating AGENTS.md...".to_string());
                 let _ = self.event_tx.send(AppEvent::UserSubmit(prompt));
             }
-            "agents" => match args {
-                Some("create") => {
-                    self.push_system_message("Agent creation coming soon.".to_string());
+            "agents" => {
+                self.push_slash_echo(cmd);
+                match args {
+                    Some("create") => {
+                        self.push_command_result("Agent creation coming soon.".to_string());
+                    }
+                    _ => {
+                        self.push_command_result("No custom agents configured".to_string());
+                    }
                 }
-                _ => {
-                    self.push_system_message("No custom agents configured.".to_string());
+            }
+            "skills" => {
+                self.push_slash_echo(cmd);
+                match args {
+                    Some("create") => {
+                        self.push_command_result("Skill creation coming soon.".to_string());
+                    }
+                    _ => {
+                        self.push_command_result("No custom skills configured".to_string());
+                    }
                 }
-            },
-            "skills" => match args {
-                Some("create") => {
-                    self.push_system_message("Skill creation coming soon.".to_string());
+            }
+            "plugins" => {
+                self.push_slash_echo(cmd);
+                match args {
+                    Some("install") => {
+                        self.push_command_result("Plugin installation coming soon.".to_string());
+                    }
+                    Some("remove") => {
+                        self.push_command_result("Plugin removal coming soon.".to_string());
+                    }
+                    _ => {
+                        self.push_command_result("No plugins installed".to_string());
+                    }
                 }
-                _ => {
-                    self.push_system_message("No custom skills configured.".to_string());
-                }
-            },
-            "plugins" => match args {
-                Some("install") => {
-                    self.push_system_message("Plugin installation coming soon.".to_string());
-                }
-                Some("remove") => {
-                    self.push_system_message("Plugin removal coming soon.".to_string());
-                }
-                _ => {
-                    self.push_system_message("No plugins installed.".to_string());
-                }
-            },
+            }
             "sound" => {
+                self.push_slash_echo(cmd);
                 opendev_runtime::play_finish_sound();
-                self.push_system_message("Playing test sound...".to_string());
+                self.push_command_result("Playing test sound...".to_string());
             }
             "compact" => {
-                if self.state.messages.len() < 5 {
-                    self.push_system_message(
-                        "Not enough messages to compact (need at least 5).".to_string(),
+                self.push_slash_echo(cmd);
+                // Account for the echo we just pushed (< 6 means < 5 real messages)
+                if self.state.messages.len() < 6 {
+                    self.push_command_result(
+                        "Not enough messages to compact (need at least 5)".to_string(),
                     );
                 } else if self.state.compaction_active {
-                    self.push_system_message("Compaction already in progress.".to_string());
+                    self.push_command_result("Compaction already in progress".to_string());
                 } else if self.state.agent_active {
-                    self.push_system_message("Cannot compact while agent is running.".to_string());
+                    self.push_command_result("Cannot compact while agent is running".to_string());
                 } else {
                     // Send special sentinel to trigger compaction in the backend
                     if let Some(ref tx) = self.user_message_tx {
@@ -231,12 +275,13 @@ impl App {
                 }
             }
             "bg" => {
+                self.push_slash_echo(cmd);
                 match args {
                     None => {
                         // List all background agent tasks
                         let tasks = self.state.bg_agent_manager.all_tasks();
                         if tasks.is_empty() {
-                            self.push_system_message("No background agents.".to_string());
+                            self.push_command_result("No background agents".to_string());
                         } else {
                             let mut lines = vec![format!(
                                 "Background agents ({} total, {} running):",
@@ -264,7 +309,7 @@ impl App {
                                     tools = task.tool_call_count,
                                 ));
                             }
-                            self.push_system_message(lines.join("\n"));
+                            self.push_command_result(lines.join("\n"));
                         }
                     }
                     Some(sub) if sub.starts_with("kill ") => {
@@ -274,8 +319,8 @@ impl App {
                                 task_id: id.to_string(),
                             });
                         } else {
-                            self.push_system_message(format!(
-                                "Background agent '{id}' not found or not running."
+                            self.push_command_result(format!(
+                                "Background agent '{id}' not found or not running"
                             ));
                         }
                     }
@@ -284,14 +329,14 @@ impl App {
                         if let Some(task) = self.state.bg_agent_manager.get_task(id) {
                             if let Some(ref summary) = task.result_summary {
                                 let content = format!("[Background agent {id} result]\n{summary}");
-                                self.push_system_message(content);
+                                self.push_command_result(content);
                             } else {
-                                self.push_system_message(format!(
-                                    "Background agent '{id}' has no result yet."
+                                self.push_command_result(format!(
+                                    "Background agent '{id}' has no result yet"
                                 ));
                             }
                         } else {
-                            self.push_system_message(format!("Background agent '{id}' not found."));
+                            self.push_command_result(format!("Background agent '{id}' not found"));
                         }
                     }
                     Some(id) => {
@@ -300,50 +345,55 @@ impl App {
                             let elapsed = task.runtime_seconds();
                             let summary =
                                 task.result_summary.as_deref().unwrap_or("(still running)");
-                            self.push_system_message(format!(
+                            self.push_command_result(format!(
                                 "Background agent [{id}]:\n  Query: {}\n  State: {}\n  Tools: {}\n  Cost: ${:.4}\n  Elapsed: {:.1}s\n  Result: {summary}",
                                 task.query, task.state, task.tool_call_count, task.cost_usd, elapsed
                             ));
                         } else {
-                            self.push_system_message(format!("Background agent '{id}' not found."));
+                            self.push_command_result(format!("Background agent '{id}' not found"));
                         }
                     }
                 }
             }
             "undo" => {
+                self.push_slash_echo(cmd);
                 if self.state.agent_active {
-                    self.push_system_message("Cannot undo while agent is running.".to_string());
+                    self.push_command_result("Cannot undo while agent is running".to_string());
                 } else if let Some(ref tx) = self.user_message_tx {
                     let _ = tx.send("\x00__UNDO__".to_string());
                 } else {
-                    self.push_system_message("Undo not available.".to_string());
+                    self.push_command_result("Undo not available".to_string());
                 }
             }
             "redo" => {
+                self.push_slash_echo(cmd);
                 if self.state.agent_active {
-                    self.push_system_message("Cannot redo while agent is running.".to_string());
+                    self.push_command_result("Cannot redo while agent is running".to_string());
                 } else if let Some(ref tx) = self.user_message_tx {
                     let _ = tx.send("\x00__REDO__".to_string());
                 } else {
-                    self.push_system_message("Redo not available.".to_string());
+                    self.push_command_result("Redo not available".to_string());
                 }
             }
             "share" => {
+                self.push_slash_echo(cmd);
                 if let Some(ref tx) = self.user_message_tx {
                     let _ = tx.send("\x00__SHARE__".to_string());
                 } else {
-                    self.push_system_message("Share not available.".to_string());
+                    self.push_command_result("Share not available".to_string());
                 }
             }
             "sessions" => {
+                self.push_slash_echo(cmd);
                 // Open session picker
                 if let Some(ref tx) = self.user_message_tx {
                     let _ = tx.send("\x00__LIST_SESSIONS__".to_string());
                 }
-                self.push_system_message("Loading sessions...".to_string());
+                self.push_command_result("Loading sessions...".to_string());
             }
             "help" => {
-                self.push_system_message(
+                self.push_slash_echo(cmd);
+                self.push_command_result(
                     [
                         "Available commands:",
                         "  /help              — Show this help",
@@ -388,7 +438,8 @@ impl App {
                 );
             }
             _ => {
-                self.push_system_message(format!(
+                self.push_slash_echo(cmd);
+                self.push_command_result(format!(
                     "Unknown command: /{name}. Type /help for available commands."
                 ));
             }
@@ -400,31 +451,52 @@ impl App {
 mod tests {
     use super::super::*;
 
+    /// Helper: assert the last two messages are a SlashCommand echo + CommandResult.
+    fn assert_command_result(app: &App, cmd_contains: &str, result_contains: &str) {
+        let msgs = &app.state.messages;
+        assert!(
+            msgs.len() >= 2,
+            "Expected at least 2 messages, got {}",
+            msgs.len()
+        );
+        let echo = &msgs[msgs.len() - 2];
+        let result = &msgs[msgs.len() - 1];
+        assert_eq!(echo.role, DisplayRole::SlashCommand, "echo role mismatch");
+        assert!(
+            echo.content.contains(cmd_contains),
+            "echo '{}' missing '{cmd_contains}'",
+            echo.content
+        );
+        assert_eq!(
+            result.role,
+            DisplayRole::CommandResult,
+            "result role mismatch"
+        );
+        assert!(
+            result.content.contains(result_contains),
+            "result '{}' missing '{result_contains}'",
+            result.content
+        );
+    }
+
     #[test]
     fn test_slash_mode_with_arg() {
         let mut app = App::new();
         assert_eq!(app.state.mode, OperationMode::Normal);
         app.execute_slash_command("/mode plan");
         assert_eq!(app.state.mode, OperationMode::Plan);
+        assert_command_result(&app, "/mode plan", "Mode set to Plan");
         app.execute_slash_command("/mode normal");
         assert_eq!(app.state.mode, OperationMode::Normal);
+        assert_command_result(&app, "/mode normal", "Mode set to Normal");
     }
 
     #[test]
     fn test_slash_mode_bad_arg() {
         let mut app = App::new();
         app.execute_slash_command("/mode bogus");
-        // Mode should not change
         assert_eq!(app.state.mode, OperationMode::Normal);
-        // Should have an error message
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("Unknown mode")
-        );
+        assert_command_result(&app, "/mode bogus", "Unknown mode");
     }
 
     #[test]
@@ -432,8 +504,10 @@ mod tests {
         let mut app = App::new();
         app.execute_slash_command("/mode");
         assert_eq!(app.state.mode, OperationMode::Plan);
+        assert_command_result(&app, "/mode", "Mode set to Plan");
         app.execute_slash_command("/mode");
         assert_eq!(app.state.mode, OperationMode::Normal);
+        assert_command_result(&app, "/mode", "Mode set to Normal");
     }
 
     #[test]
@@ -441,10 +515,13 @@ mod tests {
         let mut app = App::new();
         app.execute_slash_command("/autonomy auto");
         assert_eq!(app.state.autonomy, AutonomyLevel::Auto);
+        assert_command_result(&app, "/autonomy auto", "Autonomy set to Auto");
         app.execute_slash_command("/autonomy manual");
         assert_eq!(app.state.autonomy, AutonomyLevel::Manual);
+        assert_command_result(&app, "/autonomy manual", "Autonomy set to Manual");
         app.execute_slash_command("/autonomy semi-auto");
         assert_eq!(app.state.autonomy, AutonomyLevel::SemiAuto);
+        assert_command_result(&app, "/autonomy semi-auto", "Autonomy set to Semi");
     }
 
     #[test]
@@ -452,22 +529,13 @@ mod tests {
         let mut app = App::new();
         app.execute_slash_command("/autonomy bogus");
         assert_eq!(app.state.autonomy, AutonomyLevel::Manual);
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("Unknown autonomy")
-        );
+        assert_command_result(&app, "/autonomy bogus", "Unknown autonomy");
     }
 
     #[test]
     fn test_slash_models_opens_picker_or_shows_message() {
         let mut app = App::new();
         app.execute_slash_command("/models");
-        // Either opens the model picker popup or shows "No models available" message
-        // (depends on whether cache exists in test environment)
         let has_picker = app.model_picker_controller.is_some();
         let has_message = app
             .state
@@ -484,111 +552,72 @@ mod tests {
     fn test_slash_tasks_empty() {
         let mut app = App::new();
         app.execute_slash_command("/tasks");
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("No background tasks")
-        );
+        assert_command_result(&app, "/tasks", "No background tasks");
     }
 
     #[test]
     fn test_slash_task_no_arg() {
         let mut app = App::new();
         app.execute_slash_command("/task");
-        assert!(app.state.messages.last().unwrap().content.contains("Usage"));
+        assert_command_result(&app, "/task", "Usage");
     }
 
     #[test]
     fn test_slash_kill_no_arg() {
         let mut app = App::new();
         app.execute_slash_command("/kill");
-        assert!(app.state.messages.last().unwrap().content.contains("Usage"));
+        assert_command_result(&app, "/kill", "Usage");
     }
 
     #[test]
     fn test_slash_mcp_list_empty() {
         let mut app = App::new();
         app.execute_slash_command("/mcp list");
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("No MCP servers")
-        );
+        assert_command_result(&app, "/mcp list", "No MCP servers");
     }
 
     #[test]
     fn test_slash_init() {
         let mut app = App::new();
         app.execute_slash_command("/init");
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("Generating AGENTS.md")
-        );
+        assert_command_result(&app, "/init", "Generating AGENTS.md");
     }
 
     #[test]
     fn test_slash_agents() {
         let mut app = App::new();
         app.execute_slash_command("/agents");
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("No custom agents")
-        );
+        assert_command_result(&app, "/agents", "No custom agents");
     }
 
     #[test]
     fn test_slash_skills() {
         let mut app = App::new();
         app.execute_slash_command("/skills");
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("No custom skills")
-        );
+        assert_command_result(&app, "/skills", "No custom skills");
     }
 
     #[test]
     fn test_slash_plugins() {
         let mut app = App::new();
         app.execute_slash_command("/plugins");
-        assert!(
-            app.state
-                .messages
-                .last()
-                .unwrap()
-                .content
-                .contains("No plugins")
-        );
+        assert_command_result(&app, "/plugins", "No plugins");
     }
 
     #[test]
     fn test_slash_help_lists_all_commands() {
         let mut app = App::new();
         app.execute_slash_command("/help");
-        let help = &app.state.messages.last().unwrap().content;
-        // Check that all major commands appear
+        let result = &app.state.messages.last().unwrap().content;
+        assert_eq!(
+            app.state.messages.last().unwrap().role,
+            DisplayRole::CommandResult
+        );
         for cmd in &[
             "mode", "autonomy", "models", "mcp", "tasks", "task", "kill", "agents", "skills",
             "plugins", "undo", "redo", "share", "sessions",
         ] {
-            assert!(help.contains(cmd), "Help text missing /{cmd}");
+            assert!(result.contains(cmd), "Help text missing /{cmd}");
         }
     }
 }

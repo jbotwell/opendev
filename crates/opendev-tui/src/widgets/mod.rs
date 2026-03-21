@@ -12,7 +12,7 @@ pub mod todo_panel;
 pub mod tool_display;
 pub mod welcome_panel;
 
-pub use background_tasks::{TaskWatcherFocus, TaskWatcherPanel, UnifiedTaskItem, UnifiedTaskKind};
+pub use background_tasks::TaskWatcherPanel;
 pub use conversation::ConversationWidget;
 pub use input::InputWidget;
 pub use nested_tool::{NestedToolWidget, SubagentDisplayState};

@@ -93,7 +93,10 @@ impl<'a> ConversationWidget<'a> {
                             .get("agent_type")
                             .and_then(|v| v.as_str())
                             .unwrap_or("Agent");
-                        let desc = tool.args.get("description").and_then(|v| v.as_str())
+                        let desc = tool
+                            .args
+                            .get("description")
+                            .and_then(|v| v.as_str())
                             .or_else(|| tool.args.get("task").and_then(|v| v.as_str()))
                             .unwrap_or("");
                         (name.to_string(), desc.to_string())
@@ -156,16 +159,6 @@ impl<'a> ConversationWidget<'a> {
                     ]));
                 }
             }
-        } else if let Some((task_id, _)) = self.backgrounded_task_info {
-            lines.push(Line::from(vec![
-                Span::styled("\u{23f3} ", Style::default().fg(style_tokens::BLUE_BRIGHT)),
-                Span::styled(
-                    format!("Running in background [{task_id}]"),
-                    Style::default()
-                        .fg(style_tokens::SUBTLE)
-                        .add_modifier(Modifier::ITALIC),
-                ),
-            ]));
         } else if let Some(progress) = self.task_progress {
             let elapsed = progress.started_at.elapsed().as_secs();
             lines.push(Line::from(vec![

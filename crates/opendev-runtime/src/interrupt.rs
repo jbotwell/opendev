@@ -75,10 +75,13 @@ impl InterruptToken {
 
     /// Request that the current operation be moved to the background.
     ///
-    /// Unlike `request()`, this does NOT cancel the `CancellationToken` —
-    /// it signals a soft yield so the current tool can finish normally.
+    /// This cancels the `CancellationToken` to immediately interrupt any
+    /// in-flight async operation (LLM streaming, tool execution), but does
+    /// NOT set the hard interrupt `flag`. The react loop distinguishes
+    /// background from hard interrupt by checking `is_background_requested()`.
     pub fn request_background(&self) {
         self.inner.background.store(true, Ordering::Release);
+        self.inner.cancel.cancel();
     }
 
     /// Check whether backgrounding has been requested.
@@ -230,13 +233,14 @@ mod tests {
     }
 
     #[test]
-    fn test_request_background_does_not_cancel() {
+    fn test_request_background_cancels_but_no_hard_flag() {
         let token = InterruptToken::new();
         token.request_background();
         assert!(token.is_background_requested());
-        // Should NOT set the hard interrupt flag or cancel the CancellationToken
+        // Should cancel the CancellationToken (to interrupt in-flight ops)
+        // but NOT set the hard interrupt flag
         assert!(!token.is_requested());
-        assert!(!token.cancellation_token().is_cancelled());
+        assert!(token.cancellation_token().is_cancelled());
     }
 
     #[test]

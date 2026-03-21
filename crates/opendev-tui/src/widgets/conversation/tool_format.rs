@@ -42,7 +42,7 @@ pub(super) fn format_tool_call(tc: &DisplayToolCall, working_dir: Option<&str>) 
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            format!("({arg})"),
+            format!(" {arg}"),
             Style::default().fg(style_tokens::SUBTLE),
         ),
     ])
@@ -69,6 +69,6 @@ pub(super) fn format_nested_tool_call(
         ),
         Span::styled(format!("{icon} "), Style::default().fg(icon_color)),
         Span::styled(verb, Style::default().fg(style_tokens::SUBTLE)),
-        Span::styled(format!("({arg})"), Style::default().fg(style_tokens::GREY)),
+        Span::styled(format!(" {arg}"), Style::default().fg(style_tokens::GREY)),
     ])
 }

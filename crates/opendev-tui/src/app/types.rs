@@ -20,6 +20,10 @@ pub enum DisplayRole {
     Interrupt,
     /// Native reasoning content from the LLM (inline thinking).
     Reasoning,
+    /// Slash command echo — rendered with `❯ ` prefix in accent+bold.
+    SlashCommand,
+    /// Slash command result — rendered with `  ⎿  ` prefix, attaches to previous.
+    CommandResult,
 }
 
 /// Rendering configuration for simple (non-markdown, non-collapsible) roles.
@@ -72,6 +76,22 @@ impl DisplayRole {
                 continuation: Indent::RESULT_CONT,
                 attach_to_previous: true,
             }),
+            Self::SlashCommand => Some(RoleStyle {
+                icon: "❯ ".to_string(),
+                icon_style: Style::default()
+                    .fg(style_tokens::ACCENT)
+                    .add_modifier(Modifier::BOLD),
+                text_color: style_tokens::PRIMARY,
+                continuation: Indent::CONT,
+                attach_to_previous: false,
+            }),
+            Self::CommandResult => Some(RoleStyle {
+                icon: format!("  {CONTINUATION_CHAR}  "),
+                icon_style: Style::default().fg(style_tokens::ACCENT),
+                text_color: style_tokens::SUBTLE,
+                continuation: Indent::RESULT_CONT,
+                attach_to_previous: true,
+            }),
             Self::Assistant | Self::Reasoning => None,
         }
     }
@@ -90,6 +110,17 @@ pub struct DisplayToolCall {
     pub result_lines: Vec<String>,
     /// Nested tool calls (from subagent execution).
     pub nested_calls: Vec<DisplayToolCall>,
+}
+
+/// A queued background task result waiting to be injected into the conversation.
+#[derive(Debug, Clone)]
+pub struct PendingBackgroundResult {
+    pub task_id: String,
+    pub query: String,
+    pub result: String,
+    pub success: bool,
+    pub tool_call_count: usize,
+    pub cost_usd: f64,
 }
 
 /// State of a tool execution lifecycle.

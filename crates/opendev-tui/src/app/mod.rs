@@ -24,7 +24,8 @@ mod types;
 pub use enums::{AutonomyLevel, OperationMode, ReasoningLevel};
 pub use state::AppState;
 pub use types::{
-    DisplayMessage, DisplayRole, DisplayToolCall, RoleStyle, ToolExecution, ToolState,
+    DisplayMessage, DisplayRole, DisplayToolCall, PendingBackgroundResult, RoleStyle,
+    ToolExecution, ToolState,
 };
 
 use std::io;
@@ -38,7 +39,9 @@ use crate::controllers::{
 use crate::event::{AppEvent, EventHandler};
 use crate::managers::BackgroundTaskManager;
 use crossterm::{
-    event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
+    event::{
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -136,12 +139,16 @@ impl App {
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen)?;
 
-        // Enable xterm alternate scroll mode: terminal converts mouse wheel events
-        // into Up/Down arrow key sequences. This gives us scroll support without
-        // EnableMouseCapture, preserving native text selection.
-        use std::io::Write;
-        stdout.write_all(b"\x1b[?1007h")?;
-        stdout.flush()?;
+        // Enable alternate scroll mode: terminal converts mouse wheel / trackpad
+        // scroll into Up/Down arrow key sequences. Works reliably on macOS Terminal.app
+        // where EnableMouseCapture doesn't produce scroll events for trackpad gestures.
+        // Also enable focus change reporting for FocusGained/FocusLost redraws.
+        {
+            use std::io::Write;
+            stdout.write_all(b"\x1b[?1007h")?;
+            stdout.flush()?;
+        }
+        execute!(stdout, crossterm::event::EnableFocusChange)?;
 
         // Enable Kitty keyboard protocol so terminals report Shift+Enter distinctly.
         // Always attempt to push the flags — unsupported terminals silently ignore the
@@ -158,8 +165,6 @@ impl App {
 
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
-        terminal.clear()?;
-
         // Start the event reader
         self.event_handler.start();
 
@@ -171,11 +176,14 @@ impl App {
             let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
         }
         disable_raw_mode()?;
-        // Disable xterm alternate scroll mode before leaving alternate screen
         {
             use std::io::Write;
             let _ = terminal.backend_mut().write_all(b"\x1b[?1007l");
         }
+        execute!(
+            terminal.backend_mut(),
+            crossterm::event::DisableFocusChange
+        )?;
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
         terminal.show_cursor()?;
 
@@ -197,6 +205,28 @@ impl App {
             self.state.terminal_width = size.width;
             self.state.terminal_height = size.height;
 
+            // Force a full screen repaint when needed (overlay close, focus regain, etc.).
+            if self.state.force_clear {
+                // Re-enable alternate scroll mode after focus regain (some terminals
+                // reset it on focus change).
+                {
+                    use std::io::Write;
+                    let _ = terminal.backend_mut().write_all(b"\x1b[?1007h");
+                }
+                // Full terminal clear: clear the backend screen AND reset both
+                // internal ratatui diff buffers so the next draw() rewrites every cell.
+                //
+                // terminal.clear() sends ESC[2J (visual clear) and resets the back buffer.
+                // swap_buffers() then resets the old current buffer (which may have stale
+                // overlay content) and swaps, leaving both buffers empty.
+                // This ensures the next draw() produces a complete diff with every cell
+                // updated, eliminating stale overlay artifacts.
+                let _ = terminal.clear();
+                terminal.swap_buffers();
+                self.state.force_clear = false;
+                self.state.dirty = true;
+            }
+
             // Only render when state has changed
             if self.state.dirty {
                 // Rebuild cached conversation lines if message generation changed
@@ -207,6 +237,8 @@ impl App {
 
                 terminal.draw(|frame| self.render(frame))?;
                 self.state.dirty = false;
+                // Update selection geometry after render so mouse mapping uses fresh layout
+                self.update_selection_geometry();
             }
 
             // Wait for at least one event

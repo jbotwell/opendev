@@ -5,7 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::history::CommandHistory;
-use crate::widgets::{TaskWatcherFocus, Toast, TodoDisplayItem, WelcomePanelState};
+use crate::selection::SelectionState;
+use crate::widgets::{Toast, TodoDisplayItem, WelcomePanelState};
 
 use super::{AutonomyLevel, DisplayMessage, OperationMode, ReasoningLevel, ToolExecution};
 
@@ -131,12 +132,14 @@ pub struct AppState {
     pub bg_agent_manager: crate::managers::BackgroundAgentManager,
     /// Whether the task watcher panel (Alt+B) is open.
     pub task_watcher_open: bool,
-    /// Selected index in the task watcher list.
-    pub task_watcher_selected: usize,
-    /// Output scroll offset in the task watcher detail pane.
-    pub task_watcher_output_scroll: u16,
-    /// Which pane has focus in the task watcher.
-    pub task_watcher_focus: TaskWatcherFocus,
+    /// Index of focused cell in the task watcher grid (0-based).
+    pub task_watcher_focus: usize,
+    /// Per-task scroll offset in the task watcher (index = task_idx, value = lines scrolled up).
+    pub task_watcher_cell_scrolls: Vec<usize>,
+    /// Page offset when tasks exceed grid capacity.
+    pub task_watcher_page: usize,
+    /// When all tasks finished (for auto-close after 3s grace).
+    pub task_watcher_all_done_at: Option<Instant>,
     /// Last task completion flash: (task_id, when).
     pub last_task_completion: Option<(String, Instant)>,
     /// Active toast notifications.
@@ -151,6 +154,19 @@ pub struct AppState {
     pub redo_stack: Vec<String>,
     /// Whether debug panel is open.
     pub debug_panel_open: bool,
+    /// Pending background agent results to deliver on next idle.
+    pub pending_bg_results: Vec<super::PendingBackgroundResult>,
+    /// Session title (set by the agent).
+    pub session_title: Option<String>,
+    /// Maps background subagent IDs to their parent background task IDs.
+    pub bg_subagent_map: HashMap<String, String>,
+    /// Text selection state for mouse-based copy.
+    pub selection: SelectionState,
+    /// Force a full terminal clear before next draw (resets ratatui's diff buffer).
+    pub force_clear: bool,
+    /// Timestamp of last user-interactive event (key, mouse, scroll).
+    /// Used to detect tab-switch return via timing gap.
+    pub last_event_time: Option<Instant>,
 }
 
 impl Default for AppState {
@@ -217,9 +233,10 @@ impl Default for AppState {
             backgrounding_pending: false,
             bg_agent_manager: crate::managers::BackgroundAgentManager::new(),
             task_watcher_open: false,
-            task_watcher_selected: 0,
-            task_watcher_output_scroll: 0,
-            task_watcher_focus: TaskWatcherFocus::List,
+            task_watcher_focus: 0,
+            task_watcher_cell_scrolls: Vec::new(),
+            task_watcher_page: 0,
+            task_watcher_all_done_at: None,
             last_task_completion: None,
             toasts: Vec::new(),
             leader_pending: false,
@@ -227,6 +244,12 @@ impl Default for AppState {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             debug_panel_open: false,
+            pending_bg_results: Vec::new(),
+            session_title: None,
+            bg_subagent_map: HashMap::new(),
+            selection: SelectionState::default(),
+            force_clear: false,
+            last_event_time: None,
         }
     }
 }

@@ -16,15 +16,23 @@ pub struct InputWidget<'a> {
     cursor: usize,
     mode: &'a str,
     pending_count: usize,
+    activity_tag: Option<&'a str>,
 }
 
 impl<'a> InputWidget<'a> {
-    pub fn new(buffer: &'a str, cursor: usize, mode: &'a str, pending_count: usize) -> Self {
+    pub fn new(
+        buffer: &'a str,
+        cursor: usize,
+        mode: &'a str,
+        pending_count: usize,
+        activity_tag: Option<&'a str>,
+    ) -> Self {
         Self {
             buffer,
             cursor,
             mode,
             pending_count,
+            activity_tag,
         }
     }
 }
@@ -84,7 +92,25 @@ impl Widget for InputWidget<'_> {
                     .add_modifier(Modifier::BOLD),
             ));
         }
-        spans.push(Span::styled("─".repeat(remaining_dashes), sep_style));
+        if let Some(tag) = self.activity_tag {
+            let tag_display = if tag.len() > 30 {
+                format!("{}...", &tag[..27])
+            } else {
+                tag.to_string()
+            };
+            let tag_section = format!(" {} ", tag_display);
+            let trailing = "──";
+            let tag_width = tag_section.len() + trailing.len();
+            let fill = remaining_dashes.saturating_sub(tag_width);
+            spans.push(Span::styled("─".repeat(fill), sep_style));
+            spans.push(Span::styled(
+                tag_section,
+                Style::default().fg(style_tokens::DIM_GREY),
+            ));
+            spans.push(Span::styled(trailing, sep_style));
+        } else {
+            spans.push(Span::styled("─".repeat(remaining_dashes), sep_style));
+        }
         let sep_line = Line::from(spans);
         buf.set_line(area.left(), area.top(), &sep_line, area.width);
 
@@ -176,12 +202,12 @@ mod tests {
 
     #[test]
     fn test_input_widget_creation() {
-        let _widget = InputWidget::new("hello", 3, "NORMAL", 0);
+        let _widget = InputWidget::new("hello", 3, "NORMAL", 0, None);
     }
 
     #[test]
     fn test_input_widget_empty() {
-        let _widget = InputWidget::new("", 0, "NORMAL", 0);
+        let _widget = InputWidget::new("", 0, "NORMAL", 0, None);
     }
 
     #[test]
@@ -190,7 +216,7 @@ mod tests {
         let area = Rect::new(0, 0, 60, 3);
         let mut buf = Buffer::empty(area);
 
-        let widget = InputWidget::new("", 0, "NORMAL", 2);
+        let widget = InputWidget::new("", 0, "NORMAL", 2, None);
         widget.render(area, &mut buf);
 
         let rendered: String = (0..area.width)
@@ -210,7 +236,7 @@ mod tests {
         let area = Rect::new(0, 0, 60, 3);
         let mut buf = Buffer::empty(area);
 
-        let widget = InputWidget::new("", 0, "NORMAL", 1);
+        let widget = InputWidget::new("", 0, "NORMAL", 1, None);
         widget.render(area, &mut buf);
 
         let rendered: String = (0..area.width)
@@ -226,6 +252,50 @@ mod tests {
         assert!(
             !rendered.contains("1 messages"),
             "Should use singular 'message' for count=1"
+        );
+    }
+
+    #[test]
+    fn test_activity_tag_renders() {
+        let area = Rect::new(0, 0, 80, 3);
+        let mut buf = Buffer::empty(area);
+
+        let widget = InputWidget::new("", 0, "NORMAL", 0, Some("implementing status bar"));
+        widget.render(area, &mut buf);
+
+        let rendered: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        assert!(
+            rendered.contains("implementing status bar"),
+            "Expected activity tag in separator line, got: {rendered:?}"
+        );
+    }
+
+    #[test]
+    fn test_activity_tag_with_queue() {
+        let area = Rect::new(0, 0, 100, 3);
+        let mut buf = Buffer::empty(area);
+
+        let widget = InputWidget::new("", 0, "NORMAL", 1, Some("debugging login"));
+        widget.render(area, &mut buf);
+
+        let rendered: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        assert!(
+            rendered.contains("1 message queued"),
+            "Expected queue indicator, got: {rendered:?}"
+        );
+        assert!(
+            rendered.contains("debugging login"),
+            "Expected activity tag, got: {rendered:?}"
         );
     }
 }

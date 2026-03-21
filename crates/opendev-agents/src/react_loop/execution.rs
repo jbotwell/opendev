@@ -219,6 +219,7 @@ impl ReactLoop {
     {
         let mut iteration: usize = 0;
         let mut consecutive_no_tool_calls: usize = 0;
+        let mut consecutive_truncations: usize = 0;
         let mut doom_detector = DoomLoopDetector::new();
 
         // Per-subdirectory instruction injection tracker.
@@ -530,6 +531,26 @@ impl ReactLoop {
                     ));
                 }
                 TurnResult::Complete { content, status } => {
+                    // Check for output truncation (finish_reason == "length")
+                    if response.finish_reason.as_deref() == Some("length")
+                        && consecutive_truncations < 3
+                    {
+                        consecutive_truncations += 1;
+                        warn!(
+                            consecutive_truncations,
+                            "Response truncated due to output token limit, continuing"
+                        );
+                        append_directive(
+                            messages,
+                            "Your previous response was truncated due to output token limit. \
+                             Continue from where you left off.",
+                        );
+                        iter_metrics.total_duration_ms = iter_start.elapsed().as_millis() as u64;
+                        self.push_metrics(iter_metrics);
+                        continue;
+                    }
+                    consecutive_truncations = 0;
+
                     // Block completion when there are incomplete todos
                     if let Some(mgr) = todo_manager
                         && let Ok(mgr) = mgr.lock()
@@ -731,7 +752,7 @@ impl ReactLoop {
                                                     "role": "tool",
                                                     "tool_call_id": tc_id,
                                                     "name": t_name,
-                                                    "content": "[Moved to background]",
+                                                    "content": "Agent spawned successfully. Running independently in the background.",
                                                 }));
                                             }
                                             iter_metrics.total_duration_ms = iter_start.elapsed().as_millis() as u64;
@@ -1227,9 +1248,10 @@ impl ReactLoop {
                                 "role": "tool",
                                 "tool_call_id": tool_call_id_str,
                                 "name": tool_name,
-                                "content": "[Moved to background]",
+                                "content": "Agent spawned successfully. Running independently in the background.",
                             }));
-                            iter_metrics.total_duration_ms = iter_start.elapsed().as_millis() as u64;
+                            iter_metrics.total_duration_ms =
+                                iter_start.elapsed().as_millis() as u64;
                             self.push_metrics(iter_metrics);
                             return Ok(AgentResult::backgrounded(messages.clone()));
                         }

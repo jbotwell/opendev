@@ -148,12 +148,23 @@ impl AdaptedClient {
         let streaming_url_owned = adapter.streaming_url(base_url);
         let url = streaming_url_owned.as_deref().unwrap_or(base_url);
 
-        // Send request and get raw response for streaming
+        // Send request and get raw response for streaming.
+        // On failure (after internal retries are exhausted), soft-fail to an
+        // HttpResult so the react loop can retry on the next iteration, matching
+        // the non-streaming post_json behavior.
         debug!(url = %url, "Sending streaming request");
-        let response = self
+        let response = match self
             .client
             .send_streaming_request(url, &converted, cancel)
-            .await?;
+            .await
+        {
+            Ok(resp) => resp,
+            Err(HttpError::Interrupted) => return Ok(HttpResult::interrupted()),
+            Err(e) => {
+                warn!(error = %e, "Streaming request failed after retries, soft-failing");
+                return Ok(HttpResult::fail(e.to_string(), true));
+            }
+        };
 
         let content_type = response
             .headers()
@@ -388,14 +399,20 @@ impl AdaptedClient {
                     }
                     message["tool_calls"] = serde_json::Value::Array(finalized);
                 }
-                let finish =
-                    stop_reason
-                        .as_deref()
-                        .unwrap_or(if message.get("tool_calls").is_some() {
+                // Normalize provider-specific stop reasons to Chat Completions values
+                let finish = match stop_reason.as_deref() {
+                    Some("end_turn") => "stop",
+                    Some("max_tokens") => "length",
+                    Some("tool_use") => "tool_calls",
+                    Some(other) => other,
+                    None => {
+                        if message.get("tool_calls").is_some() {
                             "tool_calls"
                         } else {
                             "stop"
-                        });
+                        }
+                    }
+                };
                 let response = serde_json::json!({
                     "id": "stream-accumulated",
                     "object": "chat.completion",

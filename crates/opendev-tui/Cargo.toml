@@ -25,6 +25,7 @@ unicode-width = { workspace = true }
 ignore = { workspace = true }
 uuid = { workspace = true }
 dirs = "6"
+arboard = "3"
 
 [dev-dependencies]
 tempfile = { workspace = true }

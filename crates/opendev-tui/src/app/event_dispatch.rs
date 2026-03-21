@@ -10,7 +10,7 @@ use super::{
 
 impl App {
     /// Batch all pending background results into a single injection message
-    /// and drain it through the normal message queue.
+    /// and send it silently to the LLM (not displayed in the conversation).
     pub(super) fn drain_background_results(&mut self) {
         if self.state.pending_bg_results.is_empty() {
             return;
@@ -19,20 +19,21 @@ impl App {
         let mut parts = Vec::new();
         for r in &results {
             parts.push(format!(
-                "[Background task [{id}] completed ({tools} tools, ${cost:.4})]\n\
+                "[Background task [{id}] completed ({tools} tools)]\n\
                  Task: {query}\n\n\
-                 {result}\n\n\
-                 Summarize the above findings concisely and continue.",
+                 {result}",
                 id = r.task_id,
                 tools = r.tool_call_count,
-                cost = r.cost_usd,
                 query = r.query,
                 result = r.result,
             ));
         }
         let msg = parts.join("\n\n");
-        self.state.pending_messages.push(msg);
-        self.drain_next_pending_message();
+        // Send directly to the LLM without displaying as a user message
+        self.state.agent_active = true;
+        self.state.message_generation += 1;
+        let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
+        self.state.dirty = true;
     }
 
     pub(super) fn drain_next_pending_message(&mut self) {
@@ -51,13 +52,47 @@ impl App {
 
     /// Dispatch an event to the appropriate handler.
     pub(super) fn handle_event(&mut self, event: AppEvent) {
+        // Detect tab-switch return via timing gap: if >1s elapsed since last
+        // user-interactive event, the user likely switched away and came back.
+        // Force a full repaint to fix any screen corruption from the terminal
+        // emulator (works even when FocusGained doesn't fire).
+        let is_user_event = matches!(
+            event,
+            AppEvent::Key(_)
+                | AppEvent::ScrollUp
+                | AppEvent::ScrollDown
+                | AppEvent::MouseDown { .. }
+                | AppEvent::MouseDrag { .. }
+                | AppEvent::MouseUp { .. }
+        );
+        if is_user_event {
+            if let Some(last) = self.state.last_event_time
+                && last.elapsed() > std::time::Duration::from_secs(1)
+            {
+                self.state.force_clear = true;
+            }
+            self.state.last_event_time = Some(std::time::Instant::now());
+        }
+
         match event {
             AppEvent::Key(key) => {
+                // Any keyboard input clears the selection
+                if self.state.selection.range.is_some() {
+                    self.state.selection.clear();
+                }
                 self.handle_key(key);
                 self.state.dirty = true;
             }
             AppEvent::Resize(_, _) => {
-                // ratatui handles resize automatically, but we need to re-render
+                // Clear selection on resize (geometry changed)
+                self.state.selection.clear();
+                self.state.dirty = true;
+            }
+            AppEvent::FocusGained => {
+                // Force full redraw when terminal regains focus to fix screen corruption.
+                // Setting force_clear triggers terminal.clear() which resets ratatui's
+                // internal diff buffer, ensuring every cell is repainted.
+                self.state.force_clear = true;
                 self.state.dirty = true;
             }
             AppEvent::ScrollUp => {
@@ -75,6 +110,18 @@ impl App {
                 }
                 self.state.dirty = true;
             }
+            AppEvent::MouseDown { col, row } => {
+                self.handle_mouse_down(col, row);
+                self.state.dirty = true;
+            }
+            AppEvent::MouseDrag { col, row } => {
+                self.handle_mouse_drag(col, row);
+                self.state.dirty = true;
+            }
+            AppEvent::MouseUp { col, row } => {
+                self.handle_mouse_up(col, row);
+                self.state.dirty = true;
+            }
             AppEvent::Tick => {
                 self.handle_tick();
                 // Tick is dirty only when there are animations running
@@ -89,6 +136,7 @@ impl App {
                     || self.state.backgrounded_task_info.is_some()
                     || !self.state.toasts.is_empty()
                     || self.state.leader_pending
+                    || self.state.selection.active
                 {
                     self.state.dirty = true;
                 }
@@ -301,6 +349,20 @@ impl App {
 
                 // For spawn_subagent, extract stats from tracked subagent state
                 // Each subagent is treated independently — no grouping
+                // Skip if the subagent was backgrounded — "Sent to background" message
+                // was already created by AgentBackgrounded handler.
+                if tool_name == "spawn_subagent"
+                    && self
+                        .state
+                        .active_subagents
+                        .iter()
+                        .any(|s| s.backgrounded && s.parent_tool_id.as_deref() == Some(&tool_id))
+                {
+                    // Remove the backgrounded subagent from tracking
+                    self.state.active_tools.retain(|t| t.id != tool_id);
+                    self.state.dirty = true;
+                    return;
+                }
                 if tool_name == "spawn_subagent" {
                     // Find matching subagent by parent_tool_id (reliable), fall back to task text
                     let subagent_idx = self
@@ -510,7 +572,7 @@ impl App {
                 default,
                 response_tx,
             } => {
-                let _rx = self.ask_user_controller.start(question, options, default);
+                self.ask_user_controller.start(question, options, default);
                 self.ask_user_response_tx = Some(response_tx);
                 self.state.dirty = true;
             }
@@ -524,12 +586,18 @@ impl App {
                 // SubagentDisplayState was eagerly created at ToolStarted time (same channel,
                 // guaranteed ordering). Now we just fill in the subagent_id so subsequent
                 // SubagentToolCall/Finished events (which use subagent_id) can find it.
-                if let Some(sa) = self
-                    .state
-                    .active_subagents
-                    .iter_mut()
-                    .find(|s| s.task == task && s.subagent_id.is_empty())
-                {
+                // Match by parent_tool_id first (reliable), then fall back to task text
+                let found = self.state.active_subagents.iter_mut().find(|s| {
+                    s.subagent_id.is_empty()
+                        && (s.parent_tool_id.as_ref().is_some_and(|ptid| {
+                            self.state.active_tools.iter().any(|t| {
+                                t.id == *ptid
+                                    && t.name == "spawn_subagent"
+                                    && t.args.get("task").and_then(|v| v.as_str()) == Some(&task)
+                            })
+                        }) || s.task == task)
+                });
+                if let Some(sa) = found {
                     sa.subagent_id = subagent_id;
                     sa.name = subagent_name;
                 } else {
@@ -543,13 +611,41 @@ impl App {
                                 && t.args.get("task").and_then(|v| v.as_str()) == Some(&task)
                         })
                         .map(|t| t.id.clone());
-                    let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
-                        subagent_id,
-                        subagent_name,
-                        task,
-                    );
-                    sa.parent_tool_id = parent_tool_id;
-                    self.state.active_subagents.push(sa);
+                    if parent_tool_id.is_some() {
+                        let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
+                            subagent_id,
+                            subagent_name,
+                            task,
+                        );
+                        sa.parent_tool_id = parent_tool_id;
+                        self.state.active_subagents.push(sa);
+                    } else if let Some(bg_task_id) = self
+                        .state
+                        .bg_agent_manager
+                        .all_tasks()
+                        .iter()
+                        .find(|t| {
+                            t.is_running() && t.current_tool.as_deref() == Some("spawn_subagent")
+                        })
+                        .map(|t| t.task_id.clone())
+                    {
+                        // Route to background task
+                        self.state
+                            .bg_subagent_map
+                            .insert(subagent_id.clone(), bg_task_id.clone());
+                        self.state.bg_agent_manager.push_activity(
+                            &bg_task_id,
+                            format!("\u{25b8} {subagent_name}: {task}"),
+                        );
+                        // Create display entry so task watcher shows tool-level detail
+                        let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
+                            subagent_id,
+                            subagent_name,
+                            task,
+                        );
+                        sa.backgrounded = true;
+                        self.state.active_subagents.push(sa);
+                    }
                 }
                 self.state.dirty = true;
             }
@@ -566,12 +662,41 @@ impl App {
                     .iter_mut()
                     .find(|s| s.subagent_id == subagent_id)
                 {
-                    subagent.add_tool_call(tool_name, tool_id, args);
+                    let is_bg = subagent.backgrounded;
+                    subagent.add_tool_call(tool_name.clone(), tool_id, args);
+                    // Also update bg_agent_manager for backgrounded subagents
+                    if is_bg
+                        && let Some(bg_task_id) =
+                            self.state.bg_subagent_map.get(&subagent_id).cloned()
+                    {
+                        let count = self
+                            .state
+                            .bg_agent_manager
+                            .get_task(&bg_task_id)
+                            .map(|t| t.tool_call_count + 1)
+                            .unwrap_or(1);
+                        self.state
+                            .bg_agent_manager
+                            .update_progress(&bg_task_id, tool_name, count);
+                    }
+                } else if let Some(bg_task_id) =
+                    self.state.bg_subagent_map.get(&subagent_id).cloned()
+                {
+                    let count = self
+                        .state
+                        .bg_agent_manager
+                        .get_task(&bg_task_id)
+                        .map(|t| t.tool_call_count + 1)
+                        .unwrap_or(1);
+                    self.state
+                        .bg_agent_manager
+                        .update_progress(&bg_task_id, tool_name, count);
                 }
                 self.state.dirty = true;
             }
             AppEvent::SubagentToolComplete {
                 subagent_id,
+                tool_name,
                 tool_id,
                 success,
                 ..
@@ -582,7 +707,24 @@ impl App {
                     .iter_mut()
                     .find(|s| s.subagent_id == subagent_id)
                 {
+                    let is_bg = subagent.backgrounded;
                     subagent.complete_tool_call(&tool_id, success);
+                    if is_bg
+                        && let Some(bg_task_id) =
+                            self.state.bg_subagent_map.get(&subagent_id).cloned()
+                    {
+                        let icon = if success { "\u{2713}" } else { "\u{2717}" };
+                        self.state
+                            .bg_agent_manager
+                            .push_activity(&bg_task_id, format!("  {icon} {tool_name}"));
+                    }
+                } else if let Some(bg_task_id) =
+                    self.state.bg_subagent_map.get(&subagent_id).cloned()
+                {
+                    let icon = if success { "\u{2713}" } else { "\u{2717}" };
+                    self.state
+                        .bg_agent_manager
+                        .push_activity(&bg_task_id, format!("  {icon} {tool_name}"));
                 }
                 self.state.dirty = true;
             }
@@ -600,7 +742,28 @@ impl App {
                     .iter_mut()
                     .find(|s| s.subagent_id == subagent_id)
                 {
-                    subagent.finish(success, result_summary, tool_call_count, shallow_warning);
+                    let is_bg = subagent.backgrounded;
+                    subagent.finish(
+                        success,
+                        result_summary.clone(),
+                        tool_call_count,
+                        shallow_warning,
+                    );
+                    if is_bg
+                        && let Some(bg_task_id) = self.state.bg_subagent_map.remove(&subagent_id)
+                    {
+                        let status = if success { "completed" } else { "failed" };
+                        self.state.bg_agent_manager.push_activity(
+                            &bg_task_id,
+                            format!("  Subagent {status} ({tool_call_count} tools)"),
+                        );
+                    }
+                } else if let Some(bg_task_id) = self.state.bg_subagent_map.remove(&subagent_id) {
+                    let status = if success { "completed" } else { "failed" };
+                    self.state.bg_agent_manager.push_activity(
+                        &bg_task_id,
+                        format!("  Subagent {status} ({tool_call_count} tools)"),
+                    );
                 }
                 // Remove finished subagents after marking them
                 // (keep them for one more render so the user sees the result)
@@ -791,11 +954,29 @@ impl App {
                         collapsed: false,
                     });
                 }
-                self.state.active_subagents.clear();
+                // Mark surviving (finished) subagents as backgrounded.
+                // Non-finished subagents are removed — their foreground processes
+                // were cancelled by the background interrupt. The bg runtime will
+                // re-spawn them with new IDs and SubagentStarted will create fresh
+                // display entries.
+                for sa in &mut self.state.active_subagents {
+                    sa.backgrounded = true;
+                }
+                self.state.active_subagents.retain(|s| s.finished);
                 self.state.task_progress = None;
 
                 self.state.backgrounded_task_info =
                     Some((task_id.clone(), std::time::Instant::now()));
+                self.state.dirty = true;
+                self.state.message_generation += 1;
+            }
+            AppEvent::BackgroundNudge { content } => {
+                self.state.messages.push(DisplayMessage {
+                    role: DisplayRole::Assistant,
+                    content,
+                    tool_call: None,
+                    collapsed: false,
+                });
                 self.state.dirty = true;
                 self.state.message_generation += 1;
             }
@@ -816,14 +997,24 @@ impl App {
                         t.state == crate::managers::background_agents::BackgroundAgentState::Killed
                     });
 
+                // Use the higher tool count — bg_agent_manager tracks subagent
+                // tools via update_progress, while the callback only counts
+                // top-level tool calls.
+                let tracked_count = self
+                    .state
+                    .bg_agent_manager
+                    .get_task(&task_id)
+                    .map(|t| t.tool_call_count)
+                    .unwrap_or(0);
+                let total_tools = tracked_count.max(tool_call_count);
+
                 self.state.bg_agent_manager.mark_completed(
                     &task_id,
                     success,
                     result_summary.clone(),
-                    tool_call_count,
+                    total_tools,
                     cost_usd,
                 );
-                let status = if success { "completed" } else { "failed" };
                 self.state.last_task_completion =
                     Some((task_id.clone(), std::time::Instant::now()));
 
@@ -833,10 +1024,6 @@ impl App {
                 {
                     self.state.backgrounded_task_info = None;
                 }
-
-                self.push_system_message(format!(
-                    "Background agent [{task_id}] {status} ({tool_call_count} tools, ${cost_usd:.4})"
-                ));
 
                 // Queue successful, non-killed results for injection
                 if success && !was_killed {
@@ -853,7 +1040,7 @@ impl App {
                             query,
                             result: full_result,
                             success,
-                            tool_call_count,
+                            tool_call_count: total_tools,
                             cost_usd,
                         });
 
@@ -947,6 +1134,127 @@ impl App {
 
             // Passthrough for unhandled events
             _ => {}
+        }
+    }
+
+    /// Handle mouse button press — start selection if in conversation area.
+    fn handle_mouse_down(&mut self, col: u16, row: u16) {
+        // Don't start selection during modal overlays
+        if self.approval_controller.active()
+            || self.ask_user_controller.active()
+            || self.plan_approval_controller.active()
+            || self
+                .model_picker_controller
+                .as_ref()
+                .is_some_and(|p| p.active())
+            || self.state.task_watcher_open
+            || self.state.debug_panel_open
+        {
+            return;
+        }
+
+        if self.state.selection.is_in_conversation_area(col, row) {
+            self.state.selection.start(col, row);
+        } else {
+            self.state.selection.clear();
+        }
+    }
+
+    /// Handle mouse drag — extend selection, set auto-scroll direction.
+    fn handle_mouse_drag(&mut self, col: u16, row: u16) {
+        if !self.state.selection.active {
+            return;
+        }
+        self.state.selection.extend(col, row);
+    }
+
+    /// Handle mouse button release — finalize selection and copy to clipboard.
+    fn handle_mouse_up(&mut self, col: u16, row: u16) {
+        if !self.state.selection.active {
+            return;
+        }
+
+        // Update cursor position one last time
+        self.state.selection.extend(col, row);
+
+        if self.state.selection.finalize() {
+            // Extract and copy selected text
+            if let Some(text) = self.extract_selected_text() {
+                self.copy_to_clipboard(&text);
+            }
+        }
+    }
+
+    /// Extract plain text from the selected range of cached lines.
+    fn extract_selected_text(&self) -> Option<String> {
+        let range = self.state.selection.range?;
+        let (start, end) = range.ordered();
+        let lines = &self.state.cached_lines;
+
+        if lines.is_empty() || start.line_index >= lines.len() {
+            return None;
+        }
+
+        let end_line = end.line_index.min(lines.len().saturating_sub(1));
+        let mut result = String::new();
+
+        for (i, line) in lines[start.line_index..=end_line].iter().enumerate() {
+            let line_idx = start.line_index + i;
+            if i > 0 {
+                result.push('\n');
+            }
+
+            // Collect the full text of this line from spans
+            let full_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+
+            let col_start = if line_idx == start.line_index {
+                start.char_offset
+            } else {
+                0
+            };
+            let col_end = if line_idx == end.line_index {
+                end.char_offset
+            } else {
+                full_text.len()
+            };
+
+            // Clamp to actual line length (char boundary safe)
+            let clamped_start = col_start.min(full_text.len());
+            let clamped_end = col_end.min(full_text.len());
+            if clamped_start < clamped_end {
+                // Find char boundaries
+                let byte_start = full_text
+                    .char_indices()
+                    .nth(clamped_start)
+                    .map(|(i, _)| i)
+                    .unwrap_or(full_text.len());
+                let byte_end = full_text
+                    .char_indices()
+                    .nth(clamped_end)
+                    .map(|(i, _)| i)
+                    .unwrap_or(full_text.len());
+                result.push_str(&full_text[byte_start..byte_end]);
+            }
+        }
+
+        if result.is_empty() {
+            None
+        } else {
+            Some(result)
+        }
+    }
+
+    /// Copy text to the system clipboard.
+    fn copy_to_clipboard(&mut self, text: &str) {
+        match arboard::Clipboard::new() {
+            Ok(mut clipboard) => {
+                if let Err(e) = clipboard.set_text(text) {
+                    tracing::warn!("Failed to copy to clipboard: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to access clipboard: {e}");
+            }
         }
     }
 }

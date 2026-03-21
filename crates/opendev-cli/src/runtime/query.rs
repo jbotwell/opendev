@@ -175,6 +175,14 @@ impl AgentRuntime {
             )
             .await?;
 
+        // For backgrounded results, return immediately without saving messages.
+        // The synthetic assistant message is added by the caller (tui_runner) AFTER
+        // forking the session, so the background runtime gets a clean session without
+        // the synthetic message that could confuse it.
+        if result.backgrounded {
+            return Ok(result);
+        }
+
         // Step 7b: Snapshot workspace state after the react loop and compute file changes
         if let Some(ref pre_hash) = pre_snapshot
             && let Ok(mut mgr) = self.snapshot_manager.lock()

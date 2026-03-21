@@ -22,7 +22,7 @@ IMPORTANT: If your next step involves reading or searching multiple files to und
 
 The thinking trace above is your INTERNAL reasoning — treat it as your private thought process, not as a task report. Use it to guide your next action:
 - If the trace identifies a tool call or code change, perform that step.
-- If the trace concludes a conversational response is appropriate, respond naturally to the user. Put your actual reply in the task_complete result — write it as a direct response to the user, not a third-person summary.
+- If the trace concludes a conversational response is appropriate, respond naturally to the user with text — no need to call task_complete.
 Stay aligned with the trace's conclusions but express yourself naturally.
 
 --- subagent_complete_signal ---

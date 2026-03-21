@@ -124,6 +124,8 @@ pub struct LlmResponse {
     pub usage: Option<Value>,
     /// Native reasoning content (from models like o1).
     pub reasoning_content: Option<String>,
+    /// Finish reason from the API (e.g. "stop", "length", "tool_calls").
+    pub finish_reason: Option<String>,
 }
 
 impl LlmResponse {
@@ -141,6 +143,7 @@ impl LlmResponse {
             interrupted: false,
             usage: None,
             reasoning_content: None,
+            finish_reason: None,
         }
     }
 
@@ -155,6 +158,7 @@ impl LlmResponse {
             interrupted: false,
             usage: None,
             reasoning_content: None,
+            finish_reason: None,
         }
     }
 
@@ -169,6 +173,7 @@ impl LlmResponse {
             interrupted: true,
             usage: None,
             reasoning_content: None,
+            finish_reason: None,
         }
     }
 }
@@ -378,6 +383,19 @@ mod tests {
         assert!(monitor.is_background_requested());
         // Background should NOT trigger should_interrupt
         assert!(!monitor.should_interrupt());
+    }
+
+    #[test]
+    fn test_llm_response_constructors_finish_reason_none() {
+        let msg = serde_json::json!({"role": "assistant", "content": "hi"});
+        let ok = LlmResponse::ok(Some("hi".into()), msg);
+        assert!(ok.finish_reason.is_none());
+
+        let fail = LlmResponse::fail("err");
+        assert!(fail.finish_reason.is_none());
+
+        let interrupted = LlmResponse::interrupted();
+        assert!(interrupted.finish_reason.is_none());
     }
 
     #[test]

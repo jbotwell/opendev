@@ -48,6 +48,8 @@ pub struct BackgroundAgentTask {
     pub cost_usd: f64,
     /// Current tool being executed (for progress display).
     pub current_tool: Option<String>,
+    /// Rolling log of tool call activity (for panel display).
+    pub activity_log: Vec<String>,
 }
 
 impl BackgroundAgentTask {
@@ -100,6 +102,7 @@ impl BackgroundAgentManager {
                 tool_call_count: 0,
                 cost_usd: 0.0,
                 current_tool: None,
+                activity_log: Vec::new(),
             },
         );
     }
@@ -130,6 +133,27 @@ impl BackgroundAgentManager {
         if let Some(task) = self.tasks.get_mut(task_id) {
             task.current_tool = Some(tool_name);
             task.tool_call_count = tool_count;
+        }
+    }
+
+    /// Append an activity line to a task's log (capped at 50 entries).
+    /// Reasoning lines (\u{27e1} prefix) are coalesced — the last one is replaced
+    /// instead of pushing a new entry, preventing word-per-line spam from streaming tokens.
+    pub fn push_activity(&mut self, task_id: &str, line: String) {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            if line.starts_with('\u{27e1}')
+                && task
+                    .activity_log
+                    .last()
+                    .is_some_and(|l| l.starts_with('\u{27e1}'))
+            {
+                *task.activity_log.last_mut().unwrap() = line;
+                return;
+            }
+            if task.activity_log.len() >= 50 {
+                task.activity_log.remove(0);
+            }
+            task.activity_log.push(line);
         }
     }
 

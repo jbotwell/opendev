@@ -5,13 +5,17 @@
 //! the UI.
 
 use std::io;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
+use chrono::Utc;
 use opendev_agents::traits::AgentEventCallback;
 use opendev_history::SessionManager;
+use opendev_models::message::{ChatMessage, Role};
 use opendev_runtime::InterruptToken;
 use opendev_tui::app::AppState;
 use opendev_tui::{App, AppEvent};
@@ -76,6 +80,59 @@ impl AgentEventCallback for TuiEventCallback {
             deletions,
         });
     }
+}
+
+/// Event callback for background agent tasks.
+///
+/// Only emits `BackgroundAgentProgress` events — all other methods are no-ops
+/// to prevent background tool events from leaking into the foreground display.
+struct BackgroundEventCallback {
+    tx: mpsc::UnboundedSender<AppEvent>,
+    task_id: String,
+    tool_count: Arc<AtomicUsize>,
+}
+
+impl AgentEventCallback for BackgroundEventCallback {
+    fn on_tool_started(
+        &self,
+        _tool_id: &str,
+        tool_name: &str,
+        _args: &std::collections::HashMap<String, serde_json::Value>,
+    ) {
+        let count = self.tool_count.fetch_add(1, Ordering::Relaxed) + 1;
+        let _ = self.tx.send(AppEvent::BackgroundAgentProgress {
+            task_id: self.task_id.clone(),
+            tool_name: tool_name.to_string(),
+            tool_count: count,
+        });
+        let _ = self.tx.send(AppEvent::BackgroundAgentActivity {
+            task_id: self.task_id.clone(),
+            line: format!("\u{25b8} {tool_name}"),
+        });
+    }
+
+    fn on_tool_finished(&self, _tool_id: &str, _success: bool) {}
+
+    fn on_tool_result(&self, _tool_id: &str, tool_name: &str, _output: &str, success: bool) {
+        let icon = if success { "\u{2713}" } else { "\u{2717}" };
+        let _ = self.tx.send(AppEvent::BackgroundAgentActivity {
+            task_id: self.task_id.clone(),
+            line: format!("  \u{23bf} {icon} {tool_name}"),
+        });
+    }
+
+    fn on_agent_chunk(&self, _text: &str) {}
+
+    fn on_reasoning(&self, content: &str) {
+        let truncated: String = content.chars().take(80).collect();
+        let _ = self.tx.send(AppEvent::BackgroundAgentActivity {
+            task_id: self.task_id.clone(),
+            line: format!("\u{27e1} {truncated}"),
+        });
+    }
+
+    fn on_context_usage(&self, _pct: f64) {}
+    fn on_file_changed(&self, _files: usize, _additions: u64, _deletions: u64) {}
 }
 
 /// Bridges the TUI event loop with the AgentRuntime.
@@ -408,6 +465,11 @@ impl TuiRunner {
                         );
                         let query_summary: String = msg.chars().take(60).collect();
 
+                        // Save session to disk before forking — run_query skips save for backgrounded results
+                        if let Err(e) = runtime.session_manager.save_current() {
+                            warn!("Failed to save session before background fork: {e}");
+                        }
+
                         // Fork session for background task
                         let forked_sm = if let Some(session) =
                             runtime.session_manager.current_session()
@@ -440,6 +502,154 @@ impl TuiRunner {
                             None
                         };
 
+                        let mut nudge_content: Option<String> = None;
+
+                        // Save actual tool_call messages to FOREGROUND session
+                        // (after fork, so the background runtime gets a clean session)
+                        // This gives the LLM structural evidence (assistant tool_calls +
+                        // tool results) that spawn_subagent was already called, preventing
+                        // it from re-spawning the same agents on the next user message.
+                        {
+                            // Extract trailing assistant/tool block from result.messages
+                            let new_start = result
+                                .messages
+                                .iter()
+                                .rposition(|m| {
+                                    let role = m.get("role").and_then(|r| r.as_str()).unwrap_or("");
+                                    role != "assistant" && role != "tool"
+                                })
+                                .map(|i| i + 1)
+                                .unwrap_or(0);
+                            let new_values = &result.messages[new_start..];
+
+                            if !new_values.is_empty() {
+                                let new_chat_messages =
+                                    opendev_history::message_convert::api_values_to_chatmessages(
+                                        new_values,
+                                    );
+                                for chat_msg in new_chat_messages {
+                                    runtime.session_manager.add_message(chat_msg);
+                                }
+
+                                // Extract task descriptions for nudge prompt
+                                let task_descs: Vec<String> = new_values
+                                    .iter()
+                                    .filter(|m| {
+                                        m.get("role").and_then(|r| r.as_str()) == Some("tool")
+                                            && m.get("name").and_then(|n| n.as_str())
+                                                == Some("spawn_subagent")
+                                    })
+                                    .filter_map(|m| {
+                                        m.get("content").and_then(|c| c.as_str()).map(String::from)
+                                    })
+                                    .collect();
+
+                                if !task_descs.is_empty() {
+                                    // Build minimal messages for nudge
+                                    let nudge_messages = vec![
+                                        serde_json::json!({
+                                            "role": "system",
+                                            "content": "You just delegated tasks to background agents. \
+                                                        Write a brief, natural 1-2 sentence acknowledgment \
+                                                        of what you delegated. Be concise. Do not use \
+                                                        markdown. Do not use bullet points."
+                                        }),
+                                        serde_json::json!({
+                                            "role": "user",
+                                            "content": format!(
+                                                "Original request: {msg}\n\n\
+                                                 Delegated {} agents. Tool results:\n{}",
+                                                task_descs.len(),
+                                                task_descs.join("\n")
+                                            )
+                                        }),
+                                    ];
+
+                                    // Build payload — no tools, no reasoning (speed)
+                                    let mut payload = runtime
+                                        .llm_caller
+                                        .build_action_payload(&nudge_messages, &[]);
+                                    if let Some(obj) = payload.as_object_mut() {
+                                        obj.remove("tool_choice");
+                                        obj.remove("tools");
+                                        obj.remove("_reasoning_effort");
+                                        obj.insert(
+                                            "max_tokens".to_string(),
+                                            serde_json::json!(150),
+                                        );
+                                    }
+
+                                    match runtime.http_client.post_json(&payload, None).await {
+                                        Ok(http_result) if http_result.success => {
+                                            if let Some(body) = http_result.body {
+                                                let response =
+                                                    runtime.llm_caller.parse_action_response(&body);
+
+                                                // Track cost
+                                                if let Some(ref usage_json) = response.usage {
+                                                    let token_usage =
+                                                        opendev_runtime::TokenUsage::from_json(
+                                                            usage_json,
+                                                        );
+                                                    if let Ok(mut tracker) =
+                                                        runtime.cost_tracker.lock()
+                                                    {
+                                                        tracker.record_usage(&token_usage, None);
+                                                    }
+                                                }
+
+                                                if let Some(content) = response.content {
+                                                    // Save to session
+                                                    runtime.session_manager.add_message(
+                                                        ChatMessage {
+                                                            role: Role::Assistant,
+                                                            content: content.clone(),
+                                                            timestamp: Utc::now(),
+                                                            metadata:
+                                                                std::collections::HashMap::new(),
+                                                            tool_calls: Vec::new(),
+                                                            tokens: None,
+                                                            thinking_trace: None,
+                                                            reasoning_content: None,
+                                                            token_usage: None,
+                                                            provenance: None,
+                                                        },
+                                                    );
+
+                                                    // Defer emission until after AgentBackgrounded
+                                                    nudge_content = Some(content);
+                                                }
+                                            }
+                                        }
+                                        Ok(_) | Err(_) => {
+                                            warn!("Background nudge LLM call failed, skipping");
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Fallback: no tool calls were made (e.g., backgrounded during LLM call)
+                                runtime.session_manager.add_message(ChatMessage {
+                                    role: Role::Assistant,
+                                    content: format!(
+                                        "The task was moved to a background agent which is \
+                                         continuing the work independently.\n\
+                                         Original request: {msg}"
+                                    ),
+                                    timestamp: Utc::now(),
+                                    metadata: std::collections::HashMap::new(),
+                                    tool_calls: Vec::new(),
+                                    tokens: None,
+                                    thinking_trace: None,
+                                    reasoning_content: None,
+                                    token_usage: None,
+                                    provenance: None,
+                                });
+                            }
+                            if let Err(e) = runtime.session_manager.save_current() {
+                                warn!("Failed to save foreground session after backgrounding: {e}");
+                            }
+                        }
+
                         if let Some(bg_session_manager) = forked_sm {
                             let session_id = bg_session_manager
                                 .current_session()
@@ -464,9 +674,20 @@ impl TuiRunner {
                                         query_summary: query_summary.clone(),
                                     });
 
+                                    // Emit nudge AFTER AgentBackgrounded so it renders below "Sent to background"
+                                    if let Some(content) = nudge_content.take() {
+                                        let _ =
+                                            event_tx.send(AppEvent::BackgroundNudge { content });
+                                    }
+
                                     // Spawn background task
                                     tokio::spawn(async move {
-                                        let bg_callback = TuiEventCallback { tx: bg_tx.clone() };
+                                        let tool_count = Arc::new(AtomicUsize::new(0));
+                                        let bg_callback = BackgroundEventCallback {
+                                            tx: bg_tx.clone(),
+                                            task_id: bg_task_id.clone(),
+                                            tool_count: tool_count.clone(),
+                                        };
 
                                         let result = bg_runtime
                                             .run_query(
@@ -478,20 +699,32 @@ impl TuiRunner {
                                             .await;
 
                                         let cost_usd = bg_runtime.total_cost_usd();
+                                        let final_tool_count = tool_count.load(Ordering::Relaxed);
 
                                         match result {
                                             Ok(r) => {
+                                                // Cap full_result at 4000 chars
+                                                let full_result = if r.content.len() > 4000 {
+                                                    format!(
+                                                        "{}… [truncated, full result in session]",
+                                                        &r.content[..4000]
+                                                    )
+                                                } else {
+                                                    r.content.clone()
+                                                };
+                                                let result_summary = if r.content.len() > 200 {
+                                                    format!("{}...", &r.content[..200])
+                                                } else {
+                                                    r.content
+                                                };
                                                 let _ = bg_tx.send(
                                                     AppEvent::BackgroundAgentCompleted {
                                                         task_id: bg_task_id,
                                                         success: r.success,
-                                                        result_summary: if r.content.len() > 200 {
-                                                            format!("{}...", &r.content[..200])
-                                                        } else {
-                                                            r.content
-                                                        },
+                                                        result_summary,
+                                                        full_result,
                                                         cost_usd,
-                                                        tool_call_count: 0, // approximate
+                                                        tool_call_count: final_tool_count,
                                                     },
                                                 );
                                             }
@@ -501,8 +734,9 @@ impl TuiRunner {
                                                         task_id: bg_task_id,
                                                         success: false,
                                                         result_summary: e.to_string(),
+                                                        full_result: e.to_string(),
                                                         cost_usd,
-                                                        tool_call_count: 0,
+                                                        tool_call_count: final_tool_count,
                                                     },
                                                 );
                                             }
@@ -550,6 +784,11 @@ impl TuiRunner {
                             && let Some(hash) = mgr.track()
                         {
                             let _ = event_tx.send(AppEvent::SnapshotTaken { hash });
+                        }
+
+                        // Surface session title to TUI
+                        if let Some(title) = runtime.session_manager.get_metadata("title") {
+                            let _ = event_tx.send(AppEvent::SessionTitleUpdated(title));
                         }
 
                         if result.interrupted {

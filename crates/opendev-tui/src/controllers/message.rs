@@ -140,6 +140,24 @@ mod tests {
     }
 
     #[test]
+    fn test_agent_chunk_after_reasoning_creates_new_message() {
+        let controller = MessageController::new();
+        let mut state = AppState::default();
+        // Simulate reasoning arriving first
+        state.messages.push(DisplayMessage {
+            role: DisplayRole::Reasoning,
+            content: "thinking...".to_string(),
+            tool_call: None,
+            collapsed: false,
+        });
+        // Then agent chunk arrives — should create a NEW assistant message
+        controller.handle_agent_chunk(&mut state, "Hello");
+        assert_eq!(state.messages.len(), 2);
+        assert_eq!(state.messages[1].role, DisplayRole::Assistant);
+        assert_eq!(state.messages[1].content, "Hello");
+    }
+
+    #[test]
     fn test_agent_message() {
         use chrono::Utc;
         use std::collections::HashMap;

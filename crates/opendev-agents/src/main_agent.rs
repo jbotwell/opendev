@@ -329,6 +329,10 @@ impl BaseAgent for MainAgent {
         };
 
         if http_result.interrupted {
+            // Background request also cancels the token — distinguish from hard interrupt
+            if task_monitor.is_some_and(|m| m.is_background_requested()) {
+                info!("Background requested during LLM call in MainAgent");
+            }
             return LlmResponse::interrupted();
         }
 

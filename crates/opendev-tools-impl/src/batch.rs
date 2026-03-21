@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 const MAX_BATCH_SIZE: usize = 25;
 
 /// Tools that cannot be called from within a batch (prevent recursion).
-const DISALLOWED_TOOLS: &[&str] = &["batch_tool", "task_complete"];
+const DISALLOWED_TOOLS: &[&str] = &["batch_tool", "task_complete", "spawn_subagent"];
 
 /// Tool for batch-executing multiple tool invocations in parallel.
 #[derive(Debug)]
@@ -87,7 +87,8 @@ impl BaseTool for BatchTool {
         Some(format!(
             "Invalid parameters for tool 'batch_tool':\n{}\n\n\
              Expected format:\n\
-             {{\"invocations\": [{{\"tool\": \"tool_name\", \"input\": {{...}}}}, ...]}}",
+             {{\"invocations\": [{{\"tool\": \"tool_name\", \"input\": {{...}}}}, ...]}}\n\n\
+             Also accepts 'name' for 'tool', and 'arguments'/'parameters' for 'input'.",
             details.join("\n")
         ))
     }
@@ -111,8 +112,12 @@ impl BaseTool for BatchTool {
         let mut errors: Vec<String> = Vec::new();
 
         for (i, inv) in invocations.iter().enumerate() {
-            let tool_name = match inv.get("tool").and_then(|v| v.as_str()) {
-                Some(name) => name.to_string(),
+            let tool_name = match inv
+                .get("tool")
+                .or_else(|| inv.get("name"))
+                .and_then(|v| v.as_str())
+            {
+                Some(name) => name.strip_prefix("functions.").unwrap_or(name).to_string(),
                 None => {
                     errors.push(format!("[{i}] missing 'tool' field"));
                     continue;
@@ -121,7 +126,15 @@ impl BaseTool for BatchTool {
 
             // Block disallowed tools
             if DISALLOWED_TOOLS.contains(&tool_name.as_str()) {
-                errors.push(format!("[{i}] tool '{tool_name}' cannot be used in batch"));
+                if tool_name == "spawn_subagent" {
+                    errors.push(format!(
+                        "[{i}] tool 'spawn_subagent' cannot be used in batch_tool. \
+                         Instead, call spawn_subagent directly — multiple spawn_subagent \
+                         tool calls in the same response will automatically run in parallel"
+                    ));
+                } else {
+                    errors.push(format!("[{i}] tool '{tool_name}' cannot be used in batch"));
+                }
                 continue;
             }
 
@@ -133,9 +146,30 @@ impl BaseTool for BatchTool {
 
             let tool_input: HashMap<String, serde_json::Value> = inv
                 .get("input")
-                .and_then(|v| v.as_object())
-                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-                .unwrap_or_default();
+                .or_else(|| inv.get("arguments"))
+                .or_else(|| inv.get("parameters"))
+                .and_then(|v| {
+                    if let Some(s) = v.as_str() {
+                        // Handle OpenAI format where arguments is a JSON string
+                        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(s).ok()
+                    } else {
+                        v.as_object().cloned()
+                    }
+                })
+                .map(|obj| obj.into_iter().collect())
+                .unwrap_or_else(|| {
+                    // Fallback: extract all keys except tool/name as params.
+                    // Handles LLMs that put params directly in the invocation object
+                    // without an `input` wrapper.
+                    inv.as_object()
+                        .map(|obj| {
+                            obj.iter()
+                                .filter(|(k, _)| !matches!(k.as_str(), "tool" | "name"))
+                                .map(|(k, v)| (k.clone(), v.clone()))
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                });
 
             parsed.push((i, tool_name, tool_input));
         }
@@ -535,6 +569,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_batch_strips_functions_prefix() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "functions.echo", "input": {"message": "prefixed"}}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded, 0 failed"));
+        assert!(output.contains("prefixed"));
+    }
+
+    #[tokio::test]
     async fn test_batch_default_empty_input() {
         let registry = make_registry_with_tools();
         let tool = BatchTool::new(registry);
@@ -549,5 +601,186 @@ mod tests {
         let result = tool.execute(args, &ctx).await;
         assert!(result.success);
         assert!(result.output.unwrap().contains("1 succeeded"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_blocks_spawn_subagent() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "spawn_subagent", "input": {"task": "explore"}}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(!result.success);
+        assert!(result.error.unwrap().contains("cannot be used in batch"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_accepts_name_field() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"name": "echo", "input": {"message": "via name"}}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded"));
+        assert!(output.contains("via name"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_accepts_arguments_field() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "echo", "arguments": {"message": "via arguments"}}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded"));
+        assert!(output.contains("via arguments"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_accepts_parameters_field() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "echo", "parameters": {"message": "via parameters"}}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded"));
+        assert!(output.contains("via parameters"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_accepts_arguments_as_json_string() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "echo", "arguments": "{\"message\": \"json string\"}"}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded"));
+        assert!(output.contains("json string"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_flat_params_fallback() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        // No "input" wrapper — params are directly in the invocation object
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "echo", "message": "hello"}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded, 0 failed"));
+        assert!(output.contains("hello"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_flat_params_with_multiple_keys() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "echo", "message": "hello", "extra": "data"}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded"));
+        assert!(output.contains("hello"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_flat_params_ignores_tool_and_name_keys() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "echo", "name": "functions.echo", "message": "hello"}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded"));
+        assert!(output.contains("hello"));
+        // "tool" and "name" should not leak into the params
+        assert!(!output.contains("functions.echo"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_prefers_input_over_flat() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"tool": "echo", "input": {"message": "from_input"}, "message": "from_flat"}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("from_input"));
+        assert!(!output.contains("from_flat"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_name_with_prefix_and_arguments() {
+        let registry = make_registry_with_tools();
+        let tool = BatchTool::new(registry);
+        let ctx = ToolContext::new("/tmp");
+        let args = make_args(&[(
+            "invocations",
+            serde_json::json!([
+                {"name": "functions.echo", "arguments": {"message": "combo"}}
+            ]),
+        )]);
+        let result = tool.execute(args, &ctx).await;
+        assert!(result.success);
+        let output = result.output.unwrap();
+        assert!(output.contains("1 succeeded"));
+        assert!(output.contains("combo"));
     }
 }

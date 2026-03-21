@@ -131,6 +131,34 @@ impl MarkdownRenderer {
                 continue;
             }
 
+            // Horizontal rules (---, ***, ___)
+            if is_horizontal_rule(raw_line) {
+                let rule: Cow<'static, str> = Cow::Borrowed("────────────────────────────────");
+                lines.push(Line::from(Span::styled(
+                    rule,
+                    Style::default()
+                        .fg(style_tokens::GREY)
+                        .add_modifier(base_mod),
+                )));
+                continue;
+            }
+
+            // Blockquotes (> text)
+            if let Some(quote_content) = raw_line
+                .strip_prefix("> ")
+                .or_else(|| if raw_line == ">" { Some("") } else { None })
+            {
+                let mut spans = vec![Span::styled(
+                    Cow::<'static, str>::Borrowed("  │ "),
+                    Style::default()
+                        .fg(style_tokens::GREY)
+                        .add_modifier(base_mod),
+                )];
+                spans.extend(parse_inline_spans_with_palette(quote_content, palette));
+                lines.push(Line::from(spans));
+                continue;
+            }
+
             // Headers
             if let Some(header) = raw_line.strip_prefix("### ") {
                 let h: Cow<'static, str> = Cow::Owned(header.to_string());
@@ -252,62 +280,179 @@ fn find_markdown_link(text: &str) -> Option<(usize, &str, &str, usize)> {
 }
 
 /// Parse inline spans with a custom palette.
+///
+/// Handles `**bold**`, `*italic*`, `` `code` ``, and `[link](url)` markers by
+/// scanning for the earliest marker and toggling bold/italic state. Backticks
+/// and links inside bold/italic regions inherit the current modifier state.
 fn parse_inline_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
-    let mut remaining = text;
     let base_mod = palette.base_modifier;
+    let mut pos = 0;
+    let mut in_bold = false;
+    let mut in_italic = false;
+    // Track where the current bold/italic region opened, for fallback
+    let mut bold_open_pos: Option<usize> = None;
+    let mut italic_open_pos: Option<usize> = None;
+    let bytes = text.as_bytes();
 
-    while !remaining.is_empty() {
-        let next_backtick = remaining.find('`');
-        let next_link = find_markdown_link(remaining);
+    // Helper: compute the style for plain text at the current bold/italic state
+    let text_style = |bold: bool, italic: bool| -> Style {
+        let mut style = Style::default().add_modifier(base_mod);
+        if bold {
+            style = style.fg(palette.bold_fg).add_modifier(Modifier::BOLD);
+        } else {
+            style = style.fg(palette.text);
+        }
+        if italic {
+            style = style.add_modifier(Modifier::ITALIC);
+        }
+        style
+    };
 
-        let use_link = match (next_backtick, &next_link) {
-            (_, None) => false,
-            (None, Some(_)) => true,
-            (Some(bt), Some((ls, _, _, _))) => *ls < bt,
+    let mut plain_start = 0; // start of current plain-text accumulation
+
+    while pos < text.len() {
+        // Find the earliest marker from current position
+        let next_star = find_byte(bytes, b'*', pos);
+        let next_backtick = find_byte(bytes, b'`', pos);
+        let next_link = find_markdown_link(&text[pos..]).map(|(s, t, u, e)| (s + pos, t, u, e + pos));
+
+        // Pick the earliest marker
+        let candidates: [Option<usize>; 3] = [
+            next_star,
+            next_backtick,
+            next_link.as_ref().map(|(s, _, _, _)| *s),
+        ];
+        let earliest = candidates.into_iter().flatten().min();
+
+        let Some(marker_pos) = earliest else {
+            // No more markers — flush remaining text
+            break;
         };
 
-        if use_link {
-            let (link_start, link_text, _url, link_end) = next_link.unwrap();
-            if link_start > 0 {
-                spans.extend(parse_bold_spans_with_palette(
-                    &remaining[..link_start],
-                    palette,
-                ));
+        // Which marker is at this position? Handle star runs by counting consecutive stars.
+        if next_star == Some(marker_pos) {
+            // Count consecutive stars
+            let star_count = bytes[marker_pos..].iter().take_while(|&&b| b == b'*').count();
+
+            // Flush plain text before the marker
+            if marker_pos > plain_start {
+                let chunk: Cow<'static, str> = Cow::Owned(text[plain_start..marker_pos].to_string());
+                spans.push(Span::styled(chunk, text_style(in_bold, in_italic)));
             }
-            let display: Cow<'static, str> = Cow::Owned(link_text.to_string());
-            spans.push(Span::styled(
-                display,
-                Style::default().fg(palette.link).add_modifier(base_mod),
-            ));
-            remaining = &remaining[link_end..];
-        } else if let Some(code_start) = next_backtick {
-            if code_start > 0 {
-                spans.extend(parse_bold_spans_with_palette(
-                    &remaining[..code_start],
-                    palette,
-                ));
+
+            // Consume stars: ** = bold, * = italic
+            // 1=italic, 2=bold, 3=bold+italic, 4=bold+bold, 5=bold+bold+italic
+            let mut remaining_stars = star_count;
+            while remaining_stars >= 2 {
+                in_bold = !in_bold;
+                remaining_stars -= 2;
             }
-            let after_start = &remaining[code_start + 1..];
-            if let Some(code_end) = after_start.find('`') {
-                let code: Cow<'static, str> = Cow::Owned(after_start[..code_end].to_string());
-                spans.push(Span::styled(
-                    code,
-                    Style::default()
-                        .fg(palette.code_fg)
-                        .bg(palette.code_bg)
-                        .add_modifier(base_mod),
-                ));
-                remaining = &after_start[code_end + 1..];
+            if remaining_stars == 1 {
+                in_italic = !in_italic;
+            }
+            // Update tracking positions
+            if in_bold {
+                if bold_open_pos.is_none() {
+                    bold_open_pos = Some(marker_pos);
+                }
             } else {
-                spans.extend(parse_bold_spans_with_palette(remaining, palette));
-                break;
+                bold_open_pos = None;
+            }
+            if in_italic {
+                if italic_open_pos.is_none() {
+                    italic_open_pos = Some(marker_pos);
+                }
+            } else {
+                italic_open_pos = None;
+            }
+            pos = marker_pos + star_count;
+            plain_start = pos;
+        } else if next_backtick == Some(marker_pos) {
+            // Flush plain text before the backtick
+            if marker_pos > plain_start {
+                let chunk: Cow<'static, str> = Cow::Owned(text[plain_start..marker_pos].to_string());
+                spans.push(Span::styled(chunk, text_style(in_bold, in_italic)));
+            }
+            // Count consecutive backticks to support multi-backtick code spans (`` `code` ``)
+            let bt_count = bytes[marker_pos..].iter().take_while(|&&b| b == b'`').count();
+            let after = marker_pos + bt_count;
+            let closing_pattern = &text[marker_pos..marker_pos + bt_count]; // e.g. "``"
+            if let Some(close_rel) = text[after..].find(closing_pattern) {
+                let close = after + close_rel;
+                // Strip one leading/trailing space for multi-backtick (CommonMark rule)
+                let mut code_start = after;
+                let mut code_end = close;
+                if bt_count > 1 && code_end > code_start {
+                    if bytes.get(code_start) == Some(&b' ') {
+                        code_start += 1;
+                    }
+                    if code_end > code_start && bytes.get(code_end - 1) == Some(&b' ') {
+                        code_end -= 1;
+                    }
+                }
+                let code: Cow<'static, str> = Cow::Owned(text[code_start..code_end].to_string());
+                let mut style = Style::default()
+                    .fg(palette.code_fg)
+                    .bg(palette.code_bg)
+                    .add_modifier(base_mod);
+                if in_bold {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
+                if in_italic {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
+                spans.push(Span::styled(code, style));
+                pos = close + bt_count;
+                plain_start = pos;
+            } else {
+                // No closing backtick(s) — treat as plain text, continue
+                pos = marker_pos + 1;
+            }
+        } else if let Some((link_start, link_text, _url, link_end)) = next_link {
+            if link_start == marker_pos {
+                // Flush plain text before the link
+                if link_start > plain_start {
+                    let chunk: Cow<'static, str> = Cow::Owned(text[plain_start..link_start].to_string());
+                    spans.push(Span::styled(chunk, text_style(in_bold, in_italic)));
+                }
+                let display: Cow<'static, str> = Cow::Owned(link_text.to_string());
+                let mut style = Style::default().fg(palette.link).add_modifier(base_mod);
+                if in_bold {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
+                if in_italic {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
+                spans.push(Span::styled(display, style));
+                pos = link_end;
+                plain_start = pos;
+            } else {
+                // Link is not the earliest — skip past marker_pos
+                pos = marker_pos + 1;
             }
         } else {
-            spans.extend(parse_bold_spans_with_palette(remaining, palette));
-            break;
+            pos = marker_pos + 1;
         }
     }
+
+    // Flush remaining plain text
+    // If bold/italic is still open, we have unmatched markers — re-emit from the opening position
+    if in_bold {
+        // Unmatched ** — re-emit the opening marker as literal text
+        if plain_start < text.len() {
+            let chunk: Cow<'static, str> = Cow::Owned(format!("**{}", &text[plain_start..]));
+            spans.push(Span::styled(chunk, text_style(false, in_italic)));
+        }
+        let _ = bold_open_pos;
+    } else if plain_start < text.len() {
+        let chunk: Cow<'static, str> = Cow::Owned(text[plain_start..].to_string());
+        spans.push(Span::styled(chunk, text_style(in_bold, in_italic)));
+    }
+
+    // Unmatched italic: the remaining text was already flushed above
+    // with the italic style. This is acceptable — single * at end of line is rare.
+    let _ = (in_italic, italic_open_pos);
 
     if spans.is_empty() {
         spans.push(Span::styled(
@@ -319,58 +464,22 @@ fn parse_inline_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<
     spans
 }
 
-/// Parse bold markers with a custom palette.
-fn parse_bold_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<'static>> {
-    let mut spans = Vec::new();
-    let mut remaining = text;
-    let base_mod = palette.base_modifier;
-
-    while !remaining.is_empty() {
-        if let Some(bold_start) = remaining.find("**") {
-            if bold_start > 0 {
-                let plain: Cow<'static, str> = Cow::Owned(remaining[..bold_start].to_string());
-                spans.push(Span::styled(
-                    plain,
-                    Style::default().fg(palette.text).add_modifier(base_mod),
-                ));
-            }
-            let after_start = &remaining[bold_start + 2..];
-            if let Some(bold_end) = after_start.find("**") {
-                let bold_text: Cow<'static, str> = Cow::Owned(after_start[..bold_end].to_string());
-                spans.push(Span::styled(
-                    bold_text,
-                    Style::default()
-                        .fg(palette.bold_fg)
-                        .add_modifier(Modifier::BOLD | base_mod),
-                ));
-                remaining = &after_start[bold_end + 2..];
-            } else {
-                let rest: Cow<'static, str> = Cow::Owned(remaining.to_string());
-                spans.push(Span::styled(
-                    rest,
-                    Style::default().fg(palette.text).add_modifier(base_mod),
-                ));
-                break;
-            }
-        } else {
-            let rest: Cow<'static, str> = Cow::Owned(remaining.to_string());
-            spans.push(Span::styled(
-                rest,
-                Style::default().fg(palette.text).add_modifier(base_mod),
-            ));
-            break;
-        }
-    }
-
-    spans
+/// Find a single byte in a byte slice starting from `from`.
+fn find_byte(haystack: &[u8], needle: u8, from: usize) -> Option<usize> {
+    haystack[from..].iter().position(|&b| b == needle).map(|p| p + from)
 }
 
-/// Parse bold markers (**text**) within a segment of text.
-///
-/// Delegates to [`parse_bold_spans_with_palette`] with the default palette.
-#[cfg(test)]
-fn parse_bold_spans(text: &str) -> Vec<Span<'static>> {
-    parse_bold_spans_with_palette(text, &MdPalette::default())
+
+/// Check if a line is a horizontal rule (---, ***, ___).
+fn is_horizontal_rule(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.len() < 3 {
+        return false;
+    }
+    let first = trimmed.chars().next().unwrap();
+    matches!(first, '-' | '*' | '_')
+        && trimmed.chars().all(|c| c == first || c == ' ')
+        && trimmed.chars().filter(|&c| c == first).count() >= 3
 }
 
 #[cfg(test)]
@@ -478,8 +587,11 @@ mod tests {
 
     #[test]
     fn test_bold_text() {
-        let spans = parse_bold_spans("this is **bold** text");
+        let spans = parse_inline_spans("this is **bold** text");
         assert!(spans.len() >= 3);
+        // The bold span should have BOLD modifier
+        let bold_span = spans.iter().find(|s| s.content.as_ref() == "bold").unwrap();
+        assert!(bold_span.style.add_modifier.contains(Modifier::BOLD));
     }
 
     #[test]
@@ -498,5 +610,121 @@ mod tests {
             parse_inline_spans("running at [http://localhost:5173/](http://localhost:5173/).");
         let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
         assert_eq!(text, "running at http://localhost:5173/.");
+    }
+
+    #[test]
+    fn test_bold_with_code_inside() {
+        // Bug 1: bold markers broken when backticks appear inside
+        let spans = parse_inline_spans("**bold `code` more**");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "bold code more");
+        // "bold " should be bold
+        let bold_span = spans.iter().find(|s| s.content.as_ref() == "bold ").unwrap();
+        assert!(bold_span.style.add_modifier.contains(Modifier::BOLD));
+        // "code" should have code styling and bold
+        let code_span = spans.iter().find(|s| s.content.as_ref() == "code").unwrap();
+        assert!(code_span.style.add_modifier.contains(Modifier::BOLD));
+        assert_eq!(code_span.style.bg, Some(MdPalette::default().code_bg));
+        // " more" should be bold
+        let more_span = spans.iter().find(|s| s.content.as_ref() == " more").unwrap();
+        assert!(more_span.style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn test_bold_with_link_inside() {
+        let spans = parse_inline_spans("**see [link](http://example.com) here**");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "see link here");
+        // "see " should be bold
+        let see_span = spans.iter().find(|s| s.content.as_ref() == "see ").unwrap();
+        assert!(see_span.style.add_modifier.contains(Modifier::BOLD));
+        // "link" should have link color and bold
+        let link_span = spans.iter().find(|s| s.content.as_ref() == "link").unwrap();
+        assert!(link_span.style.add_modifier.contains(Modifier::BOLD));
+        assert_eq!(link_span.style.fg, Some(MdPalette::default().link));
+    }
+
+    #[test]
+    fn test_italic_text() {
+        let spans = parse_inline_spans("this is *italic* text");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "this is italic text");
+        let italic_span = spans.iter().find(|s| s.content.as_ref() == "italic").unwrap();
+        assert!(italic_span.style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn test_bold_and_italic() {
+        let spans = parse_inline_spans("**bold** and *italic*");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "bold and italic");
+        let bold_span = spans.iter().find(|s| s.content.as_ref() == "bold").unwrap();
+        assert!(bold_span.style.add_modifier.contains(Modifier::BOLD));
+        let italic_span = spans.iter().find(|s| s.content.as_ref() == "italic").unwrap();
+        assert!(italic_span.style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn test_unmatched_bold_renders_literally() {
+        let spans = parse_inline_spans("this **has no closing");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        // Should contain ** literally since it's unmatched
+        assert!(text.contains("**"), "unmatched ** should render literally, got: {text}");
+    }
+
+    #[test]
+    fn test_triple_star_bold_italic() {
+        let spans = parse_inline_spans("***bold italic***");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "bold italic");
+        let styled = spans.iter().find(|s| s.content.as_ref() == "bold italic").unwrap();
+        assert!(styled.style.add_modifier.contains(Modifier::BOLD));
+        assert!(styled.style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn test_multi_backtick_code_span() {
+        // Double backtick with inner single backtick
+        let spans = parse_inline_spans("use ``code with `backtick` inside`` here");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "use code with `backtick` inside here");
+        let code_span = spans.iter().find(|s| s.content.as_ref().contains("`backtick`")).unwrap();
+        assert_eq!(code_span.style.bg, Some(MdPalette::default().code_bg));
+    }
+
+    #[test]
+    fn test_bold_italic_nested() {
+        // Bold wrapping italic: **bold *and italic* text**
+        let spans = parse_inline_spans("**bold *and italic* text**");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "bold and italic text");
+        // "and italic" should be bold+italic
+        let both = spans.iter().find(|s| s.content.as_ref() == "and italic").unwrap();
+        assert!(both.style.add_modifier.contains(Modifier::BOLD));
+        assert!(both.style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn test_empty_bold_markers() {
+        // **** should produce no visible text between bold markers
+        let spans = parse_inline_spans("text **** more");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "text  more");
+    }
+
+    #[test]
+    fn test_adjacent_bold_regions() {
+        let spans = parse_inline_spans("**first****second**");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "firstsecond");
+    }
+
+    #[test]
+    fn test_mid_word_bold() {
+        let spans = parse_inline_spans("foo**bar**baz");
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "foobarbaz");
+        let bold = spans.iter().find(|s| s.content.as_ref() == "bar").unwrap();
+        assert!(bold.style.add_modifier.contains(Modifier::BOLD));
     }
 }

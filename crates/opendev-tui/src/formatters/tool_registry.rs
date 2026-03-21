@@ -598,6 +598,26 @@ fn format_parts_inner(
         return ("AST".to_string(), pattern_display);
     }
 
+    // Special case: list_files/Glob shows pattern, optionally with path
+    if matches!(tool_name, "list_files" | "Glob") {
+        let pattern = args
+            .get("pattern")
+            .and_then(|v| v.as_str())
+            .unwrap_or("*");
+        let pattern_display = if pattern.len() > 40 {
+            format!("{}...", &pattern[..37])
+        } else {
+            pattern.to_string()
+        };
+        if let Some(path) = args.get("path").and_then(|v| v.as_str())
+            && path != "." && !path.is_empty()
+        {
+            let rel = shortener.shorten(path);
+            return ("List".to_string(), format!("{pattern_display} in {rel}"));
+        }
+        return ("List".to_string(), pattern_display);
+    }
+
     // Unknown tools: derive pretty display name from tool_name itself
     // e.g. "some_fancy_tool" → "Some Fancy Tool", "git" → "Git"
     // Must be before generic arg extraction so we use the pretty name, not "Call"
@@ -827,5 +847,41 @@ mod tests {
             format_tool_call_parts_with_wd("spawn_subagent", &args, Some("/Users/me/project"));
         assert_eq!(verb, "Explore");
         assert_eq!(arg, "Explore repo at . with focus on tests");
+    }
+
+    #[test]
+    fn test_list_files_shows_pattern() {
+        let mut args = HashMap::new();
+        args.insert(
+            "pattern".to_string(),
+            serde_json::json!("packages/*/package.json"),
+        );
+        args.insert("path".to_string(), serde_json::json!("."));
+        let (verb, arg) = format_tool_call_parts("list_files", &args);
+        assert_eq!(verb, "List");
+        assert_eq!(arg, "packages/*/package.json");
+    }
+
+    #[test]
+    fn test_list_files_shows_pattern_with_path() {
+        let mut args = HashMap::new();
+        args.insert("pattern".to_string(), serde_json::json!("**/*.ts"));
+        args.insert(
+            "path".to_string(),
+            serde_json::json!("/Users/me/project/src"),
+        );
+        let (verb, arg) =
+            format_tool_call_parts_with_wd("list_files", &args, Some("/Users/me/project"));
+        assert_eq!(verb, "List");
+        assert_eq!(arg, "**/*.ts in src");
+    }
+
+    #[test]
+    fn test_list_files_pattern_only() {
+        let mut args = HashMap::new();
+        args.insert("pattern".to_string(), serde_json::json!("**/*.rs"));
+        let (verb, arg) = format_tool_call_parts("list_files", &args);
+        assert_eq!(verb, "List");
+        assert_eq!(arg, "**/*.rs");
     }
 }

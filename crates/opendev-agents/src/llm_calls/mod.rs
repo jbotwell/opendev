@@ -128,9 +128,15 @@ impl LlmCaller {
             "Parsed action response"
         );
 
+        let finish_reason = choice
+            .get("finish_reason")
+            .and_then(|f| f.as_str())
+            .map(|s| s.to_string());
+
         let mut resp = LlmResponse::ok(cleaned_content, message.clone());
         resp.usage = body.get("usage").cloned();
         resp.reasoning_content = reasoning_content;
+        resp.finish_reason = finish_reason;
         resp
     }
 }
@@ -273,5 +279,36 @@ mod tests {
             resp.reasoning_content.as_deref(),
             Some("Let me think step by step...")
         );
+    }
+
+    #[test]
+    fn test_parse_action_response_extracts_finish_reason() {
+        let caller = make_caller();
+        let body = serde_json::json!({
+            "choices": [{"message": {"role": "assistant", "content": "partial..."}, "finish_reason": "length"}]
+        });
+        let resp = caller.parse_action_response(&body);
+        assert!(resp.success);
+        assert_eq!(resp.finish_reason.as_deref(), Some("length"));
+    }
+
+    #[test]
+    fn test_parse_action_response_finish_reason_stop() {
+        let caller = make_caller();
+        let body = serde_json::json!({
+            "choices": [{"message": {"role": "assistant", "content": "done"}, "finish_reason": "stop"}]
+        });
+        let resp = caller.parse_action_response(&body);
+        assert_eq!(resp.finish_reason.as_deref(), Some("stop"));
+    }
+
+    #[test]
+    fn test_parse_action_response_finish_reason_null() {
+        let caller = make_caller();
+        let body = serde_json::json!({
+            "choices": [{"message": {"role": "assistant", "content": "done"}, "finish_reason": null}]
+        });
+        let resp = caller.parse_action_response(&body);
+        assert!(resp.finish_reason.is_none());
     }
 }
