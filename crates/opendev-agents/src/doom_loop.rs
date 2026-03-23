@@ -13,6 +13,8 @@ use std::hash::{Hash, Hasher};
 
 use serde_json::Value;
 
+use crate::prompts::reminders::get_reminder;
+
 /// Maximum cycle length to check (1-step, 2-step, 3-step).
 const MAX_CYCLE_LEN: usize = 3;
 
@@ -93,19 +95,12 @@ impl DoomLoopDetector {
     /// - `None` -> empty `Nudge` (no-op)
     pub fn recovery_action(&self, action: &DoomLoopAction) -> RecoveryAction {
         match action {
-            DoomLoopAction::Redirect => RecoveryAction::Nudge(
-                "You are repeating the same operation. STOP and try something different: \
-                 use a different tool, change your arguments, or ask the user for help. \
-                 Do NOT repeat the previous tool call."
-                    .to_string(),
-            ),
-            DoomLoopAction::Notify => RecoveryAction::StepBack(
-                "You have been stuck in a loop despite a previous warning. Your current \
-                 approach is not working. STOP entirely. Re-read the original task, identify \
-                 which assumption is wrong, and choose a completely different strategy. If \
-                 you cannot proceed, explain what is blocking you."
-                    .to_string(),
-            ),
+            DoomLoopAction::Redirect => {
+                RecoveryAction::Nudge(get_reminder("doom_loop_redirect_nudge", &[]))
+            }
+            DoomLoopAction::Notify => {
+                RecoveryAction::StepBack(get_reminder("doom_loop_stepback_nudge", &[]))
+            }
             DoomLoopAction::ForceStop => RecoveryAction::CompactContext,
             DoomLoopAction::None => RecoveryAction::Nudge(String::new()),
         }
@@ -306,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_tool_calls() {
+    fn test_parallel_tool_calls_redirect() {
         let mut det = DoomLoopDetector::new();
         let tc = make_tool_call("search", "{\"query\": \"foo\"}");
 

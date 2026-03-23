@@ -82,6 +82,7 @@ impl BackgroundRuntime {
             timeout_config: None,
             cancel_token: interrupt_token.map(|t| t.child_token()),
             diagnostic_provider: None,
+            shared_state: None,
         };
 
         // Set original task for completion nudge context

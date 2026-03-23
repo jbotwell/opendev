@@ -6,12 +6,11 @@ version: 3.0.0
 
 # Planning
 
-For non-trivial implementation tasks, use the Planner subagent to explore
-the codebase and create a structured plan before writing code.
+For non-trivial implementation tasks, first understand the codebase before planning:
 
-Spawn via spawn_subagent(subagent_type="Planner"). Include in the prompt:
-- The task description and relevant context
-- A plan file path under ~/.opendev/plans/ (e.g., ~/.opendev/plans/add-auth-flow.md)
+1. List the directory structure to see what exists
+2. Read relevant files to understand existing patterns and conventions
+3. Spawn a Planner subagent with your findings and a plan file path under ~/.opendev/plans/
 
 After the Planner returns, call present_plan(plan_file_path="...") to show
 the plan to the user and get approval.

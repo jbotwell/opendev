@@ -15,7 +15,6 @@
 //! - PDF extraction: [`pdf`]
 //! - Browser opening: [`open_browser`]
 //! - Agent management: [`agents`]
-//! - Batch execution: [`batch`]
 //! - Diff preview: [`diff_preview`]
 //! - Messaging: [`message`]
 //! - Notebook editing: [`notebook_edit`]
@@ -27,7 +26,6 @@
 pub mod agents;
 pub mod ask_user;
 pub mod bash;
-pub mod batch;
 pub mod browser;
 pub mod clear_todos;
 pub mod complete_todo;
@@ -73,7 +71,6 @@ pub mod write_todos;
 pub use agents::{AgentsTool, ChannelProgressCallback, SpawnSubagentTool, SubagentEvent};
 pub use ask_user::AskUserTool;
 pub use bash::BashTool;
-pub use batch::BatchTool;
 pub use browser::BrowserTool;
 pub use clear_todos::ClearTodosTool;
 pub use complete_todo::CompleteTodoTool;
@@ -97,7 +94,7 @@ pub use open_browser::OpenBrowserTool;
 pub use patch::PatchTool;
 pub use present_plan::PresentPlanTool;
 pub use schedule::ScheduleTool;
-pub use session::SessionTool;
+pub use session::PastSessionsTool;
 pub use task_complete::TaskCompleteTool;
 pub use todo::TodoTool;
 pub use update_todo::UpdateTodoTool;

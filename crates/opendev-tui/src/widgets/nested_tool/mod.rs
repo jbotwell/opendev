@@ -175,10 +175,7 @@ impl Widget for NestedToolWidget<'_> {
                         Style::default().fg(style_tokens::BLUE_BRIGHT),
                     ),
                     Span::styled(verb, Style::default().fg(style_tokens::SUBTLE)),
-                    Span::styled(
-                        format!(" {arg}"),
-                        Style::default().fg(style_tokens::SUBTLE),
-                    ),
+                    Span::styled(format!(" {arg}"), Style::default().fg(style_tokens::SUBTLE)),
                     Span::styled(
                         format!(" ({tool_elapsed}s)"),
                         Style::default().fg(style_tokens::SUBTLE),
@@ -208,10 +205,7 @@ impl Widget for NestedToolWidget<'_> {
                     ),
                     Span::styled(format!("{icon} "), Style::default().fg(color)),
                     Span::styled(verb, Style::default().fg(style_tokens::SUBTLE)),
-                    Span::styled(
-                        format!(" {arg}"),
-                        Style::default().fg(style_tokens::SUBTLE),
-                    ),
+                    Span::styled(format!(" {arg}"), Style::default().fg(style_tokens::SUBTLE)),
                     Span::styled(
                         format!(" ({}s)", completed.elapsed.as_secs()),
                         Style::default().fg(style_tokens::SUBTLE),
@@ -228,7 +222,7 @@ impl Widget for NestedToolWidget<'_> {
             let hidden_count = total_completed.saturating_sub(visible_count);
             if hidden_count > 0 {
                 lines.push(Line::from(Span::styled(
-                    format!("  {vertical}   +{hidden_count} more tool uses"),
+                    format!("  {vertical}   +{hidden_count} more tool uses (ctrl+b to run in background)"),
                     Style::default()
                         .fg(style_tokens::SUBTLE)
                         .add_modifier(Modifier::ITALIC),

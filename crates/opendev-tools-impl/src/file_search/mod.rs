@@ -219,7 +219,7 @@ impl BaseTool for GrepTool {
         args: HashMap<String, serde_json::Value>,
         ctx: &ToolContext,
     ) -> ToolResult {
-        let grep_args = match GrepArgs::from_map(&args) {
+        let mut grep_args = match GrepArgs::from_map(&args) {
             Ok(a) => a,
             Err(e) => return ToolResult::fail(e),
         };
@@ -244,11 +244,10 @@ impl BaseTool for GrepTool {
             ));
         }
 
-        // Validate regex pattern early (gives clearer errors than rg's stderr)
-        if !grep_args.fixed_string
-            && let Err(e) = regex::Regex::new(&grep_args.pattern)
-        {
-            return ToolResult::fail(format!("Invalid regex pattern: {e}"));
+        // If pattern is not valid regex and fixed_string wasn't explicitly set,
+        // auto-enable fixed_string mode so literal patterns like "}},{"  just work.
+        if !grep_args.fixed_string && regex::Regex::new(&grep_args.pattern).is_err() {
+            grep_args.fixed_string = true;
         }
 
         // Try ripgrep first, fall back to built-in grep
@@ -904,15 +903,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_grep_invalid_regex() {
+    async fn test_grep_invalid_regex_falls_back_to_fixed_string() {
         let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("test.txt"), "match [invalid here\n").unwrap();
         let tool = GrepTool;
         let ctx = ToolContext::new(dir.path());
         let args = make_args(&[("pattern", serde_json::json!("[invalid"))]);
 
         let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("Invalid regex"));
+        // Should succeed via fixed_string fallback instead of failing with "Invalid regex"
+        assert!(result.success, "expected fixed_string fallback to succeed");
     }
 
     #[tokio::test]

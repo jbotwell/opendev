@@ -100,9 +100,6 @@ impl AgentRuntime {
         let (todo_manager, mut channel_receivers, tool_approval_tx) =
             tools::register_default_tools(&tool_registry);
 
-        // BatchTool needs Arc<ToolRegistry> for dispatching calls.
-        tool_registry.register(Arc::new(BatchTool::new(Arc::clone(&tool_registry))));
-
         // Register custom tools from .opendev/tools/ and .opencode/tool/ directories.
         let custom_tools = opendev_tools_impl::custom_tool::discover_custom_tools(working_dir);
         for tool in custom_tools {
@@ -111,9 +108,8 @@ impl AgentRuntime {
         }
 
         // Register invoke_skill tool with project-local and user-global skill dirs.
-        // Priority order (first = highest): .claude/skills > .agents/skills > .opendev/skills
-        // at each level from working_dir up to git root, then global dirs,
-        // then config-specified skill_paths (lowest priority among custom dirs).
+        // Scans .opendev/skills at each level from working_dir up to git root,
+        // then global dir, then config-specified skill_paths (lowest priority).
         let mut skill_dirs = Vec::new();
 
         // Walk from working_dir up to git root, scanning for skill directories
@@ -135,21 +131,16 @@ impl AgentRuntime {
         {
             let mut current = working_dir.to_path_buf();
             loop {
-                for subdir in &[".claude", ".agents", ".opendev"] {
-                    let skills_dir = current.join(subdir).join("skills");
-                    skill_dirs.push(skills_dir);
-                }
+                skill_dirs.push(current.join(".opendev").join("skills"));
                 if current == stop_dir || !current.pop() {
                     break;
                 }
             }
         }
 
-        // Global (home) skill directories
+        // Global (home) skill directory
         if let Some(home) = dirs_next::home_dir() {
-            for subdir in &[".claude", ".agents", ".opendev"] {
-                skill_dirs.push(home.join(subdir).join("skills"));
-            }
+            skill_dirs.push(home.join(".opendev").join("skills"));
         }
         // Append config-specified skill paths (resolved relative to working_dir, ~/expanded)
         for path in &config.skill_paths {
@@ -673,6 +664,20 @@ mod tests {
         let rt = runtime.unwrap();
         // Should have tools registered
         assert!(rt.tool_registry.tool_names().len() > 20);
+        assert!(
+            !rt.tool_registry
+                .tool_names()
+                .contains(&"batch_tool".to_string()),
+            "batch_tool should not be registered"
+        );
+        assert!(
+            !rt.tool_registry.get_schemas().iter().any(|schema| schema
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                == Some("batch_tool")),
+            "batch_tool schema should not be exposed"
+        );
     }
 
     #[test]
@@ -695,5 +700,9 @@ mod tests {
         let prompt = build_system_prompt(tmp.path(), &config);
         // Should produce a non-trivial prompt from embedded templates
         assert!(!prompt.is_empty());
+        assert!(
+            !prompt.contains("batch_tool"),
+            "system prompt should not advertise batch_tool"
+        );
     }
 }

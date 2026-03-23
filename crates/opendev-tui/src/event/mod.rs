@@ -101,6 +101,7 @@ pub enum AppEvent {
         subagent_id: String,
         subagent_name: String,
         task: String,
+        cancel_token: Option<tokio_util::sync::CancellationToken>,
     },
     /// A subagent made a tool call (for nested display).
     SubagentToolCall {

@@ -20,5 +20,5 @@ Read a file from the local filesystem. Returns content with line numbers in cat 
 - If you read a file that exists but has empty contents, you will receive a warning in place of file contents
 - IMPORTANT: Always read a file before editing it. edit_file will fail if old_content doesn't match the actual file content
 - Prefer read_file over run_command with cat/head/tail
-- Read multiple files in parallel using batch_tool when you need to examine several files at once
+- Read multiple files directly in the same response when you need to examine several files at once
 - When the user provides a path to a screenshot or image, ALWAYS use this tool to view it

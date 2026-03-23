@@ -41,10 +41,7 @@ pub(super) fn format_tool_call(tc: &DisplayToolCall, working_dir: Option<&str>) 
                 .fg(style_tokens::PRIMARY)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            format!(" {arg}"),
-            Style::default().fg(style_tokens::SUBTLE),
-        ),
+        Span::styled(format!(" {arg}"), Style::default().fg(style_tokens::SUBTLE)),
     ])
 }
 

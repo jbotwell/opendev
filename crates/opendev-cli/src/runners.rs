@@ -94,7 +94,7 @@ pub async fn run_non_interactive(
     agent_runtime.connect_mcp_servers().await;
 
     match agent_runtime
-        .run_query(prompt, &system_prompt, None, None)
+        .run_query(prompt, &system_prompt, None, None, false)
         .await
     {
         Ok(result) => {

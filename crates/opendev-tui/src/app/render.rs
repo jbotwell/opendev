@@ -11,6 +11,30 @@ use super::App;
 use super::OperationMode;
 
 impl App {
+    fn spinner_wrapped_line_count(&self, content_width: u16) -> usize {
+        let widget = ConversationWidget::new(&self.state.messages, self.state.scroll_offset)
+            .working_dir(&self.state.working_dir)
+            .path_shortener(&self.state.path_shortener)
+            .active_tools(&self.state.active_tools)
+            .active_subagents(&self.state.active_subagents)
+            .task_progress(self.state.task_progress.as_ref())
+            .spinner_char(self.state.spinner.current())
+            .compaction_active(self.state.compaction_active)
+            .backgrounding_pending(self.state.backgrounding_pending);
+        widget
+            .build_spinner_lines()
+            .iter()
+            .map(|line| {
+                let w = line.width();
+                if w == 0 || content_width == 0 {
+                    1
+                } else {
+                    w.div_ceil(content_width as usize)
+                }
+            })
+            .sum()
+    }
+
     pub(super) fn render(&self, frame: &mut ratatui::Frame) {
         let area = frame.area();
 
@@ -77,8 +101,7 @@ impl App {
             // Selection highlight: post-render buffer pass to swap fg/bg on selected cells
             if let Some(range) = self.state.selection.range {
                 let conv_area = chunks[0];
-                let spinner_count = self.count_spinner_lines();
-                let reserved = 1 + spinner_count;
+                let reserved = 1;
                 let content_height = conv_area.height.saturating_sub(reserved);
                 let content_width = conv_area.width.saturating_sub(1);
                 let sel_content_area = ratatui::layout::Rect {
@@ -88,6 +111,7 @@ impl App {
                     height: content_height,
                 };
 
+                let spinner_lines = self.spinner_wrapped_line_count(content_width);
                 let sel_total_lines: usize = self
                     .state
                     .cached_lines
@@ -100,7 +124,9 @@ impl App {
                             w.div_ceil(content_width as usize)
                         }
                     })
-                    .sum();
+                    .sum::<usize>()
+                    + spinner_lines
+                    + usize::from(spinner_lines > 0 && !self.state.cached_lines.is_empty());
                 let viewport_height = content_height as usize;
                 let max_scroll = sel_total_lines.saturating_sub(viewport_height);
                 let clamped = (self.state.scroll_offset as usize).min(max_scroll);
@@ -128,11 +154,19 @@ impl App {
 
         // Input
         let activity_tag = self.activity_tag();
+        let user_msg_count = self
+            .state
+            .pending_queue
+            .iter()
+            .filter(|item| matches!(item, super::PendingItem::UserMessage(_)))
+            .count();
+        let bg_result_count = self.state.pending_queue.len() - user_msg_count;
         let input = InputWidget::new(
             &self.state.input_buffer,
             self.state.input_cursor,
             mode_str,
-            self.state.pending_messages.len(),
+            user_msg_count,
+            bg_result_count,
             activity_tag,
         );
         frame.render_widget(input, chunks[2]);
@@ -292,8 +326,7 @@ impl App {
             .saturating_sub(2) // status bar
             .max(5);
 
-        let spinner_count = self.count_spinner_lines();
-        let reserved = 1 + spinner_count;
+        let reserved = 1;
         let content_height = conv_height.saturating_sub(reserved);
         let content_width = self.state.terminal_width.saturating_sub(1);
 
@@ -304,6 +337,7 @@ impl App {
             height: content_height,
         };
 
+        let spinner_lines = self.spinner_wrapped_line_count(content_width);
         let total_lines: usize = self
             .state
             .cached_lines
@@ -316,7 +350,9 @@ impl App {
                     w.div_ceil(content_width as usize)
                 }
             })
-            .sum();
+            .sum::<usize>()
+            + spinner_lines
+            + usize::from(spinner_lines > 0 && !self.state.cached_lines.is_empty());
         let viewport_height = content_height as usize;
         let max_scroll = total_lines.saturating_sub(viewport_height);
         let clamped = (self.state.scroll_offset as usize).min(max_scroll);
@@ -325,39 +361,6 @@ impl App {
         self.state.selection.conversation_area = content_area;
         self.state.selection.actual_scroll = actual_scroll;
         self.state.selection.total_content_lines = total_lines;
-    }
-
-    /// Estimate the number of spinner/progress lines rendered below the conversation.
-    /// Must match the ConversationWidget::build_spinner_lines() output count.
-    fn count_spinner_lines(&self) -> u16 {
-        let mut count: u16 = 0;
-        // Active tools: 1 line each + nested subagent lines
-        for tool in &self.state.active_tools {
-            if !tool.is_finished() {
-                count += 1;
-                // Each active subagent matched to this tool adds lines
-                for sub in &self.state.active_subagents {
-                    if sub.parent_tool_id.as_deref() == Some(&tool.id) {
-                        count += 1; // subagent header
-                        // Each tool call within the subagent
-                        count += sub.active_tools.len().min(3) as u16;
-                    }
-                }
-            }
-        }
-        // Task progress (thinking) when no active tools
-        if count == 0 && self.state.task_progress.is_some() {
-            count += 1;
-        }
-        // Compaction spinner
-        if self.state.compaction_active {
-            count += 1;
-        }
-        // Backgrounding pending
-        if self.state.backgrounding_pending {
-            count += 1;
-        }
-        count
     }
 
     /// Render selection highlight by swapping fg/bg on selected buffer cells.

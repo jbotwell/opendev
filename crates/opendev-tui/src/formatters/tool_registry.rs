@@ -341,15 +341,6 @@ static TOOL_REGISTRY: &[ToolDisplayEntry] = &[
         primary_arg_keys: &["path", "file_path"],
         result_format: ResultFormat::File,
     },
-    // Batch
-    ToolDisplayEntry {
-        names: &["batch_tool"],
-        category: ToolCategory::Other,
-        verb: "Batch",
-        label: "tools",
-        primary_arg_keys: &["invocations"],
-        result_format: ResultFormat::Generic,
-    },
     // Misc
     ToolDisplayEntry {
         names: &["invoke_skill"],
@@ -357,6 +348,14 @@ static TOOL_REGISTRY: &[ToolDisplayEntry] = &[
         verb: "Skill",
         label: "skill",
         primary_arg_keys: &["name", "skill"],
+        result_format: ResultFormat::Generic,
+    },
+    ToolDisplayEntry {
+        names: &["past_sessions"],
+        category: ToolCategory::Other,
+        verb: "Sessions",
+        label: "sessions",
+        primary_arg_keys: &["action", "session_id", "query"],
         result_format: ResultFormat::Generic,
     },
 ];
@@ -532,16 +531,6 @@ fn format_parts_inner(
 ) -> (String, String) {
     let entry = lookup_tool(tool_name);
 
-    // Special case: batch_tool shows tool count
-    if tool_name == "batch_tool" {
-        let count = args
-            .get("invocations")
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        return ("Batch".to_string(), format!("{count} tool calls"));
-    }
-
     // Special case: spawn_subagent shows "AgentType(task_summary)" instead of "Spawn(subagent)"
     if tool_name == "spawn_subagent" {
         let verb = args
@@ -560,6 +549,36 @@ fn format_parts_inner(
         let task = extract_arg_from_keys(&["description", "task"], args)
             .unwrap_or_else(|| "working...".to_string());
         return (verb, task);
+    }
+
+    // Special case: past_sessions shows action-specific verbs
+    if tool_name == "past_sessions" {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("list");
+        return match action {
+            "list" => ("List Sessions".to_string(), String::new()),
+            "read" => {
+                let id = args
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("...");
+                ("Read Session".to_string(), id.to_string())
+            }
+            "search" => {
+                let q = args.get("query").and_then(|v| v.as_str()).unwrap_or("...");
+                ("Search Sessions".to_string(), format!("\"{q}\""))
+            }
+            "info" => {
+                let id = args
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("...");
+                ("Session Info".to_string(), id.to_string())
+            }
+            other => ("Sessions".to_string(), other.to_string()),
+        };
     }
 
     // Special case: grep tools show "pattern" in path
@@ -600,17 +619,15 @@ fn format_parts_inner(
 
     // Special case: list_files/Glob shows pattern, optionally with path
     if matches!(tool_name, "list_files" | "Glob") {
-        let pattern = args
-            .get("pattern")
-            .and_then(|v| v.as_str())
-            .unwrap_or("*");
+        let pattern = args.get("pattern").and_then(|v| v.as_str()).unwrap_or("*");
         let pattern_display = if pattern.len() > 40 {
             format!("{}...", &pattern[..37])
         } else {
             pattern.to_string()
         };
         if let Some(path) = args.get("path").and_then(|v| v.as_str())
-            && path != "." && !path.is_empty()
+            && path != "."
+            && !path.is_empty()
         {
             let rel = shortener.shorten(path);
             return ("List".to_string(), format!("{pattern_display} in {rel}"));
@@ -805,18 +822,6 @@ mod tests {
         let (verb, arg) = format_tool_call_parts("my_tool", &args);
         assert_eq!(verb, "My Tool");
         assert_eq!(arg, "do stuff");
-    }
-
-    #[test]
-    fn test_batch_tool_display() {
-        let mut args = HashMap::new();
-        args.insert(
-            "invocations".to_string(),
-            serde_json::json!([{"tool": "read_file"}, {"tool": "edit_file"}, {"tool": "bash"}]),
-        );
-        let (verb, arg) = format_tool_call_parts("batch_tool", &args);
-        assert_eq!(verb, "Batch");
-        assert_eq!(arg, "3 tool calls");
     }
 
     #[test]

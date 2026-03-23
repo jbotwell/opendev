@@ -227,10 +227,12 @@ impl TuiRunner {
                                 subagent_id,
                                 subagent_name,
                                 task,
+                                cancel_token,
                             } => AppEvent::SubagentStarted {
                                 subagent_id,
                                 subagent_name,
                                 task,
+                                cancel_token,
                             },
                             SubagentEvent::ToolCall {
                                 subagent_id,
@@ -430,7 +432,18 @@ impl TuiRunner {
                     continue;
                 }
 
-                info!(msg_len = msg.len(), "TUI: user submitted message");
+                // Detect and strip plan-mode sentinel
+                let (msg, plan_requested) =
+                    if let Some(stripped) = msg.strip_prefix("\x00__PLAN_MODE__") {
+                        (stripped.to_string(), true)
+                    } else {
+                        (msg, false)
+                    };
+
+                info!(
+                    msg_len = msg.len(),
+                    plan_requested, "TUI: user submitted message"
+                );
 
                 // Create fresh interrupt token for this query
                 let interrupt_token = InterruptToken::new();
@@ -449,6 +462,7 @@ impl TuiRunner {
                         &system_prompt,
                         Some(&callback),
                         Some(&interrupt_token),
+                        plan_requested,
                     )
                     .await
                 {

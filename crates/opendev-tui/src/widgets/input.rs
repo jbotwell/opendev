@@ -10,12 +10,33 @@ use ratatui::{
 
 use crate::formatters::style_tokens;
 
+/// Convert a title to kebab-case display: lowercase, spaces→dashes, strip special chars.
+fn to_kebab_display(title: &str) -> String {
+    let lower = title.to_lowercase();
+    let mut result = String::with_capacity(lower.len());
+    let mut last_was_dash = true;
+    for ch in lower.chars() {
+        if ch.is_ascii_alphanumeric() {
+            result.push(ch);
+            last_was_dash = false;
+        } else if !last_was_dash {
+            result.push('-');
+            last_was_dash = true;
+        }
+    }
+    if result.ends_with('-') {
+        result.pop();
+    }
+    result
+}
+
 /// Widget for the user input area.
 pub struct InputWidget<'a> {
     buffer: &'a str,
     cursor: usize,
     mode: &'a str,
-    pending_count: usize,
+    user_msg_count: usize,
+    bg_result_count: usize,
     activity_tag: Option<&'a str>,
 }
 
@@ -24,14 +45,16 @@ impl<'a> InputWidget<'a> {
         buffer: &'a str,
         cursor: usize,
         mode: &'a str,
-        pending_count: usize,
+        user_msg_count: usize,
+        bg_result_count: usize,
         activity_tag: Option<&'a str>,
     ) -> Self {
         Self {
             buffer,
             cursor,
             mode,
-            pending_count,
+            user_msg_count,
+            bg_result_count,
             activity_tag,
         }
     }
@@ -62,14 +85,15 @@ impl Widget for InputWidget<'_> {
         let hint_text = "(Shift+Tab) ";
         let prefix_dashes = 2; // "── " before mode label
 
-        let queue_text = if self.pending_count > 0 {
-            format!(
+        let queue_text = match (self.user_msg_count, self.bg_result_count) {
+            (0, 0) => String::new(),
+            (u, 0) => format!(
                 "── {} message{} queued (ESC) ",
-                self.pending_count,
-                if self.pending_count == 1 { "" } else { "s" }
-            )
-        } else {
-            String::new()
+                u,
+                if u == 1 { "" } else { "s" }
+            ),
+            (0, b) => format!("── {} result{} queued ", b, if b == 1 { "" } else { "s" }),
+            (u, b) => format!("── {} queued (ESC) ", u + b),
         };
 
         let used = prefix_dashes + mode_text.len() + hint_text.len() + queue_text.len();
@@ -93,10 +117,11 @@ impl Widget for InputWidget<'_> {
             ));
         }
         if let Some(tag) = self.activity_tag {
-            let tag_display = if tag.len() > 30 {
-                format!("{}...", &tag[..27])
+            let kebab = to_kebab_display(tag);
+            let tag_display = if kebab.len() > 30 {
+                format!("{}...", &kebab[..27])
             } else {
-                tag.to_string()
+                kebab
             };
             let tag_section = format!(" {} ", tag_display);
             let trailing = "──";
@@ -105,7 +130,7 @@ impl Widget for InputWidget<'_> {
             spans.push(Span::styled("─".repeat(fill), sep_style));
             spans.push(Span::styled(
                 tag_section,
-                Style::default().fg(style_tokens::DIM_GREY),
+                Style::default().fg(Color::Black).bg(style_tokens::GOLD),
             ));
             spans.push(Span::styled(trailing, sep_style));
         } else {
@@ -202,12 +227,12 @@ mod tests {
 
     #[test]
     fn test_input_widget_creation() {
-        let _widget = InputWidget::new("hello", 3, "NORMAL", 0, None);
+        let _widget = InputWidget::new("hello", 3, "NORMAL", 0, 0, None);
     }
 
     #[test]
     fn test_input_widget_empty() {
-        let _widget = InputWidget::new("", 0, "NORMAL", 0, None);
+        let _widget = InputWidget::new("", 0, "NORMAL", 0, 0, None);
     }
 
     #[test]
@@ -216,7 +241,7 @@ mod tests {
         let area = Rect::new(0, 0, 60, 3);
         let mut buf = Buffer::empty(area);
 
-        let widget = InputWidget::new("", 0, "NORMAL", 2, None);
+        let widget = InputWidget::new("", 0, "NORMAL", 2, 0, None);
         widget.render(area, &mut buf);
 
         let rendered: String = (0..area.width)
@@ -236,7 +261,7 @@ mod tests {
         let area = Rect::new(0, 0, 60, 3);
         let mut buf = Buffer::empty(area);
 
-        let widget = InputWidget::new("", 0, "NORMAL", 1, None);
+        let widget = InputWidget::new("", 0, "NORMAL", 1, 0, None);
         widget.render(area, &mut buf);
 
         let rendered: String = (0..area.width)
@@ -256,11 +281,11 @@ mod tests {
     }
 
     #[test]
-    fn test_activity_tag_renders() {
-        let area = Rect::new(0, 0, 80, 3);
+    fn test_queue_indicator_bg_results_only() {
+        let area = Rect::new(0, 0, 60, 3);
         let mut buf = Buffer::empty(area);
 
-        let widget = InputWidget::new("", 0, "NORMAL", 0, Some("implementing status bar"));
+        let widget = InputWidget::new("", 0, "NORMAL", 0, 2, None);
         widget.render(area, &mut buf);
 
         let rendered: String = (0..area.width)
@@ -270,8 +295,53 @@ mod tests {
             })
             .collect();
         assert!(
-            rendered.contains("implementing status bar"),
-            "Expected activity tag in separator line, got: {rendered:?}"
+            rendered.contains("2 results queued"),
+            "Expected '2 results queued' in separator line, got: {rendered:?}"
+        );
+        // No ESC hint for bg-only results
+        assert!(
+            !rendered.contains("ESC"),
+            "Should not show ESC hint for bg-only results, got: {rendered:?}"
+        );
+    }
+
+    #[test]
+    fn test_queue_indicator_mixed() {
+        let area = Rect::new(0, 0, 60, 3);
+        let mut buf = Buffer::empty(area);
+
+        let widget = InputWidget::new("", 0, "NORMAL", 1, 2, None);
+        widget.render(area, &mut buf);
+
+        let rendered: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        assert!(
+            rendered.contains("3 queued"),
+            "Expected '3 queued' in separator line, got: {rendered:?}"
+        );
+    }
+
+    #[test]
+    fn test_activity_tag_renders() {
+        let area = Rect::new(0, 0, 80, 3);
+        let mut buf = Buffer::empty(area);
+
+        let widget = InputWidget::new("", 0, "NORMAL", 0, 0, Some("implementing status bar"));
+        widget.render(area, &mut buf);
+
+        let rendered: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        assert!(
+            rendered.contains("implementing-status-bar"),
+            "Expected kebab-cased activity tag in separator line, got: {rendered:?}"
         );
     }
 
@@ -280,7 +350,7 @@ mod tests {
         let area = Rect::new(0, 0, 100, 3);
         let mut buf = Buffer::empty(area);
 
-        let widget = InputWidget::new("", 0, "NORMAL", 1, Some("debugging login"));
+        let widget = InputWidget::new("", 0, "NORMAL", 1, 0, Some("debugging login"));
         widget.render(area, &mut buf);
 
         let rendered: String = (0..area.width)
@@ -294,8 +364,18 @@ mod tests {
             "Expected queue indicator, got: {rendered:?}"
         );
         assert!(
-            rendered.contains("debugging login"),
-            "Expected activity tag, got: {rendered:?}"
+            rendered.contains("debugging-login"),
+            "Expected kebab-cased activity tag, got: {rendered:?}"
         );
+    }
+
+    #[test]
+    fn test_to_kebab_display() {
+        assert_eq!(to_kebab_display("Hello World"), "hello-world");
+        assert_eq!(to_kebab_display("Auth Refactor"), "auth-refactor");
+        assert_eq!(to_kebab_display("Fix: login bug!"), "fix-login-bug");
+        assert_eq!(to_kebab_display("  spaces  "), "spaces");
+        assert_eq!(to_kebab_display("already-kebab"), "already-kebab");
+        assert_eq!(to_kebab_display("MiXeD CaSe"), "mixed-case");
     }
 }

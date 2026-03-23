@@ -50,6 +50,11 @@ pub struct BackgroundAgentTask {
     pub current_tool: Option<String>,
     /// Rolling log of tool call activity (for panel display).
     pub activity_log: Vec<String>,
+    /// Number of pending spawn_subagent calls awaiting SubagentStarted events.
+    pub pending_spawn_count: usize,
+    /// Whether this task should be hidden from the task watcher grid.
+    /// Set when a parent task is killed as cascade from last subagent cancellation.
+    pub hidden: bool,
 }
 
 impl BackgroundAgentTask {
@@ -103,6 +108,8 @@ impl BackgroundAgentManager {
                 cost_usd: 0.0,
                 current_tool: None,
                 activity_log: Vec::new(),
+                pending_spawn_count: 0,
+                hidden: false,
             },
         );
     }
@@ -117,11 +124,13 @@ impl BackgroundAgentManager {
         cost_usd: f64,
     ) {
         if let Some(task) = self.tasks.get_mut(task_id) {
-            task.state = if success {
-                BackgroundAgentState::Completed
-            } else {
-                BackgroundAgentState::Failed
-            };
+            if task.state != BackgroundAgentState::Killed {
+                task.state = if success {
+                    BackgroundAgentState::Completed
+                } else {
+                    BackgroundAgentState::Failed
+                };
+            }
             task.result_summary = Some(result_summary);
             task.tool_call_count = tool_call_count;
             task.cost_usd = cost_usd;
@@ -133,6 +142,20 @@ impl BackgroundAgentManager {
         if let Some(task) = self.tasks.get_mut(task_id) {
             task.current_tool = Some(tool_name);
             task.tool_call_count = tool_count;
+        }
+    }
+
+    /// Increment pending spawn_subagent count for a task.
+    pub fn increment_pending_spawn(&mut self, task_id: &str) {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            task.pending_spawn_count += 1;
+        }
+    }
+
+    /// Decrement pending spawn_subagent count for a task.
+    pub fn decrement_pending_spawn(&mut self, task_id: &str) {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            task.pending_spawn_count = task.pending_spawn_count.saturating_sub(1);
         }
     }
 
@@ -154,6 +177,13 @@ impl BackgroundAgentManager {
                 task.activity_log.remove(0);
             }
             task.activity_log.push(line);
+        }
+    }
+
+    /// Hide a task from the task watcher grid (still tracked for event processing).
+    pub fn hide_task(&mut self, task_id: &str) {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            task.hidden = true;
         }
     }
 
@@ -328,6 +358,39 @@ mod tests {
         let task = mgr.get_task("t1").unwrap();
         assert_eq!(task.current_tool.as_deref(), Some("bash"));
         assert_eq!(task.tool_call_count, 3);
+    }
+
+    #[test]
+    fn test_mark_completed_preserves_killed() {
+        let mut mgr = make_mgr();
+        mgr.add_task("t1".into(), "q".into(), "s".into(), InterruptToken::new());
+        mgr.kill_task("t1");
+        assert_eq!(
+            mgr.get_task("t1").unwrap().state,
+            BackgroundAgentState::Killed
+        );
+        // mark_completed should NOT overwrite Killed → Failed
+        mgr.mark_completed("t1", false, "interrupted".into(), 2, 0.0);
+        assert_eq!(
+            mgr.get_task("t1").unwrap().state,
+            BackgroundAgentState::Killed
+        );
+    }
+
+    #[test]
+    fn test_pending_spawn_count() {
+        let mut mgr = make_mgr();
+        mgr.add_task("t1".into(), "q".into(), "s".into(), InterruptToken::new());
+        assert_eq!(mgr.get_task("t1").unwrap().pending_spawn_count, 0);
+        mgr.increment_pending_spawn("t1");
+        mgr.increment_pending_spawn("t1");
+        assert_eq!(mgr.get_task("t1").unwrap().pending_spawn_count, 2);
+        mgr.decrement_pending_spawn("t1");
+        assert_eq!(mgr.get_task("t1").unwrap().pending_spawn_count, 1);
+        // saturating_sub prevents underflow
+        mgr.decrement_pending_spawn("t1");
+        mgr.decrement_pending_spawn("t1");
+        assert_eq!(mgr.get_task("t1").unwrap().pending_spawn_count, 0);
     }
 
     #[test]

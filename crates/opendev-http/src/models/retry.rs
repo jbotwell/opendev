@@ -221,16 +221,28 @@ mod tests {
         let config = RetryConfig::default();
         // Delays include ±25% jitter, so check ranges
         let d0 = config.delay_for_attempt(0).as_millis() as u64;
-        assert!(d0 >= 1500 && d0 <= 2500, "attempt 0: {d0}ms not in [1500, 2500]");
+        assert!(
+            d0 >= 1500 && d0 <= 2500,
+            "attempt 0: {d0}ms not in [1500, 2500]"
+        );
 
         let d1 = config.delay_for_attempt(1).as_millis() as u64;
-        assert!(d1 >= 3000 && d1 <= 5000, "attempt 1: {d1}ms not in [3000, 5000]");
+        assert!(
+            d1 >= 3000 && d1 <= 5000,
+            "attempt 1: {d1}ms not in [3000, 5000]"
+        );
 
         let d2 = config.delay_for_attempt(2).as_millis() as u64;
-        assert!(d2 >= 6000 && d2 <= 10000, "attempt 2: {d2}ms not in [6000, 10000]");
+        assert!(
+            d2 >= 6000 && d2 <= 10000,
+            "attempt 2: {d2}ms not in [6000, 10000]"
+        );
 
         let d3 = config.delay_for_attempt(3).as_millis() as u64;
-        assert!(d3 >= 12000 && d3 <= 20000, "attempt 3: {d3}ms not in [12000, 20000]");
+        assert!(
+            d3 >= 12000 && d3 <= 20000,
+            "attempt 3: {d3}ms not in [12000, 20000]"
+        );
     }
 
     #[test]
@@ -238,7 +250,10 @@ mod tests {
         let config = RetryConfig::default();
         // 2000 * 2^10 = 2,048,000ms > 30,000ms cap, then ±25% jitter
         let d = config.delay_for_attempt(10).as_millis() as u64;
-        assert!(d >= 22500 && d <= 37500, "attempt 10: {d}ms not in [22500, 37500]");
+        assert!(
+            d >= 22500 && d <= 37500,
+            "attempt 10: {d}ms not in [22500, 37500]"
+        );
     }
 
     #[test]

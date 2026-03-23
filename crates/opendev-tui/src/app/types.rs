@@ -112,15 +112,20 @@ pub struct DisplayToolCall {
     pub nested_calls: Vec<DisplayToolCall>,
 }
 
-/// A queued background task result waiting to be injected into the conversation.
+/// A queued item waiting to be processed by the foreground agent.
 #[derive(Debug, Clone)]
-pub struct PendingBackgroundResult {
-    pub task_id: String,
-    pub query: String,
-    pub result: String,
-    pub success: bool,
-    pub tool_call_count: usize,
-    pub cost_usd: f64,
+pub enum PendingItem {
+    /// A user message typed while the agent was busy.
+    UserMessage(String),
+    /// A completed background agent result.
+    BackgroundResult {
+        task_id: String,
+        query: String,
+        result: String,
+        success: bool,
+        tool_call_count: usize,
+        cost_usd: f64,
+    },
 }
 
 /// State of a tool execution lifecycle.

@@ -557,9 +557,15 @@ mod tests {
         let client = HttpClient::new("https://example.com", HeaderMap::new(), None).unwrap();
         // Delays include ±25% jitter
         let d0 = client.get_retry_delay(None, None, 0).as_millis() as u64;
-        assert!(d0 >= 1500 && d0 <= 2500, "attempt 0: {d0}ms not in [1500, 2500]");
+        assert!(
+            d0 >= 1500 && d0 <= 2500,
+            "attempt 0: {d0}ms not in [1500, 2500]"
+        );
         let d1 = client.get_retry_delay(Some("invalid"), None, 1).as_millis() as u64;
-        assert!(d1 >= 3000 && d1 <= 5000, "attempt 1: {d1}ms not in [3000, 5000]");
+        assert!(
+            d1 >= 3000 && d1 <= 5000,
+            "attempt 1: {d1}ms not in [3000, 5000]"
+        );
     }
 
     #[test]
@@ -567,7 +573,10 @@ mod tests {
         let client = HttpClient::new("https://example.com", HeaderMap::new(), None).unwrap();
         // Attempt 10: 2000 * 2^10 capped at 30,000ms, then ±25% jitter
         let d = client.get_retry_delay(None, None, 10).as_millis() as u64;
-        assert!(d >= 22500 && d <= 37500, "attempt 10: {d}ms not in [22500, 37500]");
+        assert!(
+            d >= 22500 && d <= 37500,
+            "attempt 10: {d}ms not in [22500, 37500]"
+        );
     }
 
     #[tokio::test]

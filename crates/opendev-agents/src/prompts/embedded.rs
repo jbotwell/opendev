@@ -93,7 +93,6 @@ pub const TOOLS_TOOL_ANALYZE_IMAGE: &str =
     include_str!("../../templates/tools/tool-analyze-image.md");
 pub const TOOLS_TOOL_APPLY_PATCH: &str = include_str!("../../templates/tools/tool-apply-patch.md");
 pub const TOOLS_TOOL_ASK_USER: &str = include_str!("../../templates/tools/tool-ask-user.md");
-pub const TOOLS_TOOL_BATCH_TOOL: &str = include_str!("../../templates/tools/tool-batch-tool.md");
 pub const TOOLS_TOOL_BROWSER: &str = include_str!("../../templates/tools/tool-browser.md");
 pub const TOOLS_TOOL_CAPTURE_SCREENSHOT: &str =
     include_str!("../../templates/tools/tool-capture-screenshot.md");
@@ -162,7 +161,7 @@ pub const TOOLS_TOOL_WRITE_TODOS: &str = include_str!("../../templates/tools/too
 // ---------------------------------------------------------------------------
 
 /// Total number of embedded templates.
-pub const TEMPLATE_COUNT: usize = 80;
+pub const TEMPLATE_COUNT: usize = 79;
 
 /// All embedded templates indexed by their relative path.
 ///
@@ -306,7 +305,6 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
     m.insert("tools/tool-analyze-image.md", TOOLS_TOOL_ANALYZE_IMAGE);
     m.insert("tools/tool-apply-patch.md", TOOLS_TOOL_APPLY_PATCH);
     m.insert("tools/tool-ask-user.md", TOOLS_TOOL_ASK_USER);
-    m.insert("tools/tool-batch-tool.md", TOOLS_TOOL_BATCH_TOOL);
     m.insert("tools/tool-browser.md", TOOLS_TOOL_BROWSER);
     m.insert(
         "tools/tool-capture-screenshot.md",

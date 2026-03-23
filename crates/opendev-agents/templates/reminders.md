@@ -136,12 +136,23 @@ All implementation todos are now complete. Call task_complete with a summary of 
 COMMAND FAILED with exit code {exit_code}. Review the error output above and fix the issue before proceeding. Do not repeat the same command without addressing the root cause.
 
 --- plan_subagent_request ---
-User requested planning. Spawn a Planner subagent to plan this task. Include
-the task description and this exact plan file path in the prompt: {plan_file_path}
+User requested planning. Before creating a plan, first understand the codebase:
+
+1. List the current directory structure to see what exists
+2. Read relevant files to understand patterns and conventions
+3. Then spawn a Planner subagent with your findings and this plan file path: {plan_file_path}
+
 After the Planner returns, call present_plan(plan_file_path="{plan_file_path}").
 
 --- tool_denied_nudge ---
 The tool call was denied. Do NOT re-attempt the exact same call. Consider why it was denied and adjust your approach. If unclear, use ask_user to ask the user why the tool call was denied.
+
+--- explore_phase_complete ---
+<explore_complete>
+You now have codebase context. Spawn a Planner subagent with:
+(1) the original task, (2) what you learned from exploring,
+(3) plan file path: {plan_file_path}
+</explore_complete>
 
 --- plan_file_reference ---
 A plan file exists from a previous session at {plan_file_path}. You may read
@@ -155,6 +166,21 @@ Before proceeding with this subagent, you should first explore the codebase usin
 You have been reading files individually to explore the codebase. For multi-file exploration, you MUST delegate to Explore instead of reading files one-by-one.
 
 Spawn a Explore subagent now with a clear question about what you need to understand. Explore is purpose-built for codebase exploration and will be more thorough and efficient.
+
+--- doom_loop_redirect_nudge ---
+You are repeating the same operation. STOP and try something different: use a different tool, change your arguments, or ask the user for help. Do NOT repeat the previous tool call.
+
+--- doom_loop_stepback_nudge ---
+You have been stuck in a loop despite a previous warning. Your current approach is not working. STOP entirely. Re-read the original task, identify which assumption is wrong, and choose a completely different strategy. If you cannot proceed, explain what is blocking you.
+
+--- truncation_continue_directive ---
+Your previous response was truncated due to output token limit. Continue from where you left off.
+
+--- doom_loop_compact_directive ---
+You appear to be stuck in a repeating loop. Summarize what you have learned so far, discard irrelevant details, and try a fundamentally different approach.
+
+--- doom_loop_force_stop_message ---
+The agent was unable to make progress and has been stopped. Please try rephrasing your request or providing more specific guidance.
 
 --- implicit_completion_nudge ---
 Before finishing, verify you have fully addressed the user's complete request:

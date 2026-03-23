@@ -1,6 +1,6 @@
 //! Persistent application state shared across renders.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -8,7 +8,9 @@ use crate::history::CommandHistory;
 use crate::selection::SelectionState;
 use crate::widgets::{Toast, TodoDisplayItem, WelcomePanelState};
 
-use super::{AutonomyLevel, DisplayMessage, OperationMode, ReasoningLevel, ToolExecution};
+use super::{
+    AutonomyLevel, DisplayMessage, OperationMode, PendingItem, ReasoningLevel, ToolExecution,
+};
 
 /// Persistent application state shared across renders.
 #[derive(Debug)]
@@ -87,8 +89,9 @@ pub struct AppState {
     pub terminal_width: u16,
     /// Cached terminal height for tick-time access.
     pub terminal_height: u16,
-    /// Queued messages submitted while agent was processing.
-    pub pending_messages: Vec<String>,
+    /// Unified queue for items waiting to be processed by the foreground agent.
+    /// Contains both user messages and completed background results, processed FIFO.
+    pub pending_queue: VecDeque<PendingItem>,
     /// Dirty flag — set to `true` when state changes; cleared after render.
     pub dirty: bool,
     /// Generation counter for message/tool state changes.
@@ -154,12 +157,12 @@ pub struct AppState {
     pub redo_stack: Vec<String>,
     /// Whether debug panel is open.
     pub debug_panel_open: bool,
-    /// Pending background agent results to deliver on next idle.
-    pub pending_bg_results: Vec<super::PendingBackgroundResult>,
     /// Session title (set by the agent).
     pub session_title: Option<String>,
     /// Maps background subagent IDs to their parent background task IDs.
     pub bg_subagent_map: HashMap<String, String>,
+    /// Per-subagent cancellation tokens for individual kill support.
+    pub subagent_cancel_tokens: HashMap<String, tokio_util::sync::CancellationToken>,
     /// Text selection state for mouse-based copy.
     pub selection: SelectionState,
     /// Force a full terminal clear before next draw (resets ratatui's diff buffer).
@@ -211,7 +214,7 @@ impl Default for AppState {
             welcome_panel: WelcomePanelState::new(),
             terminal_width: 80,
             terminal_height: 24,
-            pending_messages: Vec::new(),
+            pending_queue: VecDeque::new(),
             dirty: true,
             message_generation: 0,
             cached_lines: Vec::new(),
@@ -244,9 +247,9 @@ impl Default for AppState {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             debug_panel_open: false,
-            pending_bg_results: Vec::new(),
             session_title: None,
             bg_subagent_map: HashMap::new(),
+            subagent_cancel_tokens: HashMap::new(),
             selection: SelectionState::default(),
             force_clear: false,
             last_event_time: None,

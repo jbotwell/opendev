@@ -111,6 +111,7 @@ impl RecordedEvent {
                 subagent_id,
                 subagent_name,
                 task,
+                cancel_token: _,
             } => (
                 "SubagentStarted".to_string(),
                 serde_json::json!({"subagent_id": subagent_id, "subagent_name": subagent_name, "task": task}),
@@ -397,6 +398,7 @@ impl RecordedEvent {
                     subagent_id,
                     subagent_name,
                     task,
+                    cancel_token: None,
                 })
             }
             "SubagentToolCall" => {

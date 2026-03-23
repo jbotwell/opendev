@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
 
 /// A structured validation error with field path and message.
@@ -224,6 +224,9 @@ pub struct ToolContext {
     pub cancel_token: Option<CancellationToken>,
     /// Optional LSP diagnostic provider for post-edit feedback.
     pub diagnostic_provider: Option<Arc<dyn DiagnosticProvider>>,
+    /// Shared mutable state across tool executions within a react loop.
+    /// Used for cross-iteration state like planning phase transitions.
+    pub shared_state: Option<Arc<Mutex<HashMap<String, serde_json::Value>>>>,
 }
 
 impl ToolContext {
@@ -253,6 +256,7 @@ impl ToolContext {
             timeout_config: None,
             cancel_token: None,
             diagnostic_provider: None,
+            shared_state: None,
         }
     }
 
@@ -291,6 +295,15 @@ impl ToolContext {
         self.timeout_config = Some(config);
         self
     }
+
+    /// Set shared mutable state for cross-iteration communication.
+    pub fn with_shared_state(
+        mut self,
+        state: Arc<Mutex<HashMap<String, serde_json::Value>>>,
+    ) -> Self {
+        self.shared_state = Some(state);
+        self
+    }
 }
 
 impl Default for ToolContext {
@@ -303,6 +316,7 @@ impl Default for ToolContext {
             timeout_config: None,
             cancel_token: None,
             diagnostic_provider: None,
+            shared_state: None,
         }
     }
 }

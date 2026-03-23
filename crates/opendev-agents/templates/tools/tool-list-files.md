@@ -15,5 +15,5 @@ Fast file pattern matching tool that works with any codebase size.
 - Use this tool when you need to find files by name or extension patterns
 - Prefer list_files over run_command with ls or find
 - When doing an open-ended search that may require multiple rounds of globbing and grepping, consider using a subagent instead
-- You can speculatively perform multiple searches in parallel using batch_tool if they are potentially useful
+- You can speculatively perform multiple searches in the same response if they are potentially useful
 - For searching file contents rather than file names, use the search tool instead

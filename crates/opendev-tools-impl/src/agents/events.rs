@@ -10,6 +10,7 @@ pub enum SubagentEvent {
         subagent_id: String,
         subagent_name: String,
         task: String,
+        cancel_token: Option<tokio_util::sync::CancellationToken>,
     },
     /// Subagent made a tool call.
     ToolCall {
@@ -52,12 +53,22 @@ pub struct ChannelProgressCallback {
     tx: mpsc::UnboundedSender<SubagentEvent>,
     /// Unique identifier for this subagent instance (disambiguates parallel subagents).
     subagent_id: String,
+    /// Per-subagent cancellation token (child of parent's token).
+    cancel_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl ChannelProgressCallback {
     /// Create a new channel-based progress callback with a unique subagent ID.
-    pub fn new(tx: mpsc::UnboundedSender<SubagentEvent>, subagent_id: String) -> Self {
-        Self { tx, subagent_id }
+    pub fn new(
+        tx: mpsc::UnboundedSender<SubagentEvent>,
+        subagent_id: String,
+        cancel_token: Option<tokio_util::sync::CancellationToken>,
+    ) -> Self {
+        Self {
+            tx,
+            subagent_id,
+            cancel_token,
+        }
     }
 }
 
@@ -73,6 +84,7 @@ impl opendev_agents::SubagentProgressCallback for ChannelProgressCallback {
             subagent_id: self.subagent_id.clone(),
             subagent_name: subagent_name.to_string(),
             task: task.to_string(),
+            cancel_token: self.cancel_token.clone(),
         });
     }
 
@@ -128,6 +140,7 @@ mod tests {
             subagent_id: "id-1".into(),
             subagent_name: "Explore".into(),
             task: "Find all TODO comments".into(),
+            cancel_token: None,
         };
         assert!(matches!(started, SubagentEvent::Started { .. }));
 
@@ -145,7 +158,7 @@ mod tests {
     #[tokio::test]
     async fn test_channel_progress_callback() {
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let cb = ChannelProgressCallback::new(tx, "test-id".into());
+        let cb = ChannelProgressCallback::new(tx, "test-id".into(), None);
 
         use opendev_agents::SubagentProgressCallback;
         cb.on_started("test-agent", "do a thing");
@@ -175,7 +188,7 @@ mod tests {
         let (tx, mut rx) = mpsc::unbounded_channel();
         let subagent_id = "test-sa-id".to_string();
         let cb: Arc<dyn opendev_agents::SubagentProgressCallback> =
-            Arc::new(ChannelProgressCallback::new(tx, subagent_id.clone()));
+            Arc::new(ChannelProgressCallback::new(tx, subagent_id.clone(), None));
 
         // Create bridge (as SubagentManager::spawn would)
         let bridge = opendev_agents::SubagentEventBridge::new("Explorer".to_string(), cb);

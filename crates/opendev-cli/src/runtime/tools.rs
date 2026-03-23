@@ -47,12 +47,11 @@ pub(super) fn register_default_tools(
 
     // Memory & session
     registry.register(Arc::new(MemoryTool));
-    registry.register(Arc::new(SessionTool));
+    registry.register(Arc::new(PastSessionsTool));
     registry.register(Arc::new(MessageTool));
 
     // Scheduling & misc
     registry.register(Arc::new(ScheduleTool));
-    // BatchTool is registered later (needs Arc<ToolRegistry> for dispatch).
     registry.register(Arc::new(NotebookEditTool));
     registry.register(Arc::new(TaskCompleteTool));
     registry.register(Arc::new(VlmTool));

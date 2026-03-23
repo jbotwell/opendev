@@ -161,6 +161,26 @@ mod tests {
             sections.contains_key("thinking_analysis_prompt_with_todos"),
             "Should find thinking_analysis_prompt_with_todos section"
         );
+        assert!(
+            sections.contains_key("doom_loop_redirect_nudge"),
+            "Should find doom_loop_redirect_nudge section"
+        );
+        assert!(
+            sections.contains_key("doom_loop_stepback_nudge"),
+            "Should find doom_loop_stepback_nudge section"
+        );
+        assert!(
+            sections.contains_key("truncation_continue_directive"),
+            "Should find truncation_continue_directive section"
+        );
+        assert!(
+            sections.contains_key("doom_loop_compact_directive"),
+            "Should find doom_loop_compact_directive section"
+        );
+        assert!(
+            sections.contains_key("doom_loop_force_stop_message"),
+            "Should find doom_loop_force_stop_message section"
+        );
     }
 
     #[test]

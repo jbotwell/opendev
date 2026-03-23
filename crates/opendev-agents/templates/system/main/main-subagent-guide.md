@@ -31,6 +31,8 @@ Subagents are specialized agents with focused capabilities. Each has a specific 
 
 **IMPORTANT**: When spawning multiple subagents for independent work, make ALL spawn_subagent calls in the SAME response. This is the ONLY way to get parallel execution. If you make them in separate responses, they run sequentially.
 
+Make multiple `spawn_subagent` calls directly in the same response when you need parallel subagents.
+
 **When to spawn in parallel** (multiple spawn_subagent calls in one response):
 **CRITICAL**: Each parallel subagent MUST have a distinct, non-overlapping task. Split by directory, module, or question — never give the same task description to multiple agents.
 - User explicitly asks for multiple agents (e.g., "spawn 2 explorers", "use 3 agents")

@@ -9,44 +9,55 @@ use super::{
 };
 
 impl App {
-    /// Batch all pending background results into a single injection message
-    /// and send it silently to the LLM (not displayed in the conversation).
-    pub(super) fn drain_background_results(&mut self) {
-        if self.state.pending_bg_results.is_empty() {
+    /// Drain the next pending item from the unified queue.
+    /// User messages are sent one at a time. Consecutive background results are batched.
+    pub(super) fn drain_next_pending(&mut self) {
+        if self.state.pending_queue.is_empty() {
             return;
         }
-        let results = std::mem::take(&mut self.state.pending_bg_results);
-        let mut parts = Vec::new();
-        for r in &results {
-            parts.push(format!(
-                "[Background task [{id}] completed ({tools} tools)]\n\
-                 Task: {query}\n\n\
-                 {result}",
-                id = r.task_id,
-                tools = r.tool_call_count,
-                query = r.query,
-                result = r.result,
-            ));
-        }
-        let msg = parts.join("\n\n");
-        // Send directly to the LLM without displaying as a user message
-        self.state.agent_active = true;
-        self.state.message_generation += 1;
-        let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
-        self.state.dirty = true;
-    }
-
-    pub(super) fn drain_next_pending_message(&mut self) {
-        if let Some(queued_msg) = self.state.pending_messages.first().cloned() {
-            self.state.pending_messages.remove(0);
-            // Display the user message NOW (deferred from queue time)
-            self.message_controller
-                .handle_user_submit(&mut self.state, &queued_msg);
-            self.state.message_generation += 1;
-            // Send to agent backend
-            self.state.agent_active = true;
-            let _ = self.event_tx.send(AppEvent::UserSubmit(queued_msg));
-            self.state.dirty = true;
+        match self.state.pending_queue.front() {
+            Some(super::PendingItem::UserMessage(_)) => {
+                if let Some(super::PendingItem::UserMessage(msg)) =
+                    self.state.pending_queue.pop_front()
+                {
+                    // Display the user message NOW (deferred from queue time)
+                    self.message_controller
+                        .handle_user_submit(&mut self.state, &msg);
+                    self.state.message_generation += 1;
+                    self.state.agent_active = true;
+                    let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
+                    self.state.dirty = true;
+                }
+            }
+            Some(super::PendingItem::BackgroundResult { .. }) => {
+                // Batch all consecutive BackgroundResult items into one LLM call
+                let mut parts = Vec::new();
+                while matches!(
+                    self.state.pending_queue.front(),
+                    Some(super::PendingItem::BackgroundResult { .. })
+                ) {
+                    if let Some(super::PendingItem::BackgroundResult {
+                        task_id,
+                        query,
+                        result,
+                        tool_call_count,
+                        ..
+                    }) = self.state.pending_queue.pop_front()
+                    {
+                        parts.push(format!(
+                            "[Background task [{task_id}] completed ({tool_call_count} tools)]\n\
+                             Task: {query}\n\n\
+                             {result}"
+                        ));
+                    }
+                }
+                let msg = parts.join("\n\n");
+                self.state.agent_active = true;
+                self.state.message_generation += 1;
+                let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
+                self.state.dirty = true;
+            }
+            None => {}
         }
     }
 
@@ -184,6 +195,10 @@ impl App {
             AppEvent::AgentStarted => {
                 self.state.agent_active = true;
                 self.state.backgrounded_task_info = None;
+                // Clear finished (non-backgrounded) subagents from previous query
+                self.state
+                    .active_subagents
+                    .retain(|s| !s.finished || s.backgrounded);
                 self.state.dirty = true;
             }
             AppEvent::AgentChunk(text) => {
@@ -202,12 +217,7 @@ impl App {
                 self.state.agent_active = false;
                 self.state.backgrounding_pending = false;
                 self.state.dirty = true;
-                // Priority: user messages first, then background results
-                if !self.state.pending_messages.is_empty() {
-                    self.drain_next_pending_message();
-                } else if !self.state.pending_bg_results.is_empty() {
-                    self.drain_background_results();
-                }
+                self.drain_next_pending();
             }
             AppEvent::AgentError(err) => {
                 self.state.agent_active = false;
@@ -220,8 +230,8 @@ impl App {
                 });
                 self.state.dirty = true;
                 self.state.message_generation += 1;
-                // Continue processing queued messages despite the error
-                self.drain_next_pending_message();
+                // Continue processing queued items despite the error
+                self.drain_next_pending();
             }
 
             // Reasoning events
@@ -253,6 +263,13 @@ impl App {
                 // This avoids the race where SubagentStarted (forwarded by the bridge task)
                 // arrives after ToolResult (sent directly), causing stats to be lost.
                 if tool_name == "spawn_subagent" {
+                    // If all existing subagents are finished, this is a new batch — clear stale entries
+                    let all_finished = !self.state.active_subagents.is_empty()
+                        && self.state.active_subagents.iter().all(|s| s.finished);
+                    if all_finished {
+                        self.state.active_subagents.retain(|s| s.backgrounded);
+                    }
+
                     let agent_name = args
                         .get("agent_type")
                         .and_then(|v| v.as_str())
@@ -341,9 +358,9 @@ impl App {
                     } else {
                         result_lines
                     };
-                    let always_collapse = false;
-                    let collapse =
-                        always_collapse || (lines.len() > 5 && !is_diff_tool(&tool_name));
+                    use crate::formatters::tool_registry::{ToolCategory, categorize_tool};
+                    let is_file_read = categorize_tool(&tool_name) == ToolCategory::FileRead;
+                    let collapse = is_file_read || (lines.len() > 5 && !is_diff_tool(&tool_name));
                     (lines, collapse)
                 };
 
@@ -364,7 +381,7 @@ impl App {
                     return;
                 }
                 if tool_name == "spawn_subagent" {
-                    // Find matching subagent by parent_tool_id (reliable), fall back to task text
+                    // Remove matching subagent from active list (cleanup only, no summary display)
                     let subagent_idx = self
                         .state
                         .active_subagents
@@ -378,92 +395,9 @@ impl App {
                                 .iter()
                                 .position(|s| s.task == task_text)
                         });
-                    let stats = if let Some(idx) = subagent_idx {
-                        let subagent = self.state.active_subagents.remove(idx);
-                        let mut tc = subagent.tool_call_count;
-                        let tk = subagent.token_count;
-                        let elapsed = subagent.started_at.elapsed();
-
-                        // If bridge events haven't delivered stats yet, parse from
-                        // the output header that SpawnSubagentTool embeds reliably.
-                        if tc == 0
-                            && let Some(line) = output.lines().next()
-                            && let Some(rest) = line.strip_prefix("__subagent_stats__:")
-                        {
-                            for part in rest.split(',') {
-                                if let Some(val) = part.strip_prefix("tc=") {
-                                    tc = val.parse().unwrap_or(0);
-                                }
-                            }
-                        }
-                        (tc, tk, elapsed, subagent.success)
-                    } else {
-                        // No subagent found at all — try parsing from output header
-                        let mut tc = 0usize;
-                        if let Some(line) = output.lines().next()
-                            && let Some(rest) = line.strip_prefix("__subagent_stats__:")
-                        {
-                            for part in rest.split(',') {
-                                if let Some(val) = part.strip_prefix("tc=") {
-                                    tc = val.parse().unwrap_or(0);
-                                }
-                            }
-                        }
-                        (tc, 0, std::time::Duration::ZERO, success)
-                    };
-
-                    let summary = if !success {
-                        // Show first meaningful line of the output as error context
-                        let error_hint = output
-                            .lines()
-                            .find(|l| {
-                                !l.starts_with("__subagent_stats__:")
-                                    && !l.starts_with("task_id:")
-                                    && !l.trim().is_empty()
-                            })
-                            .unwrap_or("unknown error");
-                        let truncated = if error_hint.len() > 120 {
-                            format!("{}...", &error_hint[..120])
-                        } else {
-                            error_hint.to_string()
-                        };
-                        format!("Failed: {truncated}")
-                    } else {
-                        let elapsed_secs = stats.2.as_secs();
-                        let elapsed_str = if elapsed_secs >= 60 {
-                            format!("{}m {}s", elapsed_secs / 60, elapsed_secs % 60)
-                        } else {
-                            format!("{elapsed_secs}s")
-                        };
-                        let token_str = if stats.1 > 0 {
-                            let k = stats.1 as f64 / 1000.0;
-                            format!(" \u{00b7} {k:.1}k tokens")
-                        } else {
-                            String::new()
-                        };
-                        if stats.0 > 0 || stats.1 > 0 {
-                            format!(
-                                "Done ({} tool uses{} \u{00b7} {})",
-                                stats.0, token_str, elapsed_str
-                            )
-                        } else {
-                            "Done".to_string()
-                        }
-                    };
-                    self.state.messages.push(DisplayMessage {
-                        role: DisplayRole::Assistant,
-                        content: String::new(),
-                        tool_call: Some(DisplayToolCall {
-                            name: tool_name.clone(),
-                            arguments,
-                            summary: None,
-                            success,
-                            collapsed: false,
-                            result_lines: vec![summary],
-                            nested_calls: Vec::new(),
-                        }),
-                        collapsed: false,
-                    });
+                    if let Some(idx) = subagent_idx {
+                        self.state.active_subagents.remove(idx);
+                    }
                 } else if !display_lines.is_empty() {
                     self.state.messages.push(DisplayMessage {
                         role: DisplayRole::Assistant,
@@ -582,6 +516,7 @@ impl App {
                 subagent_id,
                 subagent_name,
                 task,
+                cancel_token,
             } => {
                 // SubagentDisplayState was eagerly created at ToolStarted time (same channel,
                 // guaranteed ordering). Now we just fill in the subagent_id so subsequent
@@ -598,8 +533,11 @@ impl App {
                         }) || s.task == task)
                 });
                 if let Some(sa) = found {
-                    sa.subagent_id = subagent_id;
+                    sa.subagent_id = subagent_id.clone();
                     sa.name = subagent_name;
+                    if let Some(token) = cancel_token {
+                        self.state.subagent_cancel_tokens.insert(subagent_id, token);
+                    }
                 } else {
                     // Fallback: create if not found (e.g. ToolStarted was missed)
                     let parent_tool_id = self
@@ -613,38 +551,45 @@ impl App {
                         .map(|t| t.id.clone());
                     if parent_tool_id.is_some() {
                         let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
-                            subagent_id,
+                            subagent_id.clone(),
                             subagent_name,
                             task,
                         );
                         sa.parent_tool_id = parent_tool_id;
                         self.state.active_subagents.push(sa);
+                        if let Some(token) = cancel_token {
+                            self.state.subagent_cancel_tokens.insert(subagent_id, token);
+                        }
                     } else if let Some(bg_task_id) = self
                         .state
                         .bg_agent_manager
                         .all_tasks()
                         .iter()
-                        .find(|t| {
-                            t.is_running() && t.current_tool.as_deref() == Some("spawn_subagent")
-                        })
+                        .find(|t| t.is_running() && t.pending_spawn_count > 0)
                         .map(|t| t.task_id.clone())
                     {
                         // Route to background task
                         self.state
                             .bg_subagent_map
                             .insert(subagent_id.clone(), bg_task_id.clone());
+                        self.state
+                            .bg_agent_manager
+                            .decrement_pending_spawn(&bg_task_id);
                         self.state.bg_agent_manager.push_activity(
                             &bg_task_id,
                             format!("\u{25b8} {subagent_name}: {task}"),
                         );
                         // Create display entry so task watcher shows tool-level detail
                         let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
-                            subagent_id,
+                            subagent_id.clone(),
                             subagent_name,
                             task,
                         );
                         sa.backgrounded = true;
                         self.state.active_subagents.push(sa);
+                        if let Some(token) = cancel_token {
+                            self.state.subagent_cancel_tokens.insert(subagent_id, token);
+                        }
                     }
                 }
                 self.state.dirty = true;
@@ -765,6 +710,8 @@ impl App {
                         format!("  Subagent {status} ({tool_call_count} tools)"),
                     );
                 }
+                // Clean up per-subagent cancel token
+                self.state.subagent_cancel_tokens.remove(&subagent_id);
                 // Remove finished subagents after marking them
                 // (keep them for one more render so the user sees the result)
                 self.state.dirty = true;
@@ -827,9 +774,17 @@ impl App {
             }
 
             AppEvent::UserSubmit(ref msg) => {
+                // Consume pending plan request and prepend sentinel
+                let forwarded = if self.state.pending_plan_request {
+                    self.state.pending_plan_request = false;
+                    self.state.mode = OperationMode::Normal;
+                    format!("\x00__PLAN_MODE__{}", msg)
+                } else {
+                    msg.clone()
+                };
                 // Forward to backend if channel is configured
                 if let Some(ref tx) = self.user_message_tx {
-                    let _ = tx.send(msg.clone());
+                    let _ = tx.send(forwarded);
                     self.state.agent_active = true;
                 }
                 self.state.dirty = true;
@@ -854,7 +809,9 @@ impl App {
                     }
                     self.state.agent_active = false;
                     self.state.backgrounding_pending = false;
-                    self.state.pending_messages.clear();
+                    self.state
+                        .pending_queue
+                        .retain(|item| !matches!(item, super::PendingItem::UserMessage(_)));
                 }
                 self.state.dirty = true;
             }
@@ -1018,6 +975,30 @@ impl App {
                 self.state.last_task_completion =
                     Some((task_id.clone(), std::time::Instant::now()));
 
+                // When a bg task was killed, mark all its child subagents as killed too
+                if was_killed {
+                    let killed_subagent_ids: Vec<String> = self
+                        .state
+                        .bg_subagent_map
+                        .iter()
+                        .filter(|(_, bg_id)| *bg_id == &task_id)
+                        .map(|(sa_id, _)| sa_id.clone())
+                        .collect();
+                    for sa_id in &killed_subagent_ids {
+                        if let Some(sa) = self
+                            .state
+                            .active_subagents
+                            .iter_mut()
+                            .find(|s| s.subagent_id == *sa_id)
+                            && !sa.finished
+                        {
+                            sa.finish(false, "Killed".to_string(), sa.tool_call_count, None);
+                        }
+                        self.state.bg_subagent_map.remove(sa_id);
+                        self.state.subagent_cancel_tokens.remove(sa_id);
+                    }
+                }
+
                 // Clear backgrounded_task_info if it matches this task
                 if let Some((ref info_id, _)) = self.state.backgrounded_task_info
                     && info_id == &task_id
@@ -1034,8 +1015,8 @@ impl App {
                         .map(|t| t.query.clone())
                         .unwrap_or_default();
                     self.state
-                        .pending_bg_results
-                        .push(super::PendingBackgroundResult {
+                        .pending_queue
+                        .push_back(super::PendingItem::BackgroundResult {
                             task_id: task_id.clone(),
                             query,
                             result: full_result,
@@ -1045,8 +1026,8 @@ impl App {
                         });
 
                     // If idle, drain immediately
-                    if !self.state.agent_active && self.state.pending_messages.is_empty() {
-                        self.drain_background_results();
+                    if !self.state.agent_active {
+                        self.drain_next_pending();
                     }
                 }
 
@@ -1057,6 +1038,11 @@ impl App {
                 tool_name,
                 tool_count,
             } => {
+                if tool_name == "spawn_subagent" {
+                    self.state
+                        .bg_agent_manager
+                        .increment_pending_spawn(&task_id);
+                }
                 self.state
                     .bg_agent_manager
                     .update_progress(&task_id, tool_name, tool_count);

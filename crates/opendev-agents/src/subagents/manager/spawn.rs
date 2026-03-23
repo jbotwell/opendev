@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 use super::SubagentManager;
@@ -62,6 +63,7 @@ impl SubagentManager {
         tool_approval_tx: Option<&opendev_runtime::ToolApprovalSender>,
         parent_max_tokens: u64,
         parent_reasoning_effort: Option<String>,
+        cancel_token: Option<CancellationToken>,
     ) -> Result<SubagentRunResult, AgentError> {
         let spec = self.get(subagent_name).ok_or_else(|| {
             AgentError::ConfigError(format!("Unknown subagent type: {subagent_name}"))
@@ -186,6 +188,7 @@ impl SubagentManager {
         // Build tool context
         let mut tool_context = opendev_tools_core::ToolContext::new(working_dir);
         tool_context.is_subagent = true;
+        tool_context.cancel_token = cancel_token;
 
         // Wire event bridge so subagent tool calls are visible to the TUI
         let bridge = Arc::new(SubagentEventBridge::new(

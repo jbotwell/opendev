@@ -28,7 +28,7 @@ Execute a bash/shell command with optional timeout.
   - Use search instead of grep or rg
   - Use list_files instead of find or ls
 - If a command fails, analyze the error before retrying. Do not blindly retry the same command
-- When running multiple independent commands, use batch_tool with parallel mode for better performance
+- When running multiple independent commands, issue separate direct tool calls only when the system supports parallel execution for that tool mix
 - When chaining dependent commands, use '&&' to ensure each succeeds before the next runs. Do NOT use newlines to separate commands
 
 ## Command Safety

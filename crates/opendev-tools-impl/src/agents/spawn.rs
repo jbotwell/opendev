@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use opendev_tools_core::{BaseTool, ToolContext, ToolResult};
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use super::events::{ChannelProgressCallback, SubagentEvent};
@@ -163,6 +164,25 @@ impl BaseTool for SpawnSubagentTool {
             return ToolResult::fail(format!("Unknown subagent type: {agent_type}"));
         }
 
+        // Soft guard: block Planner spawn during explore phase
+        let agent_type_lower = agent_type.to_lowercase();
+        if agent_type_lower == "planner"
+            && let Some(ref shared) = ctx.shared_state
+            && let Ok(state) = shared.lock()
+        {
+            let phase = state
+                .get("planning_phase")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if phase == "explore" {
+                return ToolResult::fail(
+                    "Before planning, first list the current directory structure \
+                     and review relevant files to understand the codebase context. \
+                     Use list_files, read_file, or search, then spawn Planner.",
+                );
+            }
+        }
+
         let task_id = args.get("task_id").and_then(|v| v.as_str());
 
         info!(
@@ -217,12 +237,20 @@ impl BaseTool for SpawnSubagentTool {
         // Unique ID for this subagent instance (disambiguates parallel subagents)
         let subagent_id = uuid::Uuid::new_v4().to_string();
 
+        // Create per-subagent child cancellation token
+        let subagent_cancel = if let Some(parent) = ctx.cancel_token.as_ref() {
+            parent.child_token()
+        } else {
+            CancellationToken::new()
+        };
+
         // Create progress callback
         let progress: Arc<dyn opendev_agents::SubagentProgressCallback> =
             if let Some(ref tx) = self.event_tx {
                 Arc::new(ChannelProgressCallback::new(
                     tx.clone(),
                     subagent_id.clone(),
+                    Some(subagent_cancel.clone()),
                 ))
             } else {
                 Arc::new(opendev_agents::NoopProgressCallback)
@@ -243,6 +271,7 @@ impl BaseTool for SpawnSubagentTool {
                 None,
                 self.parent_max_tokens,
                 self.parent_reasoning_effort.clone(),
+                Some(subagent_cancel),
             )
             .await;
 
@@ -312,6 +341,21 @@ impl BaseTool for SpawnSubagentTool {
                         tool_call_count: run_result.tool_call_count,
                         shallow_warning: run_result.shallow_warning,
                     });
+                }
+
+                // Track explore subagent completion for planning phase transition
+                if agent_type_lower == "explore"
+                    && let Some(ref shared) = ctx.shared_state
+                    && let Ok(mut state) = shared.lock()
+                {
+                    let count = state
+                        .get("explore_count")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    state.insert("explore_count".into(), serde_json::json!(count + 1));
+                    if state.get("planning_phase").and_then(|v| v.as_str()) == Some("explore") {
+                        state.insert("planning_phase".into(), serde_json::json!("plan"));
+                    }
                 }
 
                 ToolResult::ok(output)
@@ -483,6 +527,157 @@ mod tests {
                 .error
                 .unwrap()
                 .contains("cannot spawn other subagents")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_planner_blocked_during_explore_phase() {
+        let mut manager = opendev_agents::SubagentManager::new();
+        // Register a planner spec so agent_type validation passes
+        manager.register(opendev_agents::SubAgentSpec::new(
+            "Planner",
+            "Plans tasks",
+            "",
+        ));
+        let manager = Arc::new(manager);
+        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
+        let raw = opendev_http::HttpClient::new(
+            "https://api.example.com/v1/chat/completions",
+            reqwest::header::HeaderMap::new(),
+            None,
+        )
+        .unwrap();
+        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
+        let tool = SpawnSubagentTool::new(
+            manager,
+            registry,
+            http,
+            PathBuf::from("/tmp"),
+            "gpt-4o",
+            "/tmp",
+        );
+
+        // Create shared state in explore phase
+        let mut state = HashMap::new();
+        state.insert("planning_phase".to_string(), serde_json::json!("explore"));
+        state.insert("explore_count".to_string(), serde_json::json!(0));
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(state));
+
+        let mut ctx = ToolContext::new("/tmp");
+        ctx.shared_state = Some(shared);
+
+        let mut args = HashMap::new();
+        args.insert("agent_type".into(), serde_json::json!("Planner"));
+        args.insert("task".into(), serde_json::json!("plan the task"));
+
+        let result = tool.execute(args, &ctx).await;
+        assert!(!result.success);
+        assert!(result.error.unwrap().contains("Before planning"));
+    }
+
+    #[tokio::test]
+    async fn test_planner_allowed_during_plan_phase() {
+        let mut manager = opendev_agents::SubagentManager::new();
+        manager.register(opendev_agents::SubAgentSpec::new(
+            "Planner",
+            "Plans tasks",
+            "",
+        ));
+        let manager = Arc::new(manager);
+        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
+        let raw = opendev_http::HttpClient::new(
+            "https://api.example.com/v1/chat/completions",
+            reqwest::header::HeaderMap::new(),
+            None,
+        )
+        .unwrap();
+        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
+        // Use non-existent working dir so spawn fails fast at dir validation
+        // (never reaches network call)
+        let tool = SpawnSubagentTool::new(
+            manager,
+            registry,
+            http,
+            PathBuf::from("/tmp"),
+            "gpt-4o",
+            "/nonexistent/path/for/test",
+        );
+
+        // Create shared state in plan phase (exploration already done)
+        let mut state = HashMap::new();
+        state.insert("planning_phase".to_string(), serde_json::json!("plan"));
+        state.insert("explore_count".to_string(), serde_json::json!(1));
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(state));
+
+        let mut ctx = ToolContext::new("/tmp");
+        ctx.shared_state = Some(shared);
+
+        let mut args = HashMap::new();
+        args.insert("agent_type".into(), serde_json::json!("Planner"));
+        args.insert("task".into(), serde_json::json!("plan the task"));
+
+        // Should NOT be blocked by the explore guard — will fail at dir validation
+        // Use explicit non-existent working_dir arg to trigger fast failure
+        args.insert(
+            "working_dir".into(),
+            serde_json::json!("/nonexistent/test/path"),
+        );
+        let result = tool.execute(args, &ctx).await;
+        assert!(!result.success);
+        let err = result.error.unwrap();
+        assert!(
+            !err.contains("Before planning"),
+            "Planner should not be blocked in plan phase, got: {err}"
+        );
+        assert!(
+            err.contains("does not exist"),
+            "Expected dir validation error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_planner_allowed_without_shared_state() {
+        let mut manager = opendev_agents::SubagentManager::new();
+        manager.register(opendev_agents::SubAgentSpec::new(
+            "Planner",
+            "Plans tasks",
+            "",
+        ));
+        let manager = Arc::new(manager);
+        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
+        let raw = opendev_http::HttpClient::new(
+            "https://api.example.com/v1/chat/completions",
+            reqwest::header::HeaderMap::new(),
+            None,
+        )
+        .unwrap();
+        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
+        let tool = SpawnSubagentTool::new(
+            manager,
+            registry,
+            http,
+            PathBuf::from("/tmp"),
+            "gpt-4o",
+            "/tmp",
+        );
+
+        // No shared state — normal non-plan-mode usage
+        let ctx = ToolContext::new("/tmp");
+
+        let mut args = HashMap::new();
+        args.insert("agent_type".into(), serde_json::json!("Planner"));
+        args.insert("task".into(), serde_json::json!("plan the task"));
+        args.insert(
+            "working_dir".into(),
+            serde_json::json!("/nonexistent/test/path"),
+        );
+
+        let result = tool.execute(args, &ctx).await;
+        assert!(!result.success);
+        let err = result.error.unwrap();
+        assert!(
+            !err.contains("Before planning"),
+            "Planner should not be blocked without shared state, got: {err}"
         );
     }
 }

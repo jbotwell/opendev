@@ -24,8 +24,7 @@ mod types;
 pub use enums::{AutonomyLevel, OperationMode, ReasoningLevel};
 pub use state::AppState;
 pub use types::{
-    DisplayMessage, DisplayRole, DisplayToolCall, PendingBackgroundResult, RoleStyle,
-    ToolExecution, ToolState,
+    DisplayMessage, DisplayRole, DisplayToolCall, PendingItem, RoleStyle, ToolExecution, ToolState,
 };
 
 use std::io;
@@ -39,9 +38,7 @@ use crate::controllers::{
 use crate::event::{AppEvent, EventHandler};
 use crate::managers::BackgroundTaskManager;
 use crossterm::{
-    event::{
-        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
-    },
+    event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -90,6 +87,22 @@ impl Default for App {
 }
 
 impl App {
+    fn should_render_before_draining(event: &AppEvent) -> bool {
+        matches!(
+            event,
+            AppEvent::ReasoningContent(_)
+                | AppEvent::AgentChunk(_)
+                | AppEvent::AgentMessage(_)
+                | AppEvent::ToolStarted { .. }
+                | AppEvent::ToolResult { .. }
+                | AppEvent::ToolFinished { .. }
+                | AppEvent::SubagentStarted { .. }
+                | AppEvent::SubagentToolCall { .. }
+                | AppEvent::SubagentToolComplete { .. }
+                | AppEvent::SubagentFinished { .. }
+        )
+    }
+
     /// Create a new TUI application with default state.
     pub fn new() -> Self {
         let event_handler = EventHandler::new(Duration::from_millis(60));
@@ -180,10 +193,7 @@ impl App {
             use std::io::Write;
             let _ = terminal.backend_mut().write_all(b"\x1b[?1007l");
         }
-        execute!(
-            terminal.backend_mut(),
-            crossterm::event::DisableFocusChange
-        )?;
+        execute!(terminal.backend_mut(), crossterm::event::DisableFocusChange)?;
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
         terminal.show_cursor()?;
 
@@ -242,12 +252,18 @@ impl App {
             }
 
             // Wait for at least one event
+            let mut should_render_now = false;
             if let Some(event) = self.event_handler.next().await {
+                should_render_now = Self::should_render_before_draining(&event);
                 self.handle_event(event);
             }
 
             // Drain all remaining queued events before next render
-            while let Some(event) = self.event_handler.try_next() {
+            while !should_render_now {
+                let Some(event) = self.event_handler.try_next() else {
+                    break;
+                };
+                should_render_now = Self::should_render_before_draining(&event);
                 self.handle_event(event);
                 if !self.state.running {
                     break;
@@ -261,11 +277,43 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event::AppEvent;
 
     #[test]
     fn test_app_creation() {
         let app = App::new();
         assert!(app.state.running);
         assert_eq!(app.state.mode, OperationMode::Normal);
+    }
+
+    #[test]
+    fn test_should_render_before_draining_on_live_subagent_events() {
+        assert!(App::should_render_before_draining(
+            &AppEvent::ReasoningContent("thinking".into(),)
+        ));
+        assert!(App::should_render_before_draining(&AppEvent::ToolStarted {
+            tool_id: "t1".into(),
+            tool_name: "spawn_subagent".into(),
+            args: std::collections::HashMap::new(),
+        }));
+        assert!(App::should_render_before_draining(
+            &AppEvent::SubagentStarted {
+                subagent_id: "sa1".into(),
+                subagent_name: "Explore".into(),
+                task: "Inspect auth".into(),
+                cancel_token: None,
+            }
+        ));
+        assert!(App::should_render_before_draining(
+            &AppEvent::ToolFinished {
+                tool_id: "t1".into(),
+                success: true,
+            }
+        ));
+    }
+
+    #[test]
+    fn test_should_not_force_render_before_draining_on_tick() {
+        assert!(!App::should_render_before_draining(&AppEvent::Tick));
     }
 }

@@ -15,6 +15,13 @@ You must NOT create, modify, or delete any files. Your role is to search and ana
 - `read_file` — Read file content. Use for project manifests, entry points, key modules.
 - `list_files` — List files/dirs by glob. Use to understand project structure.
 - `run_command` — Run shell commands (read-only: git log, wc, find, etc.). Use for repo stats, git history, or filesystem queries that other tools can't handle.
+- `ast_grep` — Structural code search using AST patterns. Write patterns as real code with `$VAR` wildcards (single node) and `$$$VAR` (multiple nodes). Matches code structure regardless of whitespace/formatting.
+
+### When to use ast_grep vs grep
+- **Use ast_grep** when searching for code *structure*: function/method definitions, struct/class declarations, specific call patterns, trait implementations, import statements, or any pattern where code shape matters more than exact text.
+  - Examples: `fn $NAME($$$ARGS) -> Result<$$$>`, `impl $TRAIT for $TYPE`, `use $$$::$NAME`, `console.log($$$ARGS)`
+- **Use grep** when searching for text *content*: string literals, comments, config values, error messages, type names as plain text, or when you need regex features.
+- **Rule of thumb**: If your grep pattern has lots of escaped special characters (`\(`, `\{`, `\[`), you probably want ast_grep instead.
 
 ## Strategy
 

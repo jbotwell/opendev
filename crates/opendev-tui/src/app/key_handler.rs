@@ -131,8 +131,7 @@ impl App {
                 self.state.task_watcher_open = false;
                 self.state.force_clear = true;
             } else {
-                let has_bg_subagents =
-                    self.state.active_subagents.iter().any(|s| s.backgrounded);
+                let has_bg_subagents = self.state.active_subagents.iter().any(|s| s.backgrounded);
                 let has_bg_agents = !self.state.bg_agent_manager.all_tasks().is_empty();
                 if has_bg_subagents || has_bg_agents {
                     self.state.task_watcher_open = true;
@@ -201,7 +200,7 @@ impl App {
                 .bg_agent_manager
                 .all_tasks()
                 .iter()
-                .filter(|t| !covered_bg_task_ids.contains(&t.task_id))
+                .filter(|t| !t.hidden && !covered_bg_task_ids.contains(&t.task_id))
                 .count();
             let total_tasks = self.state.active_subagents.len() + filtered_bg_count;
 
@@ -269,11 +268,47 @@ impl App {
                 (_, KeyCode::Char('x')) => {
                     let sa_count = self.state.active_subagents.len();
                     let focus = self.state.task_watcher_focus;
-                    if focus >= sa_count {
+                    if focus < sa_count {
+                        // Focused on a subagent cell — cancel just this subagent
+                        let subagent = &self.state.active_subagents[focus];
+                        if subagent.backgrounded
+                            && !subagent.finished
+                            && let Some(token) =
+                                self.state.subagent_cancel_tokens.get(&subagent.subagent_id)
+                        {
+                            token.cancel();
+                            // If this was the last active subagent for the parent bg task, kill the parent too
+                            if let Some(parent_bg_id) = self
+                                .state
+                                .bg_subagent_map
+                                .get(&subagent.subagent_id)
+                                .cloned()
+                            {
+                                let other_active = self.state.active_subagents.iter().any(|s| {
+                                    s.backgrounded
+                                        && !s.finished
+                                        && s.subagent_id != subagent.subagent_id
+                                        && self.state.bg_subagent_map.get(&s.subagent_id)
+                                            == Some(&parent_bg_id)
+                                });
+                                if !other_active {
+                                    self.state.bg_agent_manager.kill_task(&parent_bg_id);
+                                    self.state.bg_agent_manager.hide_task(&parent_bg_id);
+                                }
+                            }
+                        }
+                    } else {
+                        // Focused on a bg_agent_manager cell — use filtered list to match display order
                         let bg_idx = focus - sa_count;
-                        let bg_tasks = self.state.bg_agent_manager.all_tasks();
-                        if bg_idx < bg_tasks.len() {
-                            let task_id = bg_tasks[bg_idx].task_id.clone();
+                        let filtered: Vec<_> = self
+                            .state
+                            .bg_agent_manager
+                            .all_tasks()
+                            .into_iter()
+                            .filter(|t| !t.hidden && !covered_bg_task_ids.contains(&t.task_id))
+                            .collect();
+                        if bg_idx < filtered.len() {
+                            let task_id = filtered[bg_idx].task_id.clone();
                             self.state.bg_agent_manager.kill_task(&task_id);
                         }
                     }
@@ -551,7 +586,9 @@ impl App {
 
                     if self.state.agent_active {
                         // Queue silently — message will display when consumed
-                        self.state.pending_messages.push(msg);
+                        self.state
+                            .pending_queue
+                            .push_back(super::PendingItem::UserMessage(msg));
                         self.state.dirty = true;
                     } else {
                         // Start fading the welcome panel on first user message
@@ -835,7 +872,10 @@ mod tests {
         app.state.task_watcher_open = true;
         let key = crossterm::event::KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         app.handle_key(key);
-        assert!(!app.state.task_watcher_open, "Esc should close task watcher");
+        assert!(
+            !app.state.task_watcher_open,
+            "Esc should close task watcher"
+        );
         assert!(app.state.force_clear, "Esc should set force_clear");
     }
 
@@ -845,7 +885,10 @@ mod tests {
         app.state.task_watcher_open = true;
         let key = crossterm::event::KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL);
         app.handle_key(key);
-        assert!(!app.state.task_watcher_open, "Ctrl+B should close task watcher");
+        assert!(
+            !app.state.task_watcher_open,
+            "Ctrl+B should close task watcher"
+        );
         assert!(app.state.force_clear, "Ctrl+B should set force_clear");
     }
 
@@ -855,7 +898,10 @@ mod tests {
         app.state.task_watcher_open = true;
         let key = crossterm::event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
         app.handle_key(key);
-        assert!(!app.state.task_watcher_open, "Ctrl+P should close task watcher");
+        assert!(
+            !app.state.task_watcher_open,
+            "Ctrl+P should close task watcher"
+        );
         assert!(app.state.force_clear, "Ctrl+P should set force_clear");
     }
 
@@ -865,7 +911,10 @@ mod tests {
         app.state.task_watcher_open = true;
         let key = crossterm::event::KeyEvent::new(KeyCode::Char('b'), KeyModifiers::ALT);
         app.handle_key(key);
-        assert!(!app.state.task_watcher_open, "Alt+B should close task watcher");
+        assert!(
+            !app.state.task_watcher_open,
+            "Alt+B should close task watcher"
+        );
         assert!(app.state.force_clear, "Alt+B should set force_clear");
     }
 

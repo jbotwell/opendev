@@ -81,7 +81,6 @@ fn tool_groups() -> HashMap<&'static str, HashSet<&'static str>> {
             "clear_todos",
             "search_tools",
             "invoke_skill",
-            "batch_tool",
         ]),
     );
 

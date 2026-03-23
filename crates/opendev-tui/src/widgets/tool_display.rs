@@ -84,10 +84,7 @@ impl Widget for ToolDisplayWidget<'_> {
                         .fg(style_tokens::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!(" {arg}"),
-                    Style::default().fg(style_tokens::SUBTLE),
-                ),
+                Span::styled(format!(" {arg}"), Style::default().fg(style_tokens::SUBTLE)),
                 Span::styled(elapsed_str, Style::default().fg(style_tokens::GREY)),
             ]));
 

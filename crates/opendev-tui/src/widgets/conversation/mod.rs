@@ -32,7 +32,6 @@ use crate::app::{DisplayMessage, DisplayRole, DisplayToolCall, RoleStyle, ToolEx
 use crate::formatters::display::strip_system_reminders;
 use crate::formatters::markdown::MarkdownRenderer;
 use crate::formatters::style_tokens::{self, Indent};
-use crate::formatters::tool_registry::categorize_tool;
 use crate::widgets::progress::TaskProgress;
 use crate::widgets::spinner::{COMPLETED_CHAR, CONTINUATION_CHAR, SPINNER_FRAMES};
 
@@ -270,6 +269,21 @@ impl<'a> ConversationWidget<'a> {
         lines
     }
 
+    fn build_render_lines(&self) -> Vec<Line<'a>> {
+        let mut lines: Vec<Line<'a>> = if let Some(cached) = self.cached_lines {
+            cached.to_vec()
+        } else {
+            self.build_lines()
+        };
+
+        let spinner_lines = self.build_spinner_lines();
+        if !spinner_lines.is_empty() {
+            lines.extend(spinner_lines);
+        }
+
+        lines
+    }
+
     /// Build lines for a tool call result.
     fn build_tool_call_lines(&self, tc: &DisplayToolCall, lines: &mut Vec<Line<'a>>) {
         let tool_line = format_tool_call(tc, Some(self.working_dir));
@@ -309,18 +323,9 @@ impl<'a> ConversationWidget<'a> {
                 }
             }
         } else if effective_collapsed && !tc.result_lines.is_empty() {
-            // Show collapsed indicator — read tools get a short summary
             let count = tc.result_lines.len();
-            let is_read = categorize_tool(&tc.name)
-                == crate::formatters::tool_registry::ToolCategory::FileRead;
-            let label = if is_read {
-                format!("  {}  ({count} lines)", CONTINUATION_CHAR)
-            } else {
-                format!(
-                    "  {}  ({count} lines collapsed, press Ctrl+O to expand)",
-                    CONTINUATION_CHAR,
-                )
-            };
+            let verb = crate::formatters::tool_registry::lookup_tool(&tc.name).verb;
+            let label = format!("  {}  {verb} {count} lines", CONTINUATION_CHAR);
             lines.push(Line::from(Span::styled(
                 label,
                 Style::default().fg(style_tokens::SUBTLE),
@@ -346,15 +351,9 @@ impl Widget for ConversationWidget<'_> {
         // shifts text and the same characters appear at different positions.
         Clear.render(area, buf);
 
-        // Build spinner lines separately — these are rendered outside the
-        // scrollable paragraph so that 60ms tick animation doesn't shift
-        // the scroll math or cause the gap to jitter.
-        let spinner_lines = self.build_spinner_lines();
-        let spinner_height = spinner_lines.len() as u16;
-
-        // Reserve bottom rows: 1 gap row + spinner rows (if any).
-        // This keeps the gap between conversation and input stable.
-        let reserved = 1 + spinner_height;
+        // Reserve a single blank row above input; spinner lines are part of the
+        // scrollable conversation content.
+        let reserved = 1;
         let content_height = area.height.saturating_sub(reserved);
         if content_height == 0 {
             return;
@@ -366,14 +365,8 @@ impl Widget for ConversationWidget<'_> {
             ..area
         };
 
-        // Use pre-built cached lines if available, otherwise build from scratch.
-        let owned_lines;
-        let lines: &[Line] = if let Some(cached) = self.cached_lines {
-            cached
-        } else {
-            owned_lines = self.build_lines();
-            &owned_lines
-        };
+        let render_lines = self.build_render_lines();
+        let lines: &[Line] = &render_lines;
 
         // Compute total wrapped line count (character-level estimate)
         let total_lines: usize = lines
@@ -390,7 +383,7 @@ impl Widget for ConversationWidget<'_> {
         let viewport_height = content_area.height as usize;
         let max_scroll = total_lines.saturating_sub(viewport_height);
 
-        let paragraph = Paragraph::new(lines.to_vec()).wrap(Wrap { trim: false });
+        let paragraph = Paragraph::new(render_lines).wrap(Wrap { trim: false });
 
         // scroll_offset = lines from bottom; convert to lines from top for ratatui
         let clamped = (self.scroll_offset as usize).min(max_scroll);
@@ -420,36 +413,6 @@ impl Widget for ConversationWidget<'_> {
                     if let Some(cell) = buf.cell_mut(ratatui::layout::Position::new(x, y)) {
                         cell.set_bg(bg);
                     }
-                }
-            }
-        }
-
-        // Render spinner lines below the scroll area.
-        // We scan the buffer to find the actual last rendered content row,
-        // because word wrapping can cause the Paragraph to use more rows
-        // than our div_ceil estimate (total_lines). Placing the spinner
-        // based on the estimate can overlap the trailing blank line gap.
-        if spinner_height > 0 {
-            let last_content_row = (content_area.y
-                ..content_area.y.saturating_add(content_area.height))
-                .rev()
-                .find(|&y| {
-                    (content_area.x..content_area.x.saturating_add(content_area.width)).any(|x| {
-                        buf.cell(ratatui::layout::Position::new(x, y))
-                            .is_some_and(|c| c.symbol() != " ")
-                    })
-                });
-
-            // Place spinner 2 rows after last content (1 blank line gap).
-            let spinner_y = match last_content_row {
-                Some(y) => y + 2,
-                None => content_area.y,
-            };
-
-            for (i, line) in spinner_lines.iter().enumerate() {
-                let y = spinner_y + i as u16;
-                if y < area.bottom() {
-                    buf.set_line(area.x, y, line, area.width);
                 }
             }
         }
@@ -562,9 +525,10 @@ mod tests {
             .flat_map(|l| l.spans.iter())
             .map(|s| s.content.to_string())
             .collect();
-        // read_file shows short summary without "Ctrl+O" hint
-        assert!(text.contains("2 lines"));
+        // read_file shows "Read 2 lines" without parentheses or "Ctrl+O" hint
+        assert!(text.contains("Read 2 lines"));
         assert!(!text.contains("Ctrl+O"));
+        assert!(!text.contains("("));
     }
 
     #[test]
@@ -590,9 +554,8 @@ mod tests {
             args,
         }];
         let widget = ConversationWidget::new(&msgs, 0).active_tools(&tools);
-        // Spinner is now built separately from message lines
-        let spinner = widget.build_spinner_lines();
-        let text: String = spinner
+        let render_lines = widget.build_render_lines();
+        let text: String = render_lines
             .iter()
             .flat_map(|l| l.spans.iter())
             .map(|s| s.content.to_string())
@@ -601,14 +564,6 @@ mod tests {
         assert!(text.contains("Bash"));
         assert!(text.contains("ls -la"));
         assert!(text.contains("(3s)"));
-        // Message lines should NOT contain spinner content
-        let msg_lines = widget.build_lines();
-        let msg_text: String = msg_lines
-            .iter()
-            .flat_map(|l| l.spans.iter())
-            .map(|s| s.content.to_string())
-            .collect();
-        assert!(!msg_text.contains("(3s)"));
     }
 
     #[test]
@@ -1149,27 +1104,16 @@ mod tests {
             .map(|s| s.content.to_string())
             .collect();
 
-        // All 3 subagents should show "Done" with tool counts
-        assert!(
-            text.contains("Done"),
-            "Expected 'Done' in spinner output, got: {text}"
-        );
-        // Each subagent header should be present
+        // Each subagent should be rendered individually (no grouping)
+        assert!(!text.contains("3 subagents"), "Should not group subagents");
         for task in &tasks {
-            let task_short = if task.len() > 60 {
-                format!("{}...", &task[..60])
-            } else {
-                task.to_string()
-            };
             assert!(
-                text.contains(&task_short),
-                "Expected task '{task_short}' in spinner output"
+                text.contains(task),
+                "Expected task '{task}' in spinner output"
             );
         }
-        // Tool counts should be present
-        assert!(text.contains("(3 tool uses)"));
-        assert!(text.contains("(4 tool uses)"));
-        assert!(text.contains("(5 tool uses)"));
+        // Each finished subagent should show Done individually
+        assert!(text.contains("Done"));
     }
 
     /// Test that in-progress parallel subagents still show active tool calls (not "Done").
@@ -1247,10 +1191,130 @@ mod tests {
             !text.contains("Done"),
             "Should not show 'Done' for in-progress subagents"
         );
-        // Should show the active tool (Read)
+        // Each subagent rendered individually with its active tool
         assert!(
             text.contains("Read"),
-            "Expected active tool 'Read' in output"
+            "active tool 'Read' should appear in individual spinner lines"
+        );
+        // No grouping
+        assert!(!text.contains("2 subagents"), "Should not group subagents");
+    }
+
+    #[test]
+    fn test_render_lines_include_spinner_content() {
+        let msgs = vec![DisplayMessage {
+            role: DisplayRole::User,
+            content: "Do something".into(),
+            tool_call: None,
+            collapsed: false,
+        }];
+        let mut args = std::collections::HashMap::new();
+        args.insert("command".into(), serde_json::Value::String("ls -la".into()));
+        let tools = vec![ToolExecution {
+            id: "t1".into(),
+            name: "run_command".into(),
+            output_lines: vec![],
+            state: crate::app::ToolState::Running,
+            elapsed_secs: 3,
+            started_at: std::time::Instant::now(),
+            tick_count: 0,
+            parent_id: None,
+            depth: 0,
+            args,
+        }];
+        let widget = ConversationWidget::new(&msgs, 0).active_tools(&tools);
+        let text: String = widget
+            .build_render_lines()
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .map(|s| s.content.to_string())
+            .collect();
+        assert!(text.contains("> Do something") || text.contains("Do something"));
+        assert!(text.contains("Bash"));
+        assert!(text.contains("(3s)"));
+    }
+
+    #[test]
+    fn test_snapshot_parallel_subagents_group_visible_in_tui() {
+        use crate::widgets::nested_tool::SubagentDisplayState;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let backend = TestBackend::new(60, 8);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let msgs = vec![DisplayMessage {
+            role: DisplayRole::User,
+            content: "Explore the repo".into(),
+            tool_call: None,
+            collapsed: false,
+        }];
+
+        let tasks = [
+            "Search auth code",
+            "Find database models",
+            "Explore API routes",
+            "Trace background jobs",
+        ];
+
+        let tools: Vec<ToolExecution> = tasks
+            .iter()
+            .enumerate()
+            .map(|(i, task)| {
+                let mut args = std::collections::HashMap::new();
+                args.insert("task".into(), serde_json::Value::String(task.to_string()));
+                args.insert(
+                    "description".into(),
+                    serde_json::Value::String(task.to_string()),
+                );
+                ToolExecution {
+                    id: format!("t{i}"),
+                    name: "spawn_subagent".into(),
+                    output_lines: vec![],
+                    state: crate::app::ToolState::Running,
+                    elapsed_secs: 2,
+                    started_at: std::time::Instant::now(),
+                    tick_count: 0,
+                    parent_id: None,
+                    depth: 0,
+                    args,
+                }
+            })
+            .collect();
+
+        let subagents: Vec<SubagentDisplayState> = tasks
+            .iter()
+            .enumerate()
+            .map(|(i, task)| {
+                let mut sa =
+                    SubagentDisplayState::new(format!("sa{i}"), "explore".into(), task.to_string());
+                sa.parent_tool_id = Some(format!("t{i}"));
+                sa
+            })
+            .collect();
+
+        terminal
+            .draw(|frame| {
+                let widget = ConversationWidget::new(&msgs, 0)
+                    .active_tools(&tools)
+                    .active_subagents(&subagents);
+                frame.render_widget(widget, frame.area());
+            })
+            .unwrap();
+
+        let buf = terminal.backend().buffer().clone();
+        let all_text = buffer_text(&buf, Rect::new(0, 0, 60, 8)).join("\n");
+
+        // Each subagent rendered individually (no grouping)
+        assert!(
+            !all_text.contains("4 subagents"),
+            "Should not group subagents: {all_text}"
+        );
+        // At least some individual agents visible in the 8-row viewport
+        let visible = tasks.iter().filter(|t| all_text.contains(*t)).count();
+        assert!(
+            visible >= 1,
+            "At least one subagent should be visible: {all_text}"
         );
     }
 
