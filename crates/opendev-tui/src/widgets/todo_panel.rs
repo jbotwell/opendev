@@ -183,6 +183,26 @@ impl<'a> TodoPanelWidget<'a> {
     }
 
     fn build_collapsed_line(&self, done: usize, total: usize) -> Line<'a> {
+        // All tasks complete — show checkmark instead of spinner
+        if done == total && total > 0 {
+            return Line::from(vec![
+                Span::styled(
+                    " \u{2714} ".to_string(),
+                    Style::default()
+                        .fg(style_tokens::SUCCESS)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "All tasks complete".to_string(),
+                    Style::default().fg(style_tokens::SUCCESS),
+                ),
+                Span::styled(
+                    format!("  ({done}/{total})"),
+                    Style::default().fg(style_tokens::GREY),
+                ),
+            ]);
+        }
+
         let spinner = SPINNER_FRAMES[self.spinner_tick % SPINNER_FRAMES.len()];
 
         // Find the active (doing) item
@@ -379,6 +399,37 @@ mod tests {
         let widget = TodoPanelWidget::new(&items);
         // 3 items + progress bar + 2 borders = 6
         assert_eq!(widget.required_height(), 6);
+    }
+
+    #[test]
+    fn test_collapsed_all_done_shows_checkmark() {
+        let items = vec![
+            TodoDisplayItem {
+                id: 1,
+                title: "Task A".into(),
+                status: TodoDisplayStatus::Completed,
+                active_form: None,
+            },
+            TodoDisplayItem {
+                id: 2,
+                title: "Task B".into(),
+                status: TodoDisplayStatus::Completed,
+                active_form: None,
+            },
+        ];
+        let widget = TodoPanelWidget::new(&items).with_expanded(false);
+        let (done, _, total) = widget.counts();
+        let line = widget.build_collapsed_line(done, total);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            text.contains("All tasks complete"),
+            "Expected 'All tasks complete', got: {text}"
+        );
+        assert!(text.contains('\u{2714}'), "Expected checkmark in: {text}");
+        assert!(
+            !text.contains("Working"),
+            "Should not show 'Working' when all done"
+        );
     }
 
     #[test]

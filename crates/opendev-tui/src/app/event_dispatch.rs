@@ -472,9 +472,11 @@ impl App {
                         && !self.state.todo_items.is_empty()
                     {
                         self.state.todo_expanded = true;
+                        self.state.todo_all_done_at = None;
                     }
                     if tool_name == "clear_todos" {
                         self.state.todo_items.clear();
+                        self.state.todo_all_done_at = None;
                     }
                 }
 
