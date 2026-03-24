@@ -16,8 +16,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Widget},
 };
 
-/// Spinner frames for the collapsed active-todo display.
-const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+/// Spinner frames for the active-todo display (rotating arrow cycle).
+const SPINNER_FRAMES: &[char] = &['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
 
 /// Status of a single todo item for display purposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,13 +79,23 @@ impl<'a> TodoPanelWidget<'a> {
     }
 
     /// Get the required height for this widget.
+    /// Returns 0 when all items are completed (hides the panel, matching Python behavior).
     pub fn required_height(&self) -> u16 {
+        // Hide panel when all items are done (Python: todo_panel.py:89-97)
+        if !self.items.is_empty()
+            && self
+                .items
+                .iter()
+                .all(|i| i.status == TodoDisplayStatus::Completed)
+        {
+            return 0;
+        }
         if !self.expanded {
             // Collapsed: border top + 1 line + border bottom
             return 3;
         }
-        // Expanded: 2 borders + 1 progress bar + items (capped at 10)
-        (self.items.len() as u16 + 3).min(12)
+        // Expanded: 2 borders + items (capped at 10)
+        (self.items.len() as u16 + 2).min(12)
     }
 
     /// Count (done, in_progress, total) in a single pass.
@@ -102,79 +112,35 @@ impl<'a> TodoPanelWidget<'a> {
         (done, in_progress, self.items.len())
     }
 
-    fn build_lines(&self, done: usize, in_progress: usize, total: usize) -> Vec<Line<'a>> {
-
+    fn build_lines(&self, _done: usize, _in_progress: usize, _total: usize) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
-
-        // Progress bar
-        if total > 0 {
-            let bar_width = 20usize;
-            let filled = (done * bar_width) / total;
-            let partial = if in_progress > 0 && filled < bar_width {
-                1
-            } else {
-                0
-            };
-            let empty = bar_width.saturating_sub(filled).saturating_sub(partial);
-
-            let mut bar_spans = vec![Span::styled(" [", Style::default().fg(style_tokens::GREY))];
-            if filled > 0 {
-                bar_spans.push(Span::styled(
-                    "=".repeat(filled),
-                    Style::default().fg(style_tokens::SUCCESS),
-                ));
-            }
-            if partial > 0 {
-                bar_spans.push(Span::styled(
-                    ">".to_string(),
-                    Style::default().fg(style_tokens::PRIMARY),
-                ));
-            }
-            if empty > 0 {
-                bar_spans.push(Span::styled(
-                    " ".repeat(empty),
-                    Style::default().fg(style_tokens::GREY),
-                ));
-            }
-            bar_spans.push(Span::styled(
-                format!("] {done}/{total}"),
-                Style::default().fg(style_tokens::GREY),
-            ));
-            lines.push(Line::from(bar_spans));
-        }
 
         // Individual items
         for item in self.items {
             let (symbol, style) = match item.status {
                 TodoDisplayStatus::Completed => (
-                    " \u{2714} ", // checkmark
-                    Style::default()
-                        .fg(style_tokens::SUCCESS)
-                        .add_modifier(Modifier::DIM),
+                    " \u{2714} ".to_string(), // checkmark
+                    Style::default().fg(style_tokens::GOLD),
                 ),
-                TodoDisplayStatus::InProgress => (
-                    " \u{25B6} ", // play triangle
-                    Style::default()
-                        .fg(style_tokens::PRIMARY)
-                        .add_modifier(Modifier::BOLD),
-                ),
+                TodoDisplayStatus::InProgress => {
+                    let spinner = SPINNER_FRAMES[self.spinner_tick % SPINNER_FRAMES.len()];
+                    (
+                        format!(" {spinner} "),
+                        Style::default()
+                            .fg(style_tokens::PRIMARY)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                }
                 TodoDisplayStatus::Pending => (
-                    " \u{25CB} ", // circle
+                    " \u{25CB} ".to_string(), // circle
                     Style::default().fg(style_tokens::GREY),
                 ),
             };
 
-            let title = item.title.clone();
-            // Truncate long titles
-            let max_title = 60;
-            let display_title = if title.len() > max_title {
-                format!("{}...", &title[..max_title - 3])
-            } else {
-                title
-            };
+            let display_title = item.title.clone();
 
             lines.push(Line::from(vec![
-                Span::styled(symbol.to_string(), style),
+                Span::styled(symbol, style),
                 Span::styled(display_title, style),
             ]));
         }
@@ -241,22 +207,6 @@ impl Widget for TodoPanelWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let (done, in_progress, total) = self.counts();
 
-        let has_in_progress = in_progress > 0;
-
-        let spinner_span = if self.expanded && has_in_progress {
-            Span::styled(
-                format!(
-                    "{} ",
-                    SPINNER_FRAMES[self.spinner_tick % SPINNER_FRAMES.len()]
-                ),
-                Style::default()
-                    .fg(style_tokens::PRIMARY)
-                    .add_modifier(Modifier::BOLD),
-            )
-        } else {
-            Span::raw("")
-        };
-
         let title_text = if self.expanded {
             if let Some(name) = self.plan_name {
                 format!("TODOS: {name} ({done}/{total})")
@@ -269,18 +219,15 @@ impl Widget for TodoPanelWidget<'_> {
 
         let title = Line::from(vec![
             Span::raw(" "),
-            spinner_span,
             Span::styled(
                 title_text,
                 Style::default()
-                    .fg(style_tokens::ACCENT)
+                    .fg(style_tokens::GREEN_LIGHT)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                " · Ctrl+T to toggle ",
-                Style::default()
-                    .fg(style_tokens::GREY)
-                    .add_modifier(Modifier::DIM),
+                " (Ctrl+T to toggle) ",
+                Style::default().fg(style_tokens::GREY),
             ),
         ]);
 
@@ -340,8 +287,8 @@ mod tests {
         let widget = TodoPanelWidget::new(&items);
         let (done, in_progress, total) = widget.counts();
         let lines = widget.build_lines(done, in_progress, total);
-        // 1 progress bar line + 3 item lines
-        assert_eq!(lines.len(), 4);
+        // 3 item lines (no progress bar)
+        assert_eq!(lines.len(), 3);
     }
 
     #[test]
@@ -384,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn test_long_title_truncated() {
+    fn test_long_title_not_truncated() {
         let items = vec![TodoDisplayItem {
             id: 1,
             title: "A".repeat(100),
@@ -394,8 +341,10 @@ mod tests {
         let widget = TodoPanelWidget::new(&items);
         let (done, in_progress, total) = widget.counts();
         let lines = widget.build_lines(done, in_progress, total);
-        // Progress bar + 1 item
-        assert_eq!(lines.len(), 2);
+        assert_eq!(lines.len(), 1);
+        // Full title should be present (no truncation)
+        let text: String = lines[0].spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(text.contains(&"A".repeat(100)));
     }
 
     #[test]
@@ -423,8 +372,8 @@ mod tests {
     fn test_required_height_expanded() {
         let items = make_items();
         let widget = TodoPanelWidget::new(&items);
-        // 3 items + progress bar + 2 borders = 6
-        assert_eq!(widget.required_height(), 6);
+        // 3 items + 2 borders = 5
+        assert_eq!(widget.required_height(), 5);
     }
 
     #[test]
@@ -459,27 +408,7 @@ mod tests {
     }
 
     #[test]
-    fn test_required_height_collapsed() {
-        let items = make_items();
-        let widget = TodoPanelWidget::new(&items).with_expanded(false);
-        assert_eq!(widget.required_height(), 3);
-    }
-
-    #[test]
-    fn test_expanded_title_has_spinner_when_in_progress() {
-        let items = make_items(); // has 1 in-progress item
-        let widget = TodoPanelWidget::new(&items).with_spinner_tick(2);
-        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
-        widget.render(Rect::new(0, 0, 80, 10), &mut buf);
-        // Extract top row text from buffer
-        let top_row: String = (0..80).map(|x| buf.cell((x, 0)).unwrap().symbol().to_string()).collect::<String>();
-        // Should contain a spinner frame (tick 2 = '⠹')
-        assert!(top_row.contains('⠹'), "Expected spinner in title, got: {top_row}");
-        assert!(top_row.contains("Ctrl+T to toggle"), "Expected hint in title, got: {top_row}");
-    }
-
-    #[test]
-    fn test_expanded_title_no_spinner_when_all_done() {
+    fn test_required_height_zero_when_all_done() {
         let items = vec![
             TodoDisplayItem {
                 id: 1,
@@ -487,13 +416,74 @@ mod tests {
                 status: TodoDisplayStatus::Completed,
                 active_form: None,
             },
+            TodoDisplayItem {
+                id: 2,
+                title: "Also done".into(),
+                status: TodoDisplayStatus::Completed,
+                active_form: None,
+            },
         ];
+        let widget = TodoPanelWidget::new(&items);
+        assert_eq!(
+            widget.required_height(),
+            0,
+            "Panel should hide (height 0) when all items are completed"
+        );
+    }
+
+    #[test]
+    fn test_required_height_collapsed() {
+        let items = make_items();
+        let widget = TodoPanelWidget::new(&items).with_expanded(false);
+        assert_eq!(widget.required_height(), 3);
+    }
+
+    #[test]
+    fn test_expanded_title_no_spinner_in_header() {
+        let items = make_items(); // has 1 in-progress item
+        let widget = TodoPanelWidget::new(&items).with_spinner_tick(2);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        widget.render(Rect::new(0, 0, 80, 10), &mut buf);
+        // Extract top row text from buffer
+        let top_row: String = (0..80)
+            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
+            .collect::<String>();
+        // No spinner in the expanded header (spinners are per-item only)
+        for frame in SPINNER_FRAMES {
+            assert!(
+                !top_row.contains(*frame),
+                "Should not have spinner in expanded header, got: {top_row}"
+            );
+        }
+        assert!(
+            top_row.contains("Ctrl+T to toggle"),
+            "Expected hint in title, got: {top_row}"
+        );
+    }
+
+    #[test]
+    fn test_expanded_title_no_spinner_when_all_done() {
+        let items = vec![TodoDisplayItem {
+            id: 1,
+            title: "Done".into(),
+            status: TodoDisplayStatus::Completed,
+            active_form: None,
+        }];
         let widget = TodoPanelWidget::new(&items).with_spinner_tick(2);
         let mut buf = Buffer::empty(Rect::new(0, 0, 80, 6));
         widget.render(Rect::new(0, 0, 80, 6), &mut buf);
-        let top_row: String = (0..80).map(|x| buf.cell((x, 0)).unwrap().symbol().to_string()).collect::<String>();
-        // No spinner when all done
-        assert!(!top_row.contains('⠹'), "Should not have spinner when all done, got: {top_row}");
-        assert!(top_row.contains("Ctrl+T to toggle"), "Expected hint in title, got: {top_row}");
+        let top_row: String = (0..80)
+            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
+            .collect::<String>();
+        for frame in SPINNER_FRAMES {
+            assert!(
+                !top_row.contains(*frame),
+                "Should not have spinner when all done, got: {top_row}"
+            );
+        }
+        assert!(
+            top_row.contains("Ctrl+T to toggle"),
+            "Expected hint in title, got: {top_row}"
+        );
     }
 }
