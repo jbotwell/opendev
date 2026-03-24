@@ -274,6 +274,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "slow: macOS FSEvents debouncer cleanup takes ~24s"]
     async fn test_file_watcher_start_and_stop() {
         let tmp = TempDir::new().unwrap();
         let tmp_path = tmp.path().canonicalize().unwrap();
@@ -283,7 +284,7 @@ mod tests {
             &tmp_path,
             FileWatcherConfig {
                 debounce: Duration::from_millis(50),
-                inactivity_timeout: Duration::from_secs(5),
+                inactivity_timeout: Duration::from_millis(500),
                 ..Default::default()
             },
         );
@@ -297,7 +298,7 @@ mod tests {
         std::fs::write(tmp_path.join("new.txt"), "new").unwrap();
 
         // Wait for the change to be detected
-        let change = tokio::time::timeout(Duration::from_secs(3), rx.recv()).await;
+        let change = tokio::time::timeout(Duration::from_secs(2), rx.recv()).await;
         assert!(change.is_ok(), "Should receive a change event");
 
         // Stop the watcher
@@ -305,6 +306,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "slow: macOS FSEvents debouncer cleanup takes ~24s"]
     async fn test_file_watcher_inactivity_timeout() {
         let tmp = TempDir::new().unwrap();
         let tmp_path = tmp.path().canonicalize().unwrap();
@@ -325,7 +327,7 @@ mod tests {
         while rx.try_recv().is_ok() {}
 
         // Wait for timeout — the channel should close
-        let result = tokio::time::timeout(Duration::from_secs(5), async {
+        let result = tokio::time::timeout(Duration::from_secs(2), async {
             while rx.recv().await.is_some() {
                 // drain events
             }
