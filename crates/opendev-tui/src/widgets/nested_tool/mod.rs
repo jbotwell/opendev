@@ -176,7 +176,7 @@ impl Widget for NestedToolWidget<'_> {
                     ),
                     Span::styled(verb, Style::default().fg(style_tokens::SUBTLE)),
                     Span::styled(
-                        format!("({arg})"),
+                        format!(" {arg}"),
                         Style::default().fg(style_tokens::SUBTLE),
                     ),
                     Span::styled(

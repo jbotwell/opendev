@@ -75,7 +75,7 @@ impl Widget for TaskProgressWidget<'_> {
 
         let info_str = info_parts.join(" \u{00b7} "); // middle dot separator
         spans.push(Span::styled(
-            format!("({info_str})"),
+            info_str,
             Style::default().fg(style_tokens::SUBTLE),
         ));
 

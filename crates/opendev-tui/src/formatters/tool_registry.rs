@@ -470,7 +470,7 @@ fn extract_arg_from_keys(
 
 /// Format a tool call with arguments for display.
 ///
-/// Returns a string like `Read(/path/to/file.rs)` or `Bash(ls -la)`.
+/// Returns a string like `Read /path/to/file.rs` or `Bash ls -la`.
 pub fn format_tool_call_display(
     tool_name: &str,
     args: &HashMap<String, serde_json::Value>,
@@ -479,7 +479,7 @@ pub fn format_tool_call_display(
     if arg.is_empty() {
         verb
     } else {
-        format!("{verb}({arg})")
+        format!("{verb} {arg}")
     }
 }
 
@@ -741,21 +741,21 @@ mod tests {
             serde_json::Value::String("ls -la".to_string()),
         );
         let display = format_tool_call_display("run_command", &args);
-        assert_eq!(display, "Bash(ls -la)");
+        assert_eq!(display, "Bash ls -la");
     }
 
     #[test]
     fn test_format_tool_call_no_args() {
         let args = std::collections::HashMap::new();
         let display = format_tool_call_display("list_todos", &args);
-        assert_eq!(display, "List Todos(todos)");
+        assert_eq!(display, "List Todos todos");
     }
 
     #[test]
     fn test_format_mcp_tool() {
         let args = std::collections::HashMap::new();
         let display = format_tool_call_display("mcp__sqlite__query", &args);
-        assert_eq!(display, "MCP(sqlite/query)");
+        assert_eq!(display, "MCP sqlite/query");
     }
 
     #[test]

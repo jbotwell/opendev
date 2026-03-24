@@ -532,7 +532,7 @@ fn build_subagent_cell(
             icon: format!("{spinner_ch} "),
             icon_color: style_tokens::BLUE_BRIGHT,
             verb,
-            args: format!("({arg}){elapsed_str}"),
+            args: format!("{arg}{elapsed_str}"),
         });
     }
 
