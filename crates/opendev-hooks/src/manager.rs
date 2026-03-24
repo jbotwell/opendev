@@ -306,6 +306,7 @@ mod tests {
         assert!(outcome.results.is_empty());
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_run_hooks_success() {
         let config = make_config_with_echo(HookEvent::PreToolUse, None, "echo ok");
@@ -318,6 +319,7 @@ mod tests {
         assert!(outcome.results[0].success());
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_run_hooks_blocked() {
         let config = make_config_with_echo(
@@ -333,6 +335,7 @@ mod tests {
         assert_eq!(outcome.block_reason, "dangerous");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_run_hooks_block_stderr_fallback() {
         let config = make_config_with_echo(
@@ -367,6 +370,7 @@ mod tests {
         assert!(outcome.results.is_empty());
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_run_hooks_additional_context() {
         let config = make_config_with_echo(
@@ -382,6 +386,7 @@ mod tests {
         assert_eq!(outcome.additional_context.as_deref(), Some("extra info"));
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_run_hooks_permission_decision() {
         let config = make_config_with_echo(
@@ -397,6 +402,7 @@ mod tests {
         assert_eq!(outcome.permission_decision.as_deref(), Some("allow"));
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_run_hooks_updated_input() {
         let config = make_config_with_echo(

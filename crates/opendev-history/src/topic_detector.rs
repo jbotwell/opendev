@@ -45,8 +45,11 @@ You are a conversation topic analyzer. Determine whether the user's latest messa
 introduces or shifts to a new conversation topic.
 
 Respond with a JSON object containing exactly two fields:
-- \"isNewTopic\": boolean - true if the topic is new or has meaningfully changed
-- \"title\": string or null - a concise 2-4 word lowercase title if isNewTopic is true, null otherwise
+- \"isNewTopic\": boolean - true if the topic is new or has meaningfully changed, \
+or if there is no current title yet
+- \"title\": string or null - a concise 2-5 word lowercase title if isNewTopic is true, null otherwise
+
+If no current title exists, you MUST set isNewTopic to true and provide a title.
 
 Title examples: \"auth middleware refactor\", \"debug login flow\", \"add search feature\".
 
@@ -240,7 +243,22 @@ async fn detect_and_update(
     session_id: &str,
     recent_messages: &[SimpleMessage],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let result = call_llm(client, provider, model, api_key, recent_messages, None).await?;
+    let current_title = {
+        let mgr = session_manager.lock().await;
+        mgr.current_session()
+            .and_then(|s| s.metadata.get("title"))
+            .and_then(|v| v.as_str())
+            .map(|t| t.to_string())
+    };
+    let result = call_llm(
+        client,
+        provider,
+        model,
+        api_key,
+        recent_messages,
+        current_title.as_deref(),
+    )
+    .await?;
 
     if result.is_new_topic
         && let Some(title) = result.title
@@ -292,7 +310,7 @@ async fn call_llm(
              Analyze the conversation above. Has the topic meaningfully changed?"
         )
     } else {
-        "Analyze the conversation above. Is the latest message a new topic?".to_string()
+        "There is no current title. Analyze the conversation above and provide a title.".to_string()
     };
 
     api_messages.push(serde_json::json!({
@@ -500,6 +518,58 @@ mod tests {
             .and_then(|v| v.as_str())
             .unwrap();
         assert_eq!(title.len(), 50);
+    }
+
+    #[test]
+    fn test_detector_disabled_returns_none() {
+        let detector = TopicDetector::new("nonexistent_provider_xyz_99999");
+        // If no key found, detector should be disabled
+        if !detector.is_enabled() {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let result = rt.block_on(detector.detect_title(&[], None));
+            assert!(result.is_none());
+        }
+    }
+
+    #[test]
+    fn test_empty_title_filtered() {
+        // TopicResult with empty title should be filtered out by detect_title logic
+        let json = r#"{"isNewTopic": true, "title": ""}"#;
+        let result: TopicResult = serde_json::from_str(json).unwrap();
+        assert!(result.is_new_topic);
+        let title = result
+            .title
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
+        assert!(title.is_none());
+    }
+
+    #[test]
+    fn test_title_trimming() {
+        let json = r#"{"isNewTopic": true, "title": "  debug login flow  "}"#;
+        let result: TopicResult = serde_json::from_str(json).unwrap();
+        let title = result
+            .title
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
+        assert_eq!(title.as_deref(), Some("debug login flow"));
+    }
+
+    #[test]
+    fn test_message_count_limiting() {
+        let msgs: Vec<SimpleMessage> = (0..10)
+            .map(|i| SimpleMessage {
+                role: "user".to_string(),
+                content: format!("message {i}"),
+            })
+            .collect();
+        let recent: Vec<SimpleMessage> = if msgs.len() > MAX_RECENT_MESSAGES {
+            msgs[msgs.len() - MAX_RECENT_MESSAGES..].to_vec()
+        } else {
+            msgs.to_vec()
+        };
+        assert_eq!(recent.len(), MAX_RECENT_MESSAGES);
+        assert_eq!(recent[0].content, "message 6");
     }
 
     #[tokio::test]

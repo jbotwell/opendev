@@ -463,6 +463,7 @@ mod tests {
         assert_eq!(json["exists"], false);
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_verify_path_valid_dir() {
         let tmp = TempDir::new().unwrap();
@@ -493,6 +494,7 @@ mod tests {
         assert_eq!(json["is_directory"], true);
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_browse_directory() {
         let tmp = TempDir::new().unwrap();

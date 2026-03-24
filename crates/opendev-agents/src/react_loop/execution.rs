@@ -74,6 +74,15 @@ impl<'a> IterationEmitter<'a> {
         }
     }
 
+    /// Emit reasoning block start (separator between interleaved blocks).
+    fn emit_reasoning_block_start(&self) {
+        if !self.suppress_content
+            && let Some(cb) = self.cb
+        {
+            cb.on_reasoning_block_start();
+        }
+    }
+
     /// Emit text if streaming didn't deliver it (non-streaming fallback).
     fn emit_text_if_not_streamed(&self, content: &str) {
         if !self.suppress_content
@@ -364,6 +373,7 @@ impl ReactLoop {
                     match event {
                         StreamEvent::TextDelta(text) => emitter.emit_text(text),
                         StreamEvent::ReasoningDelta(text) => emitter.emit_reasoning(text),
+                        StreamEvent::ReasoningBlockStart => emitter.emit_reasoning_block_start(),
                         _ => {}
                     }
                 });
@@ -1352,6 +1362,30 @@ impl ReactLoop {
                                 }
                             } else {
                                 append_directive(messages, &nudge);
+                            }
+                        }
+
+                        // Inject plan_approved_signal after successful present_plan
+                        if tool_name == "present_plan" && tool_result.success {
+                            let plan_content = tool_result
+                                .metadata
+                                .get("plan_content")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let step_count = tool_result
+                                .metadata
+                                .get("step_count")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0);
+                            let reminder = get_reminder(
+                                "plan_approved_signal",
+                                &[
+                                    ("todos_created", &step_count.to_string()),
+                                    ("plan_content", plan_content),
+                                ],
+                            );
+                            if !reminder.is_empty() {
+                                append_directive(messages, &reminder);
                             }
                         }
 

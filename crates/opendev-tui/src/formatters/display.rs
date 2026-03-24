@@ -149,7 +149,7 @@ pub fn truncate_output(text: &str, head: usize, tail: usize) -> (String, bool, u
     };
 
     let mut result = head_part.join("\n");
-    result.push_str(&format!("\n... ({hidden} lines hidden) ...\n"));
+    result.push_str(&format!("\n... {hidden} lines hidden ...\n"));
     result.push_str(&tail_part.join("\n"));
 
     (result, true, hidden)

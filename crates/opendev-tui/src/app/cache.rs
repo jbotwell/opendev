@@ -151,7 +151,7 @@ impl App {
 
         // --- Viewport culling ---
         let viewport_h = self.conversation_viewport_height();
-        let mut buffer_lines = 50usize;
+        let mut buffer_lines = 100usize;
         if self.state.task_progress.is_some()
             || !self.state.active_tools.is_empty()
             || !self.state.active_subagents.is_empty()
@@ -242,7 +242,7 @@ impl App {
         use crate::formatters::display::strip_system_reminders;
         use crate::formatters::markdown::MarkdownRenderer;
         use crate::formatters::style_tokens::{self, Indent};
-        use crate::formatters::tool_registry::{categorize_tool, format_tool_call_parts_short};
+        use crate::formatters::tool_registry::format_tool_call_parts_short;
         use crate::formatters::wrap::wrap_spans_to_lines;
         use crate::widgets::spinner::{COMPLETED_CHAR, CONTINUATION_CHAR};
         use ratatui::style::{Modifier, Style};
@@ -309,8 +309,26 @@ impl App {
                     }
                 }
             }
+            DisplayRole::System => {
+                let subtle_style = Style::default().fg(style_tokens::SUBTLE);
+                for (i, line_text) in content.lines().enumerate() {
+                    if i == 0 {
+                        lines.push(Line::from(vec![
+                            Span::styled(
+                                format!("{} ", COMPLETED_CHAR),
+                                Style::default().fg(style_tokens::WARNING),
+                            ),
+                            Span::styled(line_text.to_string(), subtle_style),
+                        ]));
+                    } else {
+                        lines.push(Line::from(vec![
+                            Span::raw(Indent::CONT),
+                            Span::styled(line_text.to_string(), subtle_style),
+                        ]));
+                    }
+                }
+            }
             DisplayRole::User
-            | DisplayRole::System
             | DisplayRole::Interrupt
             | DisplayRole::SlashCommand
             | DisplayRole::CommandResult => {
@@ -383,6 +401,104 @@ impl App {
                     }
                 }
             }
+            DisplayRole::Plan => {
+                let border_style = Style::default().fg(style_tokens::CYAN);
+                let border_w: usize = if max_w > 0 { max_w } else { 32 };
+                let inner_w = border_w.saturating_sub(1); // leave room for right │
+                let label = " Plan ";
+                let top_after = border_w.saturating_sub(3 + label.len() + 1); // 3 = ╭── prefix, +1 for ╮ suffix
+
+                // Top border: ╭── Plan ──────────────────╮
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("{}{}", style_tokens::BOX_TL, style_tokens::BOX_H.repeat(2)),
+                        border_style,
+                    ),
+                    Span::styled(
+                        label.to_string(),
+                        border_style.add_modifier(ratatui::style::Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!(
+                            "{}{}",
+                            style_tokens::BOX_H.repeat(top_after),
+                            style_tokens::BOX_TR
+                        ),
+                        border_style,
+                    ),
+                ]));
+
+                // Top padding
+                lines.push(Line::from(vec![
+                    Span::styled(style_tokens::BOX_V.to_string(), border_style),
+                    Span::raw(" ".repeat(inner_w.saturating_sub(1))),
+                    Span::styled(style_tokens::BOX_V.to_string(), border_style),
+                ]));
+
+                // Markdown content with left border prefix
+                let cache_key = markdown_cache_key(&msg.role, &content);
+                let md_lines = if let Some(cached) = markdown_cache.get(&cache_key) {
+                    cached.clone()
+                } else {
+                    let rendered = MarkdownRenderer::render(&content);
+                    markdown_cache.insert(cache_key, rendered.clone());
+                    rendered
+                };
+
+                let prefix_str = format!("{}  ", style_tokens::BOX_V);
+                let prefix_span = vec![Span::styled(prefix_str.clone(), border_style)];
+                let cont_span = vec![Span::styled(prefix_str, border_style)];
+
+                let wrap_width = if max_w > 0 { inner_w } else { 0 };
+                let content_lines = if wrap_width > 0 {
+                    wrap_spans_to_lines(md_lines, prefix_span, cont_span, wrap_width)
+                } else {
+                    let mut out = Vec::new();
+                    for md_line in md_lines {
+                        let mut spans = prefix_span.clone();
+                        spans.extend(
+                            md_line
+                                .spans
+                                .into_iter()
+                                .map(|s| Span::styled(s.content.to_string(), s.style)),
+                        );
+                        out.push(Line::from(spans));
+                    }
+                    out
+                };
+
+                // Add right border to each content line
+                for mut line in content_lines {
+                    if border_w > 0 {
+                        let line_w = line.width();
+                        let pad = inner_w.saturating_sub(line_w);
+                        if pad > 0 {
+                            line.spans.push(Span::raw(" ".repeat(pad)));
+                        }
+                        line.spans
+                            .push(Span::styled(style_tokens::BOX_V.to_string(), border_style));
+                    }
+                    lines.push(line);
+                }
+
+                // Bottom padding
+                lines.push(Line::from(vec![
+                    Span::styled(style_tokens::BOX_V.to_string(), border_style),
+                    Span::raw(" ".repeat(inner_w.saturating_sub(1))),
+                    Span::styled(style_tokens::BOX_V.to_string(), border_style),
+                ]));
+
+                // Bottom border: ╰──────────────────────────╯
+                lines.push(Line::from(vec![Span::styled(
+                    format!(
+                        "{}{}{}",
+                        style_tokens::BOX_BL,
+                        style_tokens::BOX_H.repeat(border_w.saturating_sub(2)),
+                        style_tokens::BOX_BR
+                    ),
+                    border_style,
+                )]));
+            }
         }
 
         // Tool call summary
@@ -401,10 +517,7 @@ impl App {
                         .fg(style_tokens::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!("({arg})"),
-                    Style::default().fg(style_tokens::SUBTLE),
-                ),
+                Span::styled(format!(" {arg}"), Style::default().fg(style_tokens::SUBTLE)),
             ]));
 
             // Diff tools are never collapsed
@@ -442,17 +555,8 @@ impl App {
                 }
             } else if effective_collapsed && !tc.result_lines.is_empty() {
                 let count = tc.result_lines.len();
-                let is_read = categorize_tool(&tc.name)
-                    == crate::formatters::tool_registry::ToolCategory::FileRead;
-                let label = if is_read {
-                    let verb = crate::formatters::tool_registry::lookup_tool(&tc.name).verb;
-                    format!("  {}  {verb} {count} lines", CONTINUATION_CHAR)
-                } else {
-                    format!(
-                        "  {}  ({count} lines collapsed, press Ctrl+O to expand)",
-                        CONTINUATION_CHAR,
-                    )
-                };
+                let verb = crate::formatters::tool_registry::lookup_tool(&tc.name).verb;
+                let label = format!("  {}  {verb} {count} lines", CONTINUATION_CHAR);
                 lines.push(Line::from(Span::styled(
                     label,
                     Style::default().fg(style_tokens::SUBTLE),
@@ -480,7 +584,7 @@ impl App {
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
-                        format!("({n_arg})"),
+                        format!(" {n_arg}"),
                         Style::default().fg(style_tokens::SUBTLE),
                     ),
                 ]));

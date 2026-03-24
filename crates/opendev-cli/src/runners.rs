@@ -359,15 +359,7 @@ pub async fn run_interactive(
                         app_state.messages.push(opendev_tui::app::DisplayMessage {
                             role: opendev_tui::app::DisplayRole::Assistant,
                             content: String::new(),
-                            tool_call: Some(opendev_tui::app::DisplayToolCall {
-                                name: tc.name.clone(),
-                                arguments: tc.parameters.clone(),
-                                summary: tc.result_summary.clone(),
-                                success: tc.error.is_none(),
-                                collapsed: true,
-                                result_lines: Vec::new(),
-                                nested_calls: Vec::new(),
-                            }),
+                            tool_call: Some(opendev_tui::app::DisplayToolCall::from_model(tc)),
                             collapsed: false,
                         });
                     }

@@ -321,9 +321,14 @@ impl AgentRuntime {
                                 if m.content.is_empty() {
                                     return None;
                                 }
+                                let truncated = if m.content.len() > 500 {
+                                    m.content[..500].to_string()
+                                } else {
+                                    m.content.clone()
+                                };
                                 Some(SimpleMessage {
                                     role: role.to_string(),
-                                    content: m.content.clone(),
+                                    content: truncated,
                                 })
                             })
                             .collect()

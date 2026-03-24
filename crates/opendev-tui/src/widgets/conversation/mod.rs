@@ -163,6 +163,77 @@ impl<'a> ConversationWidget<'a> {
         }
     }
 
+    /// Render plan content in a bordered panel with markdown formatting.
+    fn render_plan_panel(content: &str, lines: &mut Vec<Line<'_>>) {
+        let border_style = Style::default().fg(style_tokens::CYAN);
+        let border_w: usize = 32;
+        let inner_w = border_w.saturating_sub(1);
+        let label = " Plan ";
+        let top_after = border_w.saturating_sub(3 + label.len() + 1);
+
+        // Top border: ╭── Plan ──────────────────╮
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{}{}", style_tokens::BOX_TL, style_tokens::BOX_H.repeat(2)),
+                border_style,
+            ),
+            Span::styled(
+                label.to_string(),
+                border_style.add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::styled(
+                format!(
+                    "{}{}",
+                    style_tokens::BOX_H.repeat(top_after),
+                    style_tokens::BOX_TR
+                ),
+                border_style,
+            ),
+        ]));
+
+        // Top padding
+        lines.push(Line::from(vec![
+            Span::styled(style_tokens::BOX_V.to_string(), border_style),
+            Span::raw(" ".repeat(inner_w.saturating_sub(1))),
+            Span::styled(style_tokens::BOX_V.to_string(), border_style),
+        ]));
+
+        // Render content through markdown with left border prefix
+        let md_lines = MarkdownRenderer::render(content);
+        let prefix = format!("{}  ", style_tokens::BOX_V);
+        for md_line in md_lines {
+            let mut spans = vec![Span::styled(prefix.clone(), border_style)];
+            spans.extend(md_line.spans);
+            let line = Line::from(spans);
+            let line_w = line.width();
+            let mut spans = line.spans;
+            let pad = border_w.saturating_sub(line_w);
+            if pad > 0 {
+                spans.push(Span::raw(" ".repeat(pad)));
+            }
+            spans.push(Span::styled(style_tokens::BOX_V.to_string(), border_style));
+            lines.push(Line::from(spans));
+        }
+
+        // Bottom padding
+        lines.push(Line::from(vec![
+            Span::styled(style_tokens::BOX_V.to_string(), border_style),
+            Span::raw(" ".repeat(inner_w.saturating_sub(1))),
+            Span::styled(style_tokens::BOX_V.to_string(), border_style),
+        ]));
+
+        // Bottom border: ╰──────────────────────────╯
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "{}{}{}",
+                style_tokens::BOX_BL,
+                style_tokens::BOX_H.repeat(border_w.saturating_sub(2)),
+                style_tokens::BOX_BR
+            ),
+            border_style,
+        )]));
+    }
+
     /// Build styled lines from messages.
     fn build_lines(&self) -> Vec<Line<'a>> {
         let mut lines: Vec<Line> = Vec::new();
@@ -211,8 +282,26 @@ impl<'a> ConversationWidget<'a> {
                         }
                     }
                 }
+                DisplayRole::System => {
+                    let subtle_style = Style::default().fg(style_tokens::SUBTLE);
+                    for (i, line_text) in content.lines().enumerate() {
+                        if i == 0 {
+                            lines.push(Line::from(vec![
+                                Span::styled(
+                                    format!("{} ", COMPLETED_CHAR),
+                                    Style::default().fg(style_tokens::WARNING),
+                                ),
+                                Span::styled(line_text.to_string(), subtle_style),
+                            ]));
+                        } else {
+                            lines.push(Line::from(vec![
+                                Span::raw(Indent::CONT),
+                                Span::styled(line_text.to_string(), subtle_style),
+                            ]));
+                        }
+                    }
+                }
                 DisplayRole::User
-                | DisplayRole::System
                 | DisplayRole::Interrupt
                 | DisplayRole::SlashCommand
                 | DisplayRole::CommandResult => {
@@ -247,6 +336,9 @@ impl<'a> ConversationWidget<'a> {
                             lines.push(Line::from(spans));
                         }
                     }
+                }
+                DisplayRole::Plan => {
+                    Self::render_plan_panel(&content, &mut lines);
                 }
             }
 
@@ -560,10 +652,10 @@ mod tests {
             .flat_map(|l| l.spans.iter())
             .map(|s| s.content.to_string())
             .collect();
-        // Should show display name like "Bash(ls -la)" not raw "run_command"
+        // Should show display name like "Bash ls -la" not raw "run_command"
         assert!(text.contains("Bash"));
         assert!(text.contains("ls -la"));
-        assert!(text.contains("(3s)"));
+        assert!(text.contains("3s"));
     }
 
     #[test]
@@ -1231,7 +1323,7 @@ mod tests {
             .collect();
         assert!(text.contains("> Do something") || text.contains("Do something"));
         assert!(text.contains("Bash"));
-        assert!(text.contains("(3s)"));
+        assert!(text.contains("3s"));
     }
 
     #[test]

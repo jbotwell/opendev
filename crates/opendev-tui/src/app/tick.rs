@@ -59,9 +59,38 @@ impl App {
             self.state.spinner.tick();
         }
 
-        // Advance todo spinner (for collapsed mode)
+        // Todo panel lifecycle: auto-collapse → auto-hide after all done
         if !self.state.todo_items.is_empty() {
-            self.state.todo_spinner_tick = self.state.todo_spinner_tick.wrapping_add(1);
+            let all_done = self
+                .state
+                .todo_items
+                .iter()
+                .all(|i| i.status == crate::widgets::TodoDisplayStatus::Completed);
+
+            if all_done {
+                if self.state.todo_all_done_at.is_none() {
+                    // Grace just started — collapse immediately, show "All tasks complete"
+                    self.state.todo_all_done_at = Some(Instant::now());
+                    self.state.todo_expanded = false;
+                    self.state.dirty = true;
+                } else if self
+                    .state
+                    .todo_all_done_at
+                    .is_some_and(|t| t.elapsed() > Duration::from_secs(5))
+                {
+                    // Grace expired — clear items (hides panel)
+                    self.state.todo_items.clear();
+                    self.state.todo_all_done_at = None;
+                    self.state.plan_name = None;
+                    self.state.force_clear = true;
+                    self.state.dirty = true;
+                }
+                // Don't advance spinner when all done
+            } else {
+                // Items still incomplete — reset grace, advance spinner
+                self.state.todo_all_done_at = None;
+                self.state.todo_spinner_tick = self.state.todo_spinner_tick.wrapping_add(1);
+            }
         }
 
         // Update elapsed time and tick counter on active tools

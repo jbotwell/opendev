@@ -234,6 +234,7 @@ mod tests {
         assert_eq!(result["query"], serde_json::json!("hello world"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_normalize_params_path_resolution_absolute() {
         let mut args = HashMap::new();
@@ -243,6 +244,7 @@ mod tests {
         assert_eq!(result["file_path"], serde_json::json!("/absolute/path.rs"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_normalize_params_path_resolution_relative() {
         let mut args = HashMap::new();
@@ -255,6 +257,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_normalize_params_path_with_dotdot() {
         let mut args = HashMap::new();
@@ -264,6 +267,7 @@ mod tests {
         assert_eq!(result["file_path"], serde_json::json!("/workspace/lib.rs"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_normalize_params_tilde_expansion() {
         let mut args = HashMap::new();
@@ -323,6 +327,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_normalize_params_redundant_basename() {
         // Simulates LLM passing "myproject/main.rs" when cwd is /home/user/myproject
@@ -340,6 +345,7 @@ mod tests {
         // the path module's own tests cover the filesystem-dependent redundancy detection.
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_normalize_params_path_param_resolved() {
         // The "path" param should now be resolved too
@@ -350,6 +356,7 @@ mod tests {
         assert_eq!(result["path"], serde_json::json!("/workspace/src/lib.rs"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_normalize_params_working_dir_param_resolved() {
         let mut args = HashMap::new();

@@ -24,6 +24,8 @@ pub enum DisplayRole {
     SlashCommand,
     /// Slash command result — rendered with `  ⎿  ` prefix, attaches to previous.
     CommandResult,
+    /// Plan content — rendered in a bordered panel with markdown.
+    Plan,
 }
 
 /// Rendering configuration for simple (non-markdown, non-collapsible) roles.
@@ -58,15 +60,6 @@ impl DisplayRole {
                 continuation: Indent::CONT,
                 attach_to_previous: false,
             }),
-            Self::System => Some(RoleStyle {
-                icon: "! ".to_string(),
-                icon_style: Style::default()
-                    .fg(style_tokens::WARNING)
-                    .add_modifier(Modifier::ITALIC),
-                text_color: style_tokens::SUBTLE,
-                continuation: Indent::CONT,
-                attach_to_previous: false,
-            }),
             Self::Interrupt => Some(RoleStyle {
                 icon: format!("  {CONTINUATION_CHAR}  "),
                 icon_style: Style::default()
@@ -92,7 +85,7 @@ impl DisplayRole {
                 continuation: Indent::RESULT_CONT,
                 attach_to_previous: true,
             }),
-            Self::Assistant | Self::Reasoning => None,
+            Self::Assistant | Self::System | Self::Reasoning | Self::Plan => None,
         }
     }
 }
@@ -110,6 +103,47 @@ pub struct DisplayToolCall {
     pub result_lines: Vec<String>,
     /// Nested tool calls (from subagent execution).
     pub nested_calls: Vec<DisplayToolCall>,
+}
+
+impl DisplayToolCall {
+    /// Convert a model `ToolCall` into a `DisplayToolCall` with smart collapse
+    /// and result extraction.  Used by both history hydration and the batch
+    /// message handler so they produce identical output.
+    pub fn from_model(tc: &opendev_models::message::ToolCall) -> Self {
+        use crate::formatters::tool_registry::{ToolCategory, categorize_tool};
+        use crate::widgets::conversation::is_diff_tool;
+
+        let result_lines: Vec<String> = tc
+            .result
+            .as_ref()
+            .map(|r| {
+                let text = match r {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => serde_json::to_string_pretty(other).unwrap_or_default(),
+                };
+                text.lines().take(50).map(|l| l.to_string()).collect()
+            })
+            .unwrap_or_default();
+
+        let is_file_read = categorize_tool(&tc.name) == ToolCategory::FileRead;
+        let collapsed = is_file_read || (result_lines.len() > 5 && !is_diff_tool(&tc.name));
+
+        let nested_calls = tc
+            .nested_tool_calls
+            .iter()
+            .map(DisplayToolCall::from_model)
+            .collect();
+
+        Self {
+            name: tc.name.clone(),
+            arguments: tc.parameters.clone(),
+            summary: tc.result_summary.clone(),
+            success: tc.error.is_none(),
+            collapsed,
+            result_lines,
+            nested_calls,
+        }
+    }
 }
 
 /// A queued item waiting to be processed by the foreground agent.
@@ -186,5 +220,135 @@ impl ToolExecution {
     /// Whether the tool execution was successful.
     pub fn is_success(&self) -> bool {
         self.state.is_success()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opendev_models::message::ToolCall;
+    use std::collections::HashMap;
+
+    fn make_tool_call(
+        name: &str,
+        result: Option<serde_json::Value>,
+        error: Option<String>,
+    ) -> ToolCall {
+        ToolCall {
+            id: "test-id".to_string(),
+            name: name.to_string(),
+            parameters: HashMap::new(),
+            result,
+            result_summary: None,
+            timestamp: chrono::Utc::now(),
+            approved: true,
+            error,
+            nested_tool_calls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_from_model_string_result() {
+        let tc = make_tool_call(
+            "bash",
+            Some(serde_json::Value::String("hello\nworld".to_string())),
+            None,
+        );
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert_eq!(dtc.result_lines, vec!["hello", "world"]);
+        assert!(dtc.success);
+    }
+
+    #[test]
+    fn test_from_model_json_result() {
+        let val = serde_json::json!({"key": "value"});
+        let tc = make_tool_call("bash", Some(val), None);
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert!(!dtc.result_lines.is_empty());
+        assert!(dtc.result_lines.join("\n").contains("\"key\""));
+    }
+
+    #[test]
+    fn test_from_model_50_line_cap() {
+        let long_text = (0..100)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let tc = make_tool_call("bash", Some(serde_json::Value::String(long_text)), None);
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert_eq!(dtc.result_lines.len(), 50);
+    }
+
+    #[test]
+    fn test_from_model_short_result_not_collapsed() {
+        let tc = make_tool_call(
+            "bash",
+            Some(serde_json::Value::String("a\nb\nc".to_string())),
+            None,
+        );
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert!(!dtc.collapsed);
+    }
+
+    #[test]
+    fn test_from_model_long_result_collapsed() {
+        let text = (0..10)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let tc = make_tool_call("bash", Some(serde_json::Value::String(text)), None);
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert!(dtc.collapsed);
+    }
+
+    #[test]
+    fn test_from_model_file_read_always_collapsed() {
+        let tc = make_tool_call(
+            "read_file",
+            Some(serde_json::Value::String("short".to_string())),
+            None,
+        );
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert!(dtc.collapsed);
+    }
+
+    #[test]
+    fn test_from_model_diff_tool_never_collapsed() {
+        let text = (0..10)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let tc = make_tool_call("edit_file", Some(serde_json::Value::String(text)), None);
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert!(!dtc.collapsed);
+    }
+
+    #[test]
+    fn test_from_model_error_maps_to_failure() {
+        let tc = make_tool_call("bash", None, Some("command failed".to_string()));
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert!(!dtc.success);
+    }
+
+    #[test]
+    fn test_from_model_nested_calls() {
+        let mut tc = make_tool_call("spawn_subagent", None, None);
+        tc.nested_tool_calls = vec![make_tool_call(
+            "bash",
+            Some(serde_json::Value::String("nested output".to_string())),
+            None,
+        )];
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert_eq!(dtc.nested_calls.len(), 1);
+        assert_eq!(dtc.nested_calls[0].name, "bash");
+        assert_eq!(dtc.nested_calls[0].result_lines, vec!["nested output"]);
+    }
+
+    #[test]
+    fn test_from_model_no_result() {
+        let tc = make_tool_call("bash", None, None);
+        let dtc = DisplayToolCall::from_model(&tc);
+        assert!(dtc.result_lines.is_empty());
+        assert!(!dtc.collapsed);
     }
 }

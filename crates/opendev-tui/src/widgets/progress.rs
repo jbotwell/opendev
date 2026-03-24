@@ -64,7 +64,7 @@ impl Widget for TaskProgressWidget<'_> {
             Style::default().fg(style_tokens::SUBTLE),
         ));
 
-        // Info section: (esc to interrupt . Xs . token_display)
+        // Info section: esc to interrupt · Xs · token_display
         let mut info_parts = Vec::new();
         info_parts.push("esc to interrupt".to_string());
         info_parts.push(format!("{}s", self.progress.elapsed_secs));
@@ -75,7 +75,7 @@ impl Widget for TaskProgressWidget<'_> {
 
         let info_str = info_parts.join(" \u{00b7} "); // middle dot separator
         spans.push(Span::styled(
-            format!("({info_str})"),
+            info_str,
             Style::default().fg(style_tokens::SUBTLE),
         ));
 

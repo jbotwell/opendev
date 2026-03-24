@@ -259,6 +259,7 @@ mod tests {
         assert!(result.ends_with("/projects/foo"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_expand_home_tilde_only() {
         let result = expand_home("~");
@@ -273,6 +274,7 @@ mod tests {
         assert!(result.ends_with("/Documents"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_expand_home_dollar_home_only() {
         let result = expand_home("$HOME");

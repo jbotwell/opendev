@@ -496,6 +496,7 @@ mod tests {
         assert!(wrapper.has_server_for(Path::new("test.xyz")));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_parse_symbol_info() {
         let json = serde_json::json!({
@@ -516,6 +517,7 @@ mod tests {
         assert_eq!(sym.container_name.as_deref(), Some("MyStruct"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_parse_locations() {
         let json = serde_json::json!([

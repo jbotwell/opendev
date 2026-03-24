@@ -337,6 +337,7 @@ mod tests {
         assert_eq!(edit.edit_count(), 3);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_uri_path_roundtrip() {
         let path = PathBuf::from("/tmp/test.rs");
@@ -393,6 +394,7 @@ mod tests {
         assert_eq!(range.end.character, 15);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_workspace_edit_from_json() {
         let json = serde_json::json!({

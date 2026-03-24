@@ -4,6 +4,11 @@
 mod helpers;
 mod patterns;
 
+/// Check if a command matches known dangerous patterns (e.g., `rm -rf /`, `git push --force`).
+pub fn is_dangerous_command(command: &str) -> bool {
+    patterns::is_dangerous(command)
+}
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -94,6 +99,7 @@ impl BashTool {
             .stderr(std::process::Stdio::piped());
 
         // Create new process group on Unix for clean kill
+        #[cfg(unix)]
         unsafe {
             cmd.pre_exec(|| {
                 libc::setpgid(0, 0);
@@ -317,6 +323,8 @@ impl BashTool {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
+        // Create new process group on Unix for clean kill
+        #[cfg(unix)]
         unsafe {
             cmd.pre_exec(|| {
                 libc::setpgid(0, 0);
@@ -597,7 +605,7 @@ impl BaseTool for BashTool {
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

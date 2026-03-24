@@ -785,6 +785,7 @@ mod tests {
         assert_eq!(call_count.load(Ordering::SeqCst), 2);
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_register_and_stream_task() {
         let tmp = tempfile::TempDir::new().unwrap();
@@ -813,6 +814,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_kill_task() {
         let tmp = tempfile::TempDir::new().unwrap();

@@ -30,8 +30,7 @@ pub(super) fn register_default_tools(
     registry.register(Arc::new(GrepTool));
     registry.register(Arc::new(AstGrepTool));
 
-    // Git
-    registry.register(Arc::new(GitTool));
+    // Patch
     registry.register(Arc::new(PatchTool));
 
     // Web tools
@@ -56,14 +55,15 @@ pub(super) fn register_default_tools(
     registry.register(Arc::new(TaskCompleteTool));
     registry.register(Arc::new(VlmTool));
     registry.register(Arc::new(DiffPreviewTool));
-    // Plan tool — with channel for TUI approval
+    // Todo manager — created before plan tool so it can be shared
+    let todo_manager = Arc::new(Mutex::new(opendev_runtime::TodoManager::new()));
+
+    // Plan tool — with channel for TUI approval AND todo manager
     let (plan_approval_tx, plan_approval_rx) = opendev_runtime::plan_approval_channel();
     registry.register(Arc::new(
-        PresentPlanTool::new().with_approval_tx(plan_approval_tx),
+        PresentPlanTool::with_todo_manager(Arc::clone(&todo_manager))
+            .with_approval_tx(plan_approval_tx),
     ));
-
-    // Todo tools (5 separate tools sharing one manager)
-    let todo_manager = Arc::new(Mutex::new(opendev_runtime::TodoManager::new()));
     registry.register(Arc::new(WriteTodosTool::new(Arc::clone(&todo_manager))));
     registry.register(Arc::new(UpdateTodoTool::new(Arc::clone(&todo_manager))));
     registry.register(Arc::new(CompleteTodoTool::new(Arc::clone(&todo_manager))));
@@ -76,6 +76,12 @@ pub(super) fn register_default_tools(
     registry.register(Arc::new(AgentsTool));
     // Note: SpawnSubagentTool requires shared Arc<ToolRegistry> and Arc<HttpClient>,
     // which are created after registration. Deferred for now.
+
+    // Initialize TUI display map from tool metadata
+    let display_map = registry.build_display_map();
+    if !display_map.is_empty() {
+        opendev_tui::formatters::tool_registry::init_runtime_display(display_map);
+    }
 
     // Tool approval channel (sender stored on runtime for react loop, receiver goes to TUI)
     let (tool_approval_tx, tool_approval_rx) = opendev_runtime::tool_approval_channel();

@@ -260,6 +260,7 @@ mod tests {
         assert!(result.starts_with("line ZERO\n"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_path_to_uri_string() {
         let path = Path::new("/tmp/test.rs");

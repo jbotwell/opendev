@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="figures/introduction.png" alt="OpenDev Introduction" width="800"/>
+  <img src="demo_assets/demo.gif" alt="OpenDev Demo" width="800"/>
 </p>
 
 ---
@@ -47,12 +47,67 @@ OpenDev is written in **Rust** for maximum performance and minimal resource usag
 
 ### Installation
 
+#### macOS
+
 ```bash
-# From source
+# Homebrew (recommended)
+brew install opendev-to/tap/opendev
+
+# Shell installer
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/opendev-to/opendev/releases/latest/download/opendev-cli-installer.sh | sh
+
+# Or download the binary directly from GitHub Releases:
+#   opendev-cli-aarch64-apple-darwin.tar.xz  (Apple Silicon)
+#   opendev-cli-x86_64-apple-darwin.tar.xz   (Intel)
+```
+
+#### Linux
+
+```bash
+# Shell installer (x86_64 and ARM64)
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/opendev-to/opendev/releases/latest/download/opendev-cli-installer.sh | sh
+
+# Or download the binary directly from GitHub Releases:
+#   opendev-cli-x86_64-unknown-linux-gnu.tar.xz   (x86_64)
+#   opendev-cli-aarch64-unknown-linux-gnu.tar.xz   (ARM64 / Raspberry Pi)
+```
+
+#### Windows
+
+```powershell
+# PowerShell installer
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/opendev-to/opendev/releases/latest/download/opendev-cli-installer.ps1 | iex"
+
+# Or download opendev-cli-x86_64-pc-windows-msvc.zip from GitHub Releases
+```
+
+#### From source (all platforms)
+
+Requires [Rust](https://rustup.rs/) 1.94+.
+
+```bash
 git clone https://github.com/opendev-to/opendev.git
 cd opendev
 cargo build --release -p opendev-cli
-cp target/release/opendev ~/.local/bin/
+# Binary at target/release/opendev (or opendev.exe on Windows)
+```
+
+> **All release binaries, checksums, and installers are available on the [GitHub Releases](https://github.com/opendev-to/opendev/releases) page.**
+
+#### Supported platforms
+
+| Platform | Architecture | Binary |
+|----------|-------------|--------|
+| macOS | Apple Silicon (M1+) | `opendev-cli-aarch64-apple-darwin.tar.xz` |
+| macOS | Intel | `opendev-cli-x86_64-apple-darwin.tar.xz` |
+| Linux | x86_64 | `opendev-cli-x86_64-unknown-linux-gnu.tar.xz` |
+| Linux | ARM64 | `opendev-cli-aarch64-unknown-linux-gnu.tar.xz` |
+| Windows | x86_64 | `opendev-cli-x86_64-pc-windows-msvc.zip` |
+
+#### Verify installation
+
+```bash
+opendev --version
 ```
 
 ### Quick Start

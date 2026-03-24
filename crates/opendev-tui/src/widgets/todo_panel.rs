@@ -88,18 +88,21 @@ impl<'a> TodoPanelWidget<'a> {
         (self.items.len() as u16 + 3).min(12)
     }
 
-    fn build_lines(&self) -> Vec<Line<'a>> {
-        let total = self.items.len();
-        let done = self
-            .items
-            .iter()
-            .filter(|i| i.status == TodoDisplayStatus::Completed)
-            .count();
-        let in_progress = self
-            .items
-            .iter()
-            .filter(|i| i.status == TodoDisplayStatus::InProgress)
-            .count();
+    /// Count (done, in_progress, total) in a single pass.
+    fn counts(&self) -> (usize, usize, usize) {
+        let mut done = 0usize;
+        let mut in_progress = 0usize;
+        for item in self.items {
+            match item.status {
+                TodoDisplayStatus::Completed => done += 1,
+                TodoDisplayStatus::InProgress => in_progress += 1,
+                TodoDisplayStatus::Pending => {}
+            }
+        }
+        (done, in_progress, self.items.len())
+    }
+
+    fn build_lines(&self, done: usize, in_progress: usize, total: usize) -> Vec<Line<'a>> {
 
         let mut lines = Vec::new();
 
@@ -124,7 +127,7 @@ impl<'a> TodoPanelWidget<'a> {
             if partial > 0 {
                 bar_spans.push(Span::styled(
                     ">".to_string(),
-                    Style::default().fg(style_tokens::WARNING),
+                    Style::default().fg(style_tokens::PRIMARY),
                 ));
             }
             if empty > 0 {
@@ -152,7 +155,7 @@ impl<'a> TodoPanelWidget<'a> {
                 TodoDisplayStatus::InProgress => (
                     " \u{25B6} ", // play triangle
                     Style::default()
-                        .fg(style_tokens::WARNING)
+                        .fg(style_tokens::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 ),
                 TodoDisplayStatus::Pending => (
@@ -179,7 +182,27 @@ impl<'a> TodoPanelWidget<'a> {
         lines
     }
 
-    fn build_collapsed_line(&self) -> Line<'a> {
+    fn build_collapsed_line(&self, done: usize, total: usize) -> Line<'a> {
+        // All tasks complete — show checkmark instead of spinner
+        if done == total && total > 0 {
+            return Line::from(vec![
+                Span::styled(
+                    " \u{2714} ".to_string(),
+                    Style::default()
+                        .fg(style_tokens::SUCCESS)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "All tasks complete".to_string(),
+                    Style::default().fg(style_tokens::SUCCESS),
+                ),
+                Span::styled(
+                    format!("  ({done}/{total})"),
+                    Style::default().fg(style_tokens::GREY),
+                ),
+            ]);
+        }
+
         let spinner = SPINNER_FRAMES[self.spinner_tick % SPINNER_FRAMES.len()];
 
         // Find the active (doing) item
@@ -195,23 +218,16 @@ impl<'a> TodoPanelWidget<'a> {
             })
             .unwrap_or("Working...");
 
-        let done = self
-            .items
-            .iter()
-            .filter(|i| i.status == TodoDisplayStatus::Completed)
-            .count();
-        let total = self.items.len();
-
         Line::from(vec![
             Span::styled(
                 format!(" {spinner} "),
                 Style::default()
-                    .fg(style_tokens::WARNING)
+                    .fg(style_tokens::PRIMARY)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 active_text.to_string(),
-                Style::default().fg(style_tokens::WARNING),
+                Style::default().fg(style_tokens::PRIMARY),
             ),
             Span::styled(
                 format!("  ({done}/{total})"),
@@ -223,27 +239,55 @@ impl<'a> TodoPanelWidget<'a> {
 
 impl Widget for TodoPanelWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let total = self.items.len();
-        let done = self
-            .items
-            .iter()
-            .filter(|i| i.status == TodoDisplayStatus::Completed)
-            .count();
+        let (done, in_progress, total) = self.counts();
 
-        let title = if self.expanded {
+        let has_in_progress = in_progress > 0;
+
+        let spinner_span = if self.expanded && has_in_progress {
+            Span::styled(
+                format!(
+                    "{} ",
+                    SPINNER_FRAMES[self.spinner_tick % SPINNER_FRAMES.len()]
+                ),
+                Style::default()
+                    .fg(style_tokens::PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else {
+            Span::raw("")
+        };
+
+        let title_text = if self.expanded {
             if let Some(name) = self.plan_name {
-                format!(" TODOS: {name} ({done}/{total}) ")
+                format!("TODOS: {name} ({done}/{total})")
             } else {
-                format!(" TODOS ({done}/{total}) ")
+                format!("TODOS ({done}/{total})")
             }
         } else {
-            format!(" TODOS ({done}/{total}) ")
+            format!("TODOS ({done}/{total})")
         };
+
+        let title = Line::from(vec![
+            Span::raw(" "),
+            spinner_span,
+            Span::styled(
+                title_text,
+                Style::default()
+                    .fg(style_tokens::ACCENT)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " · Ctrl+T to toggle ",
+                Style::default()
+                    .fg(style_tokens::GREY)
+                    .add_modifier(Modifier::DIM),
+            ),
+        ]);
 
         let border_color = if done == total && total > 0 {
             style_tokens::SUCCESS
         } else {
-            style_tokens::CYAN
+            style_tokens::GREY
         };
 
         let block = Block::default()
@@ -252,11 +296,11 @@ impl Widget for TodoPanelWidget<'_> {
             .border_style(Style::default().fg(border_color));
 
         if self.expanded {
-            let lines = self.build_lines();
+            let lines = self.build_lines(done, in_progress, total);
             let paragraph = Paragraph::new(lines).block(block);
             paragraph.render(area, buf);
         } else {
-            let line = self.build_collapsed_line();
+            let line = self.build_collapsed_line(done, total);
             let paragraph = Paragraph::new(vec![line]).block(block);
             paragraph.render(area, buf);
         }
@@ -294,7 +338,8 @@ mod tests {
     fn test_build_lines_count() {
         let items = make_items();
         let widget = TodoPanelWidget::new(&items);
-        let lines = widget.build_lines();
+        let (done, in_progress, total) = widget.counts();
+        let lines = widget.build_lines(done, in_progress, total);
         // 1 progress bar line + 3 item lines
         assert_eq!(lines.len(), 4);
     }
@@ -311,7 +356,8 @@ mod tests {
     fn test_empty_items() {
         let items: Vec<TodoDisplayItem> = vec![];
         let widget = TodoPanelWidget::new(&items);
-        let lines = widget.build_lines();
+        let (done, in_progress, total) = widget.counts();
+        let lines = widget.build_lines(done, in_progress, total);
         assert!(lines.is_empty());
     }
 
@@ -346,7 +392,8 @@ mod tests {
             active_form: None,
         }];
         let widget = TodoPanelWidget::new(&items);
-        let lines = widget.build_lines();
+        let (done, in_progress, total) = widget.counts();
+        let lines = widget.build_lines(done, in_progress, total);
         // Progress bar + 1 item
         assert_eq!(lines.len(), 2);
     }
@@ -365,7 +412,8 @@ mod tests {
     fn test_collapsed_uses_active_form() {
         let items = make_items();
         let widget = TodoPanelWidget::new(&items).with_expanded(false);
-        let line = widget.build_collapsed_line();
+        let (done, _, total) = widget.counts();
+        let line = widget.build_collapsed_line(done, total);
         // Should contain the active_form text "Writing code"
         let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
         assert!(text.contains("Writing code"));
@@ -380,9 +428,72 @@ mod tests {
     }
 
     #[test]
+    fn test_collapsed_all_done_shows_checkmark() {
+        let items = vec![
+            TodoDisplayItem {
+                id: 1,
+                title: "Task A".into(),
+                status: TodoDisplayStatus::Completed,
+                active_form: None,
+            },
+            TodoDisplayItem {
+                id: 2,
+                title: "Task B".into(),
+                status: TodoDisplayStatus::Completed,
+                active_form: None,
+            },
+        ];
+        let widget = TodoPanelWidget::new(&items).with_expanded(false);
+        let (done, _, total) = widget.counts();
+        let line = widget.build_collapsed_line(done, total);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            text.contains("All tasks complete"),
+            "Expected 'All tasks complete', got: {text}"
+        );
+        assert!(text.contains('\u{2714}'), "Expected checkmark in: {text}");
+        assert!(
+            !text.contains("Working"),
+            "Should not show 'Working' when all done"
+        );
+    }
+
+    #[test]
     fn test_required_height_collapsed() {
         let items = make_items();
         let widget = TodoPanelWidget::new(&items).with_expanded(false);
         assert_eq!(widget.required_height(), 3);
+    }
+
+    #[test]
+    fn test_expanded_title_has_spinner_when_in_progress() {
+        let items = make_items(); // has 1 in-progress item
+        let widget = TodoPanelWidget::new(&items).with_spinner_tick(2);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
+        widget.render(Rect::new(0, 0, 80, 10), &mut buf);
+        // Extract top row text from buffer
+        let top_row: String = (0..80).map(|x| buf.cell((x, 0)).unwrap().symbol().to_string()).collect::<String>();
+        // Should contain a spinner frame (tick 2 = '⠹')
+        assert!(top_row.contains('⠹'), "Expected spinner in title, got: {top_row}");
+        assert!(top_row.contains("Ctrl+T to toggle"), "Expected hint in title, got: {top_row}");
+    }
+
+    #[test]
+    fn test_expanded_title_no_spinner_when_all_done() {
+        let items = vec![
+            TodoDisplayItem {
+                id: 1,
+                title: "Done".into(),
+                status: TodoDisplayStatus::Completed,
+                active_form: None,
+            },
+        ];
+        let widget = TodoPanelWidget::new(&items).with_spinner_tick(2);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 6));
+        widget.render(Rect::new(0, 0, 80, 6), &mut buf);
+        let top_row: String = (0..80).map(|x| buf.cell((x, 0)).unwrap().symbol().to_string()).collect::<String>();
+        // No spinner when all done
+        assert!(!top_row.contains('⠹'), "Should not have spinner when all done, got: {top_row}");
+        assert!(top_row.contains("Ctrl+T to toggle"), "Expected hint in title, got: {top_row}");
     }
 }

@@ -117,12 +117,7 @@ impl Widget for InputWidget<'_> {
             ));
         }
         if let Some(tag) = self.activity_tag {
-            let kebab = to_kebab_display(tag);
-            let tag_display = if kebab.len() > 30 {
-                format!("{}...", &kebab[..27])
-            } else {
-                kebab
-            };
+            let tag_display = to_kebab_display(tag);
             let tag_section = format!(" {} ", tag_display);
             let trailing = "──";
             let tag_width = tag_section.len() + trailing.len();
@@ -377,5 +372,44 @@ mod tests {
         assert_eq!(to_kebab_display("  spaces  "), "spaces");
         assert_eq!(to_kebab_display("already-kebab"), "already-kebab");
         assert_eq!(to_kebab_display("MiXeD CaSe"), "mixed-case");
+    }
+
+    #[test]
+    fn test_to_kebab_display_long_title_no_truncation() {
+        let long_title = "implementing the new authentication middleware refactor";
+        let kebab = to_kebab_display(long_title);
+        assert_eq!(
+            kebab,
+            "implementing-the-new-authentication-middleware-refactor"
+        );
+        // No truncation — full string preserved
+        assert!(!kebab.contains("..."));
+        assert!(kebab.len() > 30);
+    }
+
+    #[test]
+    fn test_activity_tag_long_title_not_truncated() {
+        let area = Rect::new(0, 0, 120, 3);
+        let mut buf = Buffer::empty(area);
+
+        let long_tag = "implementing the new authentication middleware refactor";
+        let widget = InputWidget::new("", 0, "NORMAL", 0, 0, Some(long_tag));
+        widget.render(area, &mut buf);
+
+        let rendered: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        // Full kebab tag should appear, no "..." truncation
+        assert!(
+            rendered.contains("implementing-the-new-authentication-middleware-refactor"),
+            "Expected full long tag without truncation, got: {rendered:?}"
+        );
+        assert!(
+            !rendered.contains("..."),
+            "Tag should not be truncated, got: {rendered:?}"
+        );
     }
 }

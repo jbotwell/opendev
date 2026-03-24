@@ -354,6 +354,7 @@ mod tests {
         assert_eq!(result.stderr.trim(), "err");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_executor_json_stdout() {
         let executor = HookExecutor::new();

@@ -6,6 +6,9 @@ use ratatui::{
 };
 
 use crate::formatters::style_tokens;
+use crate::formatters::tool_line::{
+    ToolLineStyle, format_elapsed, tool_line_active, tool_line_completed,
+};
 use crate::formatters::tool_registry::format_tool_call_parts_short;
 use crate::widgets::spinner::{COMPACTION_CHAR, COMPLETED_CHAR, CONTINUATION_CHAR, SPINNER_FRAMES};
 
@@ -119,7 +122,7 @@ impl<'a> ConversationWidget<'a> {
                                 .add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(
-                            format!("({task_short})"),
+                            format!(" {task_short}"),
                             Style::default().fg(style_tokens::SUBTLE),
                         ),
                     ]));
@@ -130,29 +133,17 @@ impl<'a> ConversationWidget<'a> {
 
                     lines.push(Line::from(""));
                 } else {
-                    // Normal tool: ⠋ verb(arg) (Xs)
+                    // Normal tool: ⠋ verb arg Xs
                     let (verb, arg) =
                         format_tool_call_parts_short(&tool.name, &tool.args, &shortener);
-                    lines.push(Line::from(vec![
-                        Span::styled(
-                            format!("{spinner} "),
-                            Style::default().fg(style_tokens::BLUE_BRIGHT),
-                        ),
-                        Span::styled(
-                            verb,
-                            Style::default()
-                                .fg(style_tokens::PRIMARY)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(
-                            format!("({arg})"),
-                            Style::default().fg(style_tokens::SUBTLE),
-                        ),
-                        Span::styled(
-                            format!(" ({}s)", tool.elapsed_secs),
-                            Style::default().fg(style_tokens::GREY),
-                        ),
-                    ]));
+                    lines.push(tool_line_active(
+                        vec![],
+                        spinner,
+                        verb,
+                        arg,
+                        Some(format_elapsed(tool.elapsed_secs)),
+                        ToolLineStyle::Primary,
+                    ));
                 }
             }
         } else if let Some(progress) = self.task_progress {
@@ -167,7 +158,7 @@ impl<'a> ConversationWidget<'a> {
                     Style::default().fg(style_tokens::SUBTLE),
                 ),
                 Span::styled(
-                    format!("({}s \u{00b7} esc to interrupt)", elapsed),
+                    format!("{}s \u{00b7} esc to interrupt", elapsed),
                     Style::default().fg(style_tokens::SUBTLE),
                 ),
             ]));
@@ -205,7 +196,7 @@ impl<'a> ConversationWidget<'a> {
             // Subagent finished but tool not yet — show Done summary
             let tool_count = sa.tool_call_count;
             let count_str = if tool_count > 0 {
-                format!(" ({tool_count} tool uses)")
+                format!(" · {tool_count} tool uses")
             } else {
                 String::new()
             };
@@ -231,21 +222,19 @@ impl<'a> ConversationWidget<'a> {
 
         // Show last completed tool
         if let Some(ct) = sa.completed_tools.last() {
-            let (icon, color) = if ct.success {
-                (COMPLETED_CHAR, style_tokens::GREEN_BRIGHT)
-            } else {
-                ('\u{2717}', style_tokens::ERROR)
-            };
             let (verb, arg) = format_tool_call_parts_short(&ct.tool_name, &ct.args, shortener);
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("  {CONTINUATION_CHAR}  "),
-                    Style::default().fg(style_tokens::GREY),
-                ),
-                Span::styled(format!("{icon} "), Style::default().fg(color)),
-                Span::styled(verb, Style::default().fg(style_tokens::SUBTLE)),
-                Span::styled(format!("({arg})"), Style::default().fg(style_tokens::GREY)),
-            ]));
+            let continuation_prefix = vec![Span::styled(
+                format!("  {CONTINUATION_CHAR}  "),
+                Style::default().fg(style_tokens::GREY),
+            )];
+            lines.push(tool_line_completed(
+                continuation_prefix,
+                ct.success,
+                verb,
+                arg,
+                None,
+                ToolLineStyle::Nested,
+            ));
         }
 
         // Show active tools with spinner
@@ -253,18 +242,18 @@ impl<'a> ConversationWidget<'a> {
             let at_idx = at.tick % SPINNER_FRAMES.len();
             let at_ch = SPINNER_FRAMES[at_idx];
             let (verb, arg) = format_tool_call_parts_short(&at.tool_name, &at.args, shortener);
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("  {CONTINUATION_CHAR}  "),
-                    Style::default().fg(style_tokens::GREY),
-                ),
-                Span::styled(
-                    format!("{at_ch} "),
-                    Style::default().fg(style_tokens::BLUE_BRIGHT),
-                ),
-                Span::styled(verb, Style::default().fg(style_tokens::SUBTLE)),
-                Span::styled(format!("({arg})"), Style::default().fg(style_tokens::GREY)),
-            ]));
+            let continuation_prefix = vec![Span::styled(
+                format!("  {CONTINUATION_CHAR}  "),
+                Style::default().fg(style_tokens::GREY),
+            )];
+            lines.push(tool_line_active(
+                continuation_prefix,
+                at_ch,
+                verb,
+                arg,
+                None,
+                ToolLineStyle::Nested,
+            ));
         }
 
         // Initializing if no tools yet
@@ -289,7 +278,7 @@ impl<'a> ConversationWidget<'a> {
         let hidden = total_completed.saturating_sub(1);
         if hidden > 0 {
             lines.push(Line::from(Span::styled(
-                format!("      +{hidden} more tool uses (ctrl+b to run in background)"),
+                format!("      +{hidden} more tool uses · ctrl+b to run in background"),
                 Style::default()
                     .fg(style_tokens::GREY)
                     .add_modifier(Modifier::ITALIC),
