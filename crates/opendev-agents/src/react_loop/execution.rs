@@ -601,7 +601,10 @@ impl ReactLoop {
 
                     // Implicit completion nudge — verify original task before finishing
                     // Skip on first iteration: text-only response = conversational reply
+                    // Skip when the agent only created todos (no implementation work) —
+                    // the nudge would cause the LLM to re-create the todo list.
                     if !completion_nudge_sent
+                        && !todo_creation_only
                         && iteration > 0
                         && let Some(task) = self.config.original_task.as_deref()
                     {
