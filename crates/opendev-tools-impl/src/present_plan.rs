@@ -334,6 +334,7 @@ impl BaseTool for PresentPlanTool {
         metadata.insert("plan_file_path".into(), serde_json::json!(plan_file_path));
         metadata.insert("plan_length".into(), serde_json::json!(plan_content.len()));
         metadata.insert("step_count".into(), serde_json::json!(step_count));
+        metadata.insert("plan_content".into(), serde_json::json!(plan_content));
 
         if let Some(ref name) = plan_name {
             metadata.insert("plan_name".into(), serde_json::json!(name));

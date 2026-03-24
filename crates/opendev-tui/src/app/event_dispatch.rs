@@ -362,8 +362,17 @@ impl App {
                     (vec![summary], false)
                 } else if tool_name == "present_plan" {
                     // Plan content is already displayed via PlanApprovalRequested → DisplayRole::Plan.
-                    // Suppress the redundant tool result message.
-                    (Vec::new(), false)
+                    // Show brief approval confirmation instead of full plan content.
+                    let step_count = output
+                        .split_once(" steps)")
+                        .and_then(|(before, _)| before.rsplit(", ").next())
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if step_count > 0 {
+                        (vec![format!("Plan approved · {step_count} todos created")], false)
+                    } else {
+                        (vec!["Plan approved".to_string()], false)
+                    }
                 } else {
                     use crate::widgets::conversation::is_diff_tool;
                     let result_lines: Vec<String> =
@@ -411,7 +420,9 @@ impl App {
                                 .position(|s| s.task == task_text)
                         });
                     if let Some(idx) = subagent_idx {
-                        self.state.active_subagents.remove(idx);
+                        let removed = self.state.active_subagents.remove(idx);
+                        // Clean up bg_subagent_map if this was a backgrounded subagent
+                        self.state.bg_subagent_map.remove(&removed.subagent_id);
                     }
                 } else if !display_lines.is_empty() {
                     self.state.messages.push(DisplayMessage {
@@ -430,8 +441,8 @@ impl App {
                     });
                 }
 
-                // Refresh todo panel from shared manager after any todo tool
-                if is_todo_tool
+                // Refresh todo panel from shared manager after any todo tool or present_plan
+                if (is_todo_tool || tool_name == "present_plan")
                     && let Some(ref mgr) = self.state.todo_manager
                     && let Ok(mgr) = mgr.lock()
                 {
@@ -457,7 +468,9 @@ impl App {
                             },
                         })
                         .collect();
-                    if tool_name == "write_todos" && !self.state.todo_items.is_empty() {
+                    if (tool_name == "write_todos" || tool_name == "present_plan")
+                        && !self.state.todo_items.is_empty()
+                    {
                         self.state.todo_expanded = true;
                     }
                     if tool_name == "clear_todos" {
@@ -710,7 +723,8 @@ impl App {
                         shallow_warning,
                     );
                     if is_bg
-                        && let Some(bg_task_id) = self.state.bg_subagent_map.remove(&subagent_id)
+                        && let Some(bg_task_id) =
+                            self.state.bg_subagent_map.get(&subagent_id).cloned()
                     {
                         let status = if success { "completed" } else { "failed" };
                         self.state.bg_agent_manager.push_activity(
@@ -718,7 +732,9 @@ impl App {
                             format!("  Subagent {status} · {tool_call_count} tools"),
                         );
                     }
-                } else if let Some(bg_task_id) = self.state.bg_subagent_map.remove(&subagent_id) {
+                } else if let Some(bg_task_id) =
+                    self.state.bg_subagent_map.get(&subagent_id).cloned()
+                {
                     let status = if success { "completed" } else { "failed" };
                     self.state.bg_agent_manager.push_activity(
                         &bg_task_id,
@@ -1028,6 +1044,22 @@ impl App {
                         self.state.subagent_cancel_tokens.remove(sa_id);
                     }
                 }
+
+                // Clean up child subagents belonging to this completed task
+                let child_sa_ids: Vec<String> = self
+                    .state
+                    .bg_subagent_map
+                    .iter()
+                    .filter(|(_, bg_id)| *bg_id == &task_id)
+                    .map(|(sa_id, _)| sa_id.clone())
+                    .collect();
+                for sa_id in &child_sa_ids {
+                    self.state.bg_subagent_map.remove(sa_id);
+                }
+                // Remove finished backgrounded subagents belonging to this completed task
+                self.state.active_subagents.retain(|s| {
+                    !(s.backgrounded && s.finished && child_sa_ids.contains(&s.subagent_id))
+                });
 
                 // Clear backgrounded_task_info if it matches this task
                 if let Some((ref info_id, _)) = self.state.backgrounded_task_info
