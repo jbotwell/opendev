@@ -334,21 +334,25 @@ impl<'a> ConversationWidget<'a> {
                                 ),
                             ]));
                         } else if let Some(started) = msg.thinking_started_at {
-                            // Streaming: animated "⟡ Thinking... Xs (Ctrl+I to expand)"
+                            // Streaming: shimmer wave animation
                             let elapsed = started.elapsed().as_secs();
-                            lines.push(Line::from(vec![
-                                Span::styled(
-                                    format!(
-                                        "{} Thinking... {}s",
-                                        style_tokens::THINKING_ICON, elapsed
-                                    ),
-                                    thinking_style,
-                                ),
-                                Span::styled(
-                                    " (Ctrl+I to expand)",
-                                    Style::default().fg(style_tokens::SUBTLE),
-                                ),
-                            ]));
+                            let text = format!(
+                                "{} Thinking... {}s",
+                                style_tokens::THINKING_ICON, elapsed
+                            );
+                            let highlight =
+                                ratatui::style::Color::Rgb(200, 200, 220);
+                            let mut spans = style_tokens::shimmer_line(
+                                &text,
+                                0, // fallback path has no tick_count
+                                style_tokens::THINKING_BG,
+                                highlight,
+                            );
+                            spans.push(Span::styled(
+                                " (Ctrl+I to expand)",
+                                Style::default().fg(style_tokens::SUBTLE),
+                            ));
+                            lines.push(Line::from(spans));
                         }
                     } else {
                         // Expanded: full markdown rendering

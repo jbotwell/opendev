@@ -21,11 +21,15 @@ fn display_message_hash(msg: &DisplayMessage) -> u64 {
     msg.content.hash(&mut hasher);
     msg.collapsed.hash(&mut hasher);
     msg.thinking_duration_secs.hash(&mut hasher);
-    // For unfinalized reasoning, hash elapsed seconds to trigger re-render each tick
-    if msg.thinking_duration_secs.is_none()
-        && let Some(started) = msg.thinking_started_at
-    {
-        started.elapsed().as_secs().hash(&mut hasher);
+    // For unfinalized reasoning, use a unique value each call to force re-render
+    // every tick (drives the shimmer animation and elapsed timer)
+    if msg.thinking_duration_secs.is_none() && msg.thinking_started_at.is_some() {
+        // Use a monotonic counter to ensure the hash is always unique.
+        // This is safe because unfinalized reasoning is transient (short-lived).
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        COUNTER
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .hash(&mut hasher);
     }
     if let Some(ref tc) = msg.tool_call {
         tc.name.hash(&mut hasher);
@@ -246,6 +250,7 @@ impl App {
                     &mut self.state.markdown_cache,
                     &self.state.path_shortener,
                     content_width,
+                    self.state.spinner.tick_count(),
                 );
             }
 
@@ -268,6 +273,7 @@ impl App {
         markdown_cache: &mut HashMap<u64, Vec<ratatui::text::Line<'static>>>,
         shortener: &crate::formatters::PathShortener,
         content_width: u16,
+        tick_count: u64,
     ) {
         use crate::formatters::display::strip_system_reminders;
         use crate::formatters::markdown::MarkdownRenderer;
@@ -403,21 +409,24 @@ impl App {
                             ),
                         ]));
                     } else if let Some(started) = msg.thinking_started_at {
-                        // Streaming: animated "⟡ Thinking... Xs (Ctrl+I to expand)"
+                        // Streaming: shimmer wave "⟡ Thinking... Xs (Ctrl+I to expand)"
                         let elapsed = started.elapsed().as_secs();
-                        lines.push(Line::from(vec![
-                            Span::styled(
-                                format!(
-                                    "{} Thinking... {}s",
-                                    style_tokens::THINKING_ICON, elapsed
-                                ),
-                                thinking_style,
-                            ),
-                            Span::styled(
-                                " (Ctrl+I to expand)",
-                                Style::default().fg(style_tokens::SUBTLE),
-                            ),
-                        ]));
+                        let text = format!(
+                            "{} Thinking... {}s",
+                            style_tokens::THINKING_ICON, elapsed
+                        );
+                        let highlight = ratatui::style::Color::Rgb(200, 200, 220);
+                        let mut spans = style_tokens::shimmer_line(
+                            &text,
+                            tick_count,
+                            style_tokens::THINKING_BG,
+                            highlight,
+                        );
+                        spans.push(Span::styled(
+                            " (Ctrl+I to expand)",
+                            Style::default().fg(style_tokens::SUBTLE),
+                        ));
+                        lines.push(Line::from(spans));
                     }
                 } else {
                     // Expanded: full markdown rendering (unchanged)
