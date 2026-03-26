@@ -144,8 +144,10 @@ pub fn wrap_spans_to_lines<'a>(
                 s.extend(struct_prefix.clone());
                 s
             } else if struct_prefix_w > 0 {
-                // Continuation of a bullet: pad to align with content start
-                vec![Span::raw(" ".repeat(cont_prefix_w + struct_prefix_w))]
+                // Continuation of a bullet: keep prefix, pad to align with content start
+                let mut s = cont_prefix.clone();
+                s.push(Span::raw(" ".repeat(struct_prefix_w)));
+                s
             } else {
                 // No bullet: use normal continuation prefix
                 cont_prefix.clone()

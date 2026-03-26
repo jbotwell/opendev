@@ -560,7 +560,7 @@ impl ReactLoop {
                     }
                     consecutive_truncations = 0;
 
-                    // Block completion when there are incomplete todos
+                    // Block completion when there are incomplete todos.
                     if let Some(mgr) = todo_manager
                         && let Ok(mgr) = mgr.lock()
                         && mgr.has_incomplete_todos()
@@ -1478,6 +1478,11 @@ impl ReactLoop {
                         }
                     }
 
+                    // Track todo-creation intent for nudge guard decisions.
+                    // If any tool in this batch is write_todos or clear_todos,
+                    // mark that we wrote todos and reset the substantive-work flag.
+                    // If any tool is NOT a read-only or todo-management tool,
+                    // mark that substantive work happened after todo creation.
                     // Consecutive reads detection
                     let all_reads = tool_calls.iter().all(|tc| {
                         let name = tc

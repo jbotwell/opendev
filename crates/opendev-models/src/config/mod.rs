@@ -332,7 +332,7 @@ fn default_plan_mode_explore_variant() -> String {
     "enabled".to_string()
 }
 fn default_reasoning_effort() -> String {
-    "high".to_string()
+    "medium".to_string()
 }
 
 impl Default for AppConfig {
@@ -346,7 +346,7 @@ impl Default for AppConfig {
             api_base_url: None,
             max_tokens: 16384,
             temperature: 0.6,
-            reasoning_effort: "high".to_string(),
+            reasoning_effort: "medium".to_string(),
             auto_save_interval: 5,
             max_context_tokens: 100_000,
             verbose: false,
@@ -394,10 +394,6 @@ impl AppConfig {
 
     /// Get the API key from config or the environment.
     pub fn get_api_key(&self) -> Result<String, String> {
-        if let Some(ref key) = self.api_key {
-            return Ok(key.clone());
-        }
-
         let env_var = match self.model_provider.as_str() {
             "fireworks" => "FIREWORKS_API_KEY",
             "anthropic" => "ANTHROPIC_API_KEY",
@@ -410,8 +406,20 @@ impl AppConfig {
             _ => "OPENAI_API_KEY",
         };
 
-        std::env::var(env_var)
-            .map_err(|_| format!("No API key found. Set {} environment variable", env_var))
+        if let Ok(key) = std::env::var(env_var)
+            && !key.is_empty()
+        {
+            return Ok(key);
+        }
+
+        if let Some(ref key) = self.api_key {
+            return Ok(key.clone());
+        }
+
+        Err(format!(
+            "No API key found. Set {} environment variable",
+            env_var
+        ))
     }
 }
 
@@ -458,5 +466,49 @@ mod tests {
         assert_eq!(config.model, "gpt-4");
         assert_eq!(config.temperature, 0.6); // default
         assert!(config.enable_bash); // default
+    }
+
+    #[test]
+    fn test_get_api_key_prefers_env_over_config() {
+        let env_name = "OPENAI_API_KEY";
+        let old = std::env::var(env_name).ok();
+        unsafe {
+            std::env::set_var(env_name, "env-openai-key");
+        }
+
+        let config = AppConfig {
+            model_provider: "openai".to_string(),
+            api_key: Some("config-openai-key".to_string()),
+            ..AppConfig::default()
+        };
+
+        assert_eq!(config.get_api_key().unwrap(), "env-openai-key");
+
+        match old {
+            Some(value) => unsafe { std::env::set_var(env_name, value) },
+            None => unsafe { std::env::remove_var(env_name) },
+        }
+    }
+
+    #[test]
+    fn test_get_api_key_custom_provider_uses_openai_env_fallback() {
+        let env_name = "OPENAI_API_KEY";
+        let old = std::env::var(env_name).ok();
+        unsafe {
+            std::env::set_var(env_name, "env-custom-key");
+        }
+
+        let config = AppConfig {
+            model_provider: "cloudflare".to_string(),
+            api_key: Some("config-custom-key".to_string()),
+            ..AppConfig::default()
+        };
+
+        assert_eq!(config.get_api_key().unwrap(), "env-custom-key");
+
+        match old {
+            Some(value) => unsafe { std::env::set_var(env_name, value) },
+            None => unsafe { std::env::remove_var(env_name) },
+        }
     }
 }

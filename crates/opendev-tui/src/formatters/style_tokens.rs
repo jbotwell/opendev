@@ -172,9 +172,9 @@ impl Theme {
             phase_critique: Color::Rgb(255, 179, 71),
             phase_refinement: Color::Rgb(0, 191, 255),
 
-            heading_1: Color::Rgb(186, 182, 215),
+            heading_1: Color::Rgb(210, 205, 245),
             heading_2: Color::Rgb(186, 182, 215),
-            heading_3: Color::Rgb(186, 182, 215),
+            heading_3: Color::Rgb(155, 152, 190),
             code_fg: Color::Rgb(150, 190, 160),
             code_bg: Color::Rgb(30, 30, 30),
             bullet: Color::Rgb(140, 148, 160),
@@ -213,9 +213,9 @@ impl Theme {
             phase_critique: Color::Rgb(180, 120, 0),
             phase_refinement: Color::Rgb(0, 140, 200),
 
-            heading_1: Color::Rgb(80, 70, 110),
+            heading_1: Color::Rgb(60, 50, 100),
             heading_2: Color::Rgb(80, 70, 110),
-            heading_3: Color::Rgb(80, 70, 110),
+            heading_3: Color::Rgb(100, 92, 130),
             code_fg: Color::Rgb(50, 120, 70),
             code_bg: Color::Rgb(240, 240, 240),
             bullet: Color::Rgb(120, 120, 135),
@@ -254,13 +254,13 @@ impl Theme {
             phase_critique: Color::Rgb(255, 184, 108), // Orange
             phase_refinement: Color::Rgb(139, 233, 253), // Cyan
 
-            heading_1: Color::Rgb(180, 165, 220), // Soft purple
-            heading_2: Color::Rgb(180, 165, 220),
-            heading_3: Color::Rgb(180, 165, 220),
-            code_fg: Color::Rgb(140, 210, 155), // Muted green
-            code_bg: Color::Rgb(40, 42, 54),    // Background
-            bullet: Color::Rgb(98, 114, 164),   // Comment
-            bold_fg: Color::Rgb(235, 225, 210), // Warm off-white
+            heading_1: Color::Rgb(210, 195, 250), // Bright purple
+            heading_2: Color::Rgb(180, 165, 220), // Soft purple
+            heading_3: Color::Rgb(150, 138, 195), // Muted purple
+            code_fg: Color::Rgb(140, 210, 155),   // Muted green
+            code_bg: Color::Rgb(40, 42, 54),      // Background
+            bullet: Color::Rgb(98, 114, 164),     // Comment
+            bold_fg: Color::Rgb(235, 225, 210),   // Warm off-white
         }
     }
 }
@@ -310,9 +310,9 @@ pub const DIFF_ADD_BG: Color = Color::Rgb(0, 40, 0);
 pub const DIFF_DEL_BG: Color = Color::Rgb(40, 0, 0);
 
 // Markdown heading colors
-pub const HEADING_1: Color = Color::Rgb(186, 182, 215);
+pub const HEADING_1: Color = Color::Rgb(210, 205, 245);
 pub const HEADING_2: Color = Color::Rgb(186, 182, 215);
-pub const HEADING_3: Color = Color::Rgb(186, 182, 215);
+pub const HEADING_3: Color = Color::Rgb(155, 152, 190);
 pub const CODE_FG: Color = Color::Rgb(150, 190, 160);
 pub const CODE_BG: Color = Color::Rgb(30, 30, 30);
 pub const BULLET: Color = Color::Rgb(140, 148, 160);
@@ -320,6 +320,50 @@ pub const BOLD_FG: Color = Color::Rgb(222, 216, 200);
 
 // Icons
 pub const THINKING_ICON: &str = "\u{27e1}"; // ⟡
+
+/// Build a shimmer/wave line: a bright highlight sweeps across the text.
+///
+/// `tick` drives the wave position. Each character gets an interpolated color
+/// between `base` (dim) and `highlight` (bright) based on distance from the
+/// wave center, using a gaussian falloff with a ~4-char wide window.
+pub fn shimmer_line(text: &str, tick: u64, base: Color, highlight: Color) -> Vec<ratatui::text::Span<'static>> {
+    use ratatui::style::Style;
+    use ratatui::text::Span;
+
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    if len == 0 {
+        return vec![];
+    }
+
+    // Wave position: sweep across text, wrapping around with a small gap
+    let cycle_len = len + 8; // extra gap before the wave wraps
+    let wave_pos = (tick as usize * 2) % cycle_len; // *2 for faster sweep
+
+    let (br, bg, bb) = match base {
+        Color::Rgb(r, g, b) => (r as f32, g as f32, b as f32),
+        _ => (105.0, 105.0, 105.0),
+    };
+    let (hr, hg, hb) = match highlight {
+        Color::Rgb(r, g, b) => (r as f32, g as f32, b as f32),
+        _ => (220.0, 220.0, 230.0),
+    };
+
+    let mut spans = Vec::with_capacity(len);
+    for (i, ch) in chars.iter().enumerate() {
+        let dist = (i as f32 - wave_pos as f32).abs();
+        // Gaussian falloff: sigma ~2.0 for a ~4-char wide bright window
+        let intensity = (-dist * dist / 8.0).exp();
+        let r = (br + (hr - br) * intensity) as u8;
+        let g = (bg + (hg - bg) * intensity) as u8;
+        let b = (bb + (hb - bb) * intensity) as u8;
+        spans.push(Span::styled(
+            ch.to_string(),
+            Style::default().fg(Color::Rgb(r, g, b)),
+        ));
+    }
+    spans
+}
 
 // Box-drawing characters (rounded)
 pub const BOX_TL: &str = "\u{256d}";

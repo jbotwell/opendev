@@ -20,6 +20,15 @@ fn display_message_hash(msg: &DisplayMessage) -> u64 {
     std::mem::discriminant(&msg.role).hash(&mut hasher);
     msg.content.hash(&mut hasher);
     msg.collapsed.hash(&mut hasher);
+    msg.thinking_duration_secs.hash(&mut hasher);
+    // For unfinalized reasoning, hash elapsed millis (tick-aligned) to drive
+    // shimmer animation and elapsed timer updates without excessive re-renders
+    if msg.thinking_duration_secs.is_none()
+        && let Some(started) = msg.thinking_started_at
+    {
+        // ~30fps: changes every 33ms, matching the tick rate
+        (started.elapsed().as_millis() / 33).hash(&mut hasher);
+    }
     if let Some(ref tc) = msg.tool_call {
         tc.name.hash(&mut hasher);
         format!("{:?}", tc.arguments).hash(&mut hasher);
@@ -86,6 +95,7 @@ impl App {
             self.state.cached_lines.clear();
             self.state.per_message_hashes.clear();
             self.state.per_message_line_counts.clear();
+            self.state.per_message_culled.clear();
             self.state.markdown_cache.clear();
         }
 
@@ -98,7 +108,7 @@ impl App {
             .collect();
 
         // Find the first message index where the hash differs
-        let first_dirty = {
+        let mut first_dirty = {
             let old_len = self.state.per_message_hashes.len();
             if old_len > num_messages {
                 0 // Messages were removed -- full rebuild
@@ -117,37 +127,6 @@ impl App {
                 dirty_idx
             }
         };
-
-        // Nothing changed
-        if first_dirty >= num_messages && self.state.per_message_hashes.len() == num_messages {
-            return;
-        }
-
-        // If the first dirty message attaches to its predecessor, re-render that
-        // predecessor too so its trailing blank line can be suppressed.
-        let first_dirty = if first_dirty > 0
-            && self
-                .state
-                .messages
-                .get(first_dirty)
-                .and_then(|m| m.role.style())
-                .is_some_and(|s| s.attach_to_previous)
-        {
-            first_dirty - 1
-        } else {
-            first_dirty
-        };
-
-        // Truncate to the point before first_dirty
-        let lines_to_keep: usize = self
-            .state
-            .per_message_line_counts
-            .iter()
-            .take(first_dirty)
-            .sum();
-        self.state.cached_lines.truncate(lines_to_keep);
-        self.state.per_message_hashes.truncate(first_dirty);
-        self.state.per_message_line_counts.truncate(first_dirty);
 
         // --- Viewport culling ---
         let viewport_h = self.conversation_viewport_height();
@@ -199,6 +178,57 @@ impl App {
             })
             .collect();
 
+        // Detect culling state changes (messages transitioning visible <-> culled).
+        // When the user scrolls, previously-culled messages may enter the viewport
+        // and need to be re-rendered from their blank placeholders.
+        if self.state.per_message_culled.len() == num_messages {
+            for (i, (new_vis, old_vis)) in msg_visible
+                .iter()
+                .zip(self.state.per_message_culled.iter())
+                .enumerate()
+            {
+                if new_vis != old_vis {
+                    first_dirty = first_dirty.min(i);
+                    break;
+                }
+            }
+        } else if !self.state.per_message_culled.is_empty() {
+            // Length mismatch (messages added/removed) — already handled by hash check
+            first_dirty = first_dirty.min(self.state.per_message_culled.len());
+        }
+
+        // Nothing changed (content hashes match AND culling state unchanged)
+        if first_dirty >= num_messages && self.state.per_message_hashes.len() == num_messages {
+            self.state.per_message_culled = msg_visible;
+            return;
+        }
+
+        // If the first dirty message attaches to its predecessor, re-render that
+        // predecessor too so its trailing blank line can be suppressed.
+        let first_dirty = if first_dirty > 0
+            && self
+                .state
+                .messages
+                .get(first_dirty)
+                .and_then(|m| m.role.style())
+                .is_some_and(|s| s.attach_to_previous)
+        {
+            first_dirty - 1
+        } else {
+            first_dirty
+        };
+
+        // Truncate to the point before first_dirty
+        let lines_to_keep: usize = self
+            .state
+            .per_message_line_counts
+            .iter()
+            .take(first_dirty)
+            .sum();
+        self.state.cached_lines.truncate(lines_to_keep);
+        self.state.per_message_hashes.truncate(first_dirty);
+        self.state.per_message_line_counts.truncate(first_dirty);
+
         // Re-render only messages from first_dirty onward
         for msg_idx in first_dirty..num_messages {
             let msg = &self.state.messages[msg_idx];
@@ -218,6 +248,7 @@ impl App {
                     &mut self.state.markdown_cache,
                     &self.state.path_shortener,
                     content_width,
+                    self.state.spinner.tick_count(),
                 );
             }
 
@@ -225,6 +256,8 @@ impl App {
             self.state.per_message_hashes.push(new_hashes[msg_idx]);
             self.state.per_message_line_counts.push(lines_produced);
         }
+
+        self.state.per_message_culled = msg_visible;
     }
 
     /// Render a single `DisplayMessage` into styled lines, appending to `lines`.
@@ -238,6 +271,7 @@ impl App {
         markdown_cache: &mut HashMap<u64, Vec<ratatui::text::Line<'static>>>,
         shortener: &crate::formatters::PathShortener,
         content_width: u16,
+        tick_count: u64,
     ) {
         use crate::formatters::display::strip_system_reminders;
         use crate::formatters::markdown::MarkdownRenderer;
@@ -348,55 +382,102 @@ impl App {
                 }
             }
             DisplayRole::Reasoning => {
-                let cache_key = markdown_cache_key(&msg.role, &content);
-                let md_lines = if let Some(cached) = markdown_cache.get(&cache_key) {
-                    cached.clone()
-                } else {
-                    let rendered =
-                        MarkdownRenderer::render_muted(&content, style_tokens::THINKING_BG);
-                    markdown_cache.insert(cache_key, rendered.clone());
-                    rendered
-                };
-
                 let thinking_style = Style::default().fg(style_tokens::THINKING_BG);
-                let first_prefix = vec![Span::styled(
-                    format!("{} ", style_tokens::THINKING_ICON),
-                    thinking_style,
-                )];
-                let cont_prefix = vec![Span::styled(Indent::THINKING_CONT, thinking_style)];
 
-                if max_w > 0 {
-                    let wrapped = wrap_spans_to_lines(md_lines, first_prefix, cont_prefix, max_w);
-                    lines.extend(wrapped);
-                } else {
-                    let mut leading_consumed = false;
-                    for md_line in md_lines {
-                        let line_text: String = md_line
-                            .spans
-                            .iter()
-                            .map(|s| s.content.to_string())
-                            .collect();
-                        let has_content = !line_text.trim().is_empty();
-
-                        if !leading_consumed && has_content {
-                            let mut spans = first_prefix.clone();
-                            spans.extend(
-                                md_line
-                                    .spans
-                                    .into_iter()
-                                    .map(|s| Span::styled(s.content.to_string(), s.style)),
-                            );
-                            lines.push(Line::from(spans));
-                            leading_consumed = true;
+                if msg.collapsed {
+                    if let Some(secs) = msg.thinking_duration_secs {
+                        // Finalized collapsed: "⟡ Thought for Xs (Ctrl+I to expand)"
+                        let duration_text = if secs == 0 {
+                            "<1".to_string()
                         } else {
-                            let mut spans = cont_prefix.clone();
-                            spans.extend(
-                                md_line
-                                    .spans
-                                    .into_iter()
-                                    .map(|s| Span::styled(s.content.to_string(), s.style)),
-                            );
-                            lines.push(Line::from(spans));
+                            secs.to_string()
+                        };
+                        lines.push(Line::from(vec![
+                            Span::styled(
+                                format!(
+                                    "{} Thought for {}s",
+                                    style_tokens::THINKING_ICON,
+                                    duration_text
+                                ),
+                                thinking_style,
+                            ),
+                            Span::styled(
+                                " (Ctrl+I to expand)",
+                                Style::default().fg(style_tokens::SUBTLE),
+                            ),
+                        ]));
+                    } else if let Some(started) = msg.thinking_started_at {
+                        // Streaming: shimmer wave "⟡ Thinking... Xs (Ctrl+I to expand)"
+                        let elapsed = started.elapsed().as_secs();
+                        let text = format!(
+                            "{} Thinking... {}s",
+                            style_tokens::THINKING_ICON, elapsed
+                        );
+                        let highlight = ratatui::style::Color::Rgb(200, 200, 220);
+                        let mut spans = style_tokens::shimmer_line(
+                            &text,
+                            tick_count,
+                            style_tokens::THINKING_BG,
+                            highlight,
+                        );
+                        spans.push(Span::styled(
+                            " (Ctrl+I to expand)",
+                            Style::default().fg(style_tokens::SUBTLE),
+                        ));
+                        lines.push(Line::from(spans));
+                    }
+                } else {
+                    // Expanded: full markdown rendering (unchanged)
+                    let cache_key = markdown_cache_key(&msg.role, &content);
+                    let md_lines = if let Some(cached) = markdown_cache.get(&cache_key) {
+                        cached.clone()
+                    } else {
+                        let rendered =
+                            MarkdownRenderer::render_muted(&content, style_tokens::THINKING_BG);
+                        markdown_cache.insert(cache_key, rendered.clone());
+                        rendered
+                    };
+
+                    let first_prefix = vec![Span::styled(
+                        format!("{} ", style_tokens::THINKING_ICON),
+                        thinking_style,
+                    )];
+                    let cont_prefix = vec![Span::styled(Indent::THINKING_CONT, thinking_style)];
+
+                    if max_w > 0 {
+                        let wrapped =
+                            wrap_spans_to_lines(md_lines, first_prefix, cont_prefix, max_w);
+                        lines.extend(wrapped);
+                    } else {
+                        let mut leading_consumed = false;
+                        for md_line in md_lines {
+                            let line_text: String = md_line
+                                .spans
+                                .iter()
+                                .map(|s| s.content.to_string())
+                                .collect();
+                            let has_content = !line_text.trim().is_empty();
+
+                            if !leading_consumed && has_content {
+                                let mut spans = first_prefix.clone();
+                                spans.extend(
+                                    md_line
+                                        .spans
+                                        .into_iter()
+                                        .map(|s| Span::styled(s.content.to_string(), s.style)),
+                                );
+                                lines.push(Line::from(spans));
+                                leading_consumed = true;
+                            } else {
+                                let mut spans = cont_prefix.clone();
+                                spans.extend(
+                                    md_line
+                                        .spans
+                                        .into_iter()
+                                        .map(|s| Span::styled(s.content.to_string(), s.style)),
+                                );
+                                lines.push(Line::from(spans));
+                            }
                         }
                     }
                 }
@@ -611,12 +692,10 @@ mod tests {
         let mut app = App::new();
         // Add many messages
         for i in 0..100 {
-            app.state.messages.push(DisplayMessage {
-                role: DisplayRole::User,
-                content: format!("Message {i}"),
-                tool_call: None,
-                collapsed: false,
-            });
+            app.state.messages.push(DisplayMessage::new(
+                DisplayRole::User,
+                format!("Message {i}"),
+            ));
         }
         app.state.message_generation = 1;
         app.state.terminal_height = 24;
@@ -640,12 +719,10 @@ mod tests {
 
     fn test_markdown_cache_hit() {
         let mut app = App::new();
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "Hello **world**".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state.messages.push(DisplayMessage::new(
+            DisplayRole::Assistant,
+            "Hello **world**",
+        ));
         app.state.terminal_height = 24;
         app.rebuild_cached_lines();
         assert_eq!(app.state.markdown_cache.len(), 1);
@@ -661,12 +738,10 @@ mod tests {
     #[test]
     fn test_markdown_cache_miss_different_content() {
         let mut app = App::new();
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "Hello **world**".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state.messages.push(DisplayMessage::new(
+            DisplayRole::Assistant,
+            "Hello **world**",
+        ));
         app.state.terminal_height = 24;
         app.rebuild_cached_lines();
         assert_eq!(app.state.markdown_cache.len(), 1);
@@ -678,12 +753,10 @@ mod tests {
     #[test]
     fn test_markdown_cache_clear() {
         let mut app = App::new();
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "# Title\nSome text".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state.messages.push(DisplayMessage::new(
+            DisplayRole::Assistant,
+            "# Title\nSome text",
+        ));
         app.state.terminal_height = 24;
         app.rebuild_cached_lines();
         assert!(!app.state.markdown_cache.is_empty());
@@ -696,12 +769,9 @@ mod tests {
     fn test_incremental_append_only_renders_new_message() {
         let mut app = App::new();
         app.state.terminal_height = 24;
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::User,
-            content: "First message".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::User, "First message"));
         app.rebuild_cached_lines();
         let lines_after_first = app.state.cached_lines.len();
         assert!(lines_after_first > 0);
@@ -711,12 +781,9 @@ mod tests {
         let first_lines_snapshot = app.state.cached_lines.clone();
 
         // Append a second message
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::User,
-            content: "Second message".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::User, "Second message"));
         app.rebuild_cached_lines();
         assert_eq!(
             app.state.per_message_hashes[0], first_hash,
@@ -738,12 +805,9 @@ mod tests {
         let mut app = App::new();
         app.state.terminal_height = 24;
         for content in &["First", "Second", "Third"] {
-            app.state.messages.push(DisplayMessage {
-                role: DisplayRole::User,
-                content: content.to_string(),
-                tool_call: None,
-                collapsed: false,
-            });
+            app.state
+                .messages
+                .push(DisplayMessage::new(DisplayRole::User, content.to_string()));
         }
         app.rebuild_cached_lines();
         let original_lines = app.state.cached_lines.len();
@@ -762,12 +826,7 @@ mod tests {
         // Second hash changed
         assert_ne!(
             app.state.per_message_hashes[1],
-            display_message_hash(&DisplayMessage {
-                role: DisplayRole::User,
-                content: "Second".into(),
-                tool_call: None,
-                collapsed: false,
-            }),
+            display_message_hash(&DisplayMessage::new(DisplayRole::User, "Second")),
         );
         assert_eq!(app.state.cached_lines.len(), original_lines);
     }
@@ -787,16 +846,14 @@ mod tests {
         let mut app = App::new();
         app.state.terminal_height = 24;
         for i in 0..5u32 {
-            app.state.messages.push(DisplayMessage {
-                role: if i % 2 == 0 {
+            app.state.messages.push(DisplayMessage::new(
+                if i % 2 == 0 {
                     DisplayRole::User
                 } else {
                     DisplayRole::Assistant
                 },
-                content: format!("Message {i}"),
-                tool_call: None,
-                collapsed: false,
-            });
+                format!("Message {i}"),
+            ));
             app.rebuild_cached_lines();
             assert_eq!(app.state.per_message_hashes.len(), (i + 1) as usize);
             assert_eq!(app.state.per_message_line_counts.len(), (i + 1) as usize);
@@ -825,12 +882,9 @@ mod tests {
     fn test_incremental_no_change_is_noop() {
         let mut app = App::new();
         app.state.terminal_height = 24;
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::User,
-            content: "Hello".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::User, "Hello"));
         app.rebuild_cached_lines();
         let lines_after = app.state.cached_lines.clone();
         // Second rebuild with no changes
@@ -842,18 +896,12 @@ mod tests {
     fn test_incremental_message_removal() {
         let mut app = App::new();
         app.state.terminal_height = 24;
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::User,
-            content: "First".into(),
-            tool_call: None,
-            collapsed: false,
-        });
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::User,
-            content: "Second".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::User, "First"));
+        app.state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::User, "Second"));
         app.rebuild_cached_lines();
         assert_eq!(app.state.per_message_hashes.len(), 2);
         app.state.messages.pop();
@@ -872,6 +920,8 @@ mod tests {
             content: "Let me think about this.\nFirst, I need to understand.\nThen solve.".into(),
             tool_call: None,
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: Some(5),
         });
         app.rebuild_cached_lines();
 
@@ -941,13 +991,13 @@ mod tests {
             content: "Thinking carefully about the problem at hand.".into(),
             tool_call: None,
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: Some(5),
         });
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "The result is clear.".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state.messages.push(DisplayMessage::new(
+            DisplayRole::Assistant,
+            "The result is clear.",
+        ));
         app.state.message_generation = 1;
         app.rebuild_cached_lines();
 
@@ -993,25 +1043,23 @@ mod tests {
         app.state.terminal_width = 60;
         app.state.terminal_height = 12;
         for i in 0..40 {
-            app.state.messages.push(DisplayMessage {
-                role: DisplayRole::User,
-                content: format!("Older message {i}"),
-                tool_call: None,
-                collapsed: false,
-            });
+            app.state.messages.push(DisplayMessage::new(
+                DisplayRole::User,
+                format!("Older message {i}"),
+            ));
         }
         app.state.messages.push(DisplayMessage {
             role: DisplayRole::Reasoning,
             content: "Thinking through how to split this work safely.".into(),
             tool_call: None,
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: Some(5),
         });
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "I will spawn 2 agents to explore the codebase.".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state.messages.push(DisplayMessage::new(
+            DisplayRole::Assistant,
+            "I will spawn 2 agents to explore the codebase.",
+        ));
         app.state.agent_active = true;
         app.state.active_tools.push(ToolExecution {
             id: "t0".into(),
@@ -1063,13 +1111,13 @@ mod tests {
             content: "Thinking through the codebase structure.".into(),
             tool_call: None,
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: Some(5),
         });
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "I will spawn 2 agents to explore the codebase.".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state.messages.push(DisplayMessage::new(
+            DisplayRole::Assistant,
+            "I will spawn 2 agents to explore the codebase.",
+        ));
 
         let tasks = ["Inspect auth flow", "Trace API routes"];
         let tools: Vec<ToolExecution> = tasks
@@ -1206,8 +1254,8 @@ mod tests {
             .map(|s| s.content.to_string())
             .collect();
         assert!(
-            all_text.contains("Thinking through"),
-            "reasoning context disappeared after ToolStarted events: {all_text}"
+            all_text.contains("Thought for"),
+            "collapsed reasoning context disappeared after ToolStarted events: {all_text}"
         );
         assert!(
             all_text.contains("spawn 2 agents"),
@@ -1235,13 +1283,13 @@ mod tests {
             content: "Planning 25 parallel explorations.".into(),
             tool_call: None,
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: Some(5),
         });
-        app.state.messages.push(DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "I will spawn 25 agents to explore the codebase.".into(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app.state.messages.push(DisplayMessage::new(
+            DisplayRole::Assistant,
+            "I will spawn 25 agents to explore the codebase.",
+        ));
 
         let tools: Vec<ToolExecution> = (0..25)
             .map(|i| {

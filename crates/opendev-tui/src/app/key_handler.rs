@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use super::{App, AutonomyLevel, OperationMode};
+use super::{App, AutonomyLevel, DisplayRole, OperationMode};
 use crate::event::AppEvent;
 
 impl App {
@@ -789,6 +789,18 @@ impl App {
                     }
                 }
                 let _ = toggled; // suppress unused warning
+            }
+            // Ctrl+I — toggle ALL thinking blocks collapsed/expanded
+            (KeyModifiers::CONTROL, KeyCode::Char('i')) => {
+                self.state.thinking_expanded = !self.state.thinking_expanded;
+                for msg in self.state.messages.iter_mut() {
+                    if msg.role == DisplayRole::Reasoning {
+                        msg.collapsed = !self.state.thinking_expanded;
+                    }
+                }
+                self.state.message_generation += 1;
+                self.state.scroll_offset = 0;
+                self.state.user_scrolled = false;
             }
             // Ctrl+T — toggle todo panel expanded/collapsed
             (KeyModifiers::CONTROL, KeyCode::Char('t')) => {

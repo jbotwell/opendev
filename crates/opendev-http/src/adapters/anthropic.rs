@@ -628,21 +628,68 @@ impl super::base::ProviderAdapter for AnthropicAdapter {
                         let text = delta.get("thinking")?.as_str()?;
                         Some(StreamEvent::ReasoningDelta(text.to_string()))
                     }
+                    "input_json_delta" => {
+                        let index = data
+                            .get("index")
+                            .and_then(|i| i.as_u64())
+                            .unwrap_or(0) as usize;
+                        let partial = delta
+                            .get("partial_json")
+                            .and_then(|p| p.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        Some(StreamEvent::FunctionCallDelta {
+                            index,
+                            delta: partial,
+                        })
+                    }
                     _ => None,
                 }
             }
             "message_stop" => None,
             "message_start" => None,
-            "message_delta" => None,
-            "content_block_start" => {
-                let block_type = data
-                    .get("content_block")
-                    .and_then(|b| b.get("type"))
-                    .and_then(|t| t.as_str());
-                if block_type == Some("thinking") {
-                    return Some(StreamEvent::ReasoningBlockStart);
+            "message_delta" => {
+                // Usage and stop_reason updates
+                let usage = data.get("usage").cloned();
+                let stop_reason = data
+                    .get("delta")
+                    .and_then(|d| d.get("stop_reason"))
+                    .and_then(|s| s.as_str())
+                    .map(String::from);
+                if usage.is_some() || stop_reason.is_some() {
+                    Some(StreamEvent::UsageUpdate { usage, stop_reason })
+                } else {
+                    None
                 }
-                None
+            }
+            "content_block_start" => {
+                let cb = data.get("content_block")?;
+                let block_type = cb.get("type").and_then(|t| t.as_str())?;
+                match block_type {
+                    "thinking" => Some(StreamEvent::ReasoningBlockStart),
+                    "tool_use" => {
+                        let index = data
+                            .get("index")
+                            .and_then(|i| i.as_u64())
+                            .unwrap_or(0) as usize;
+                        let call_id = cb
+                            .get("id")
+                            .and_then(|i| i.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let name = cb
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        Some(StreamEvent::FunctionCallStart {
+                            index,
+                            call_id,
+                            name,
+                        })
+                    }
+                    _ => None,
+                }
             }
             "content_block_stop" => None,
             "ping" => None,

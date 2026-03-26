@@ -92,13 +92,64 @@ impl BaseTool for WriteTodosTool {
             }
         }
 
+        const MAX_TODOS: usize = 10;
+        let was_truncated = items.len() > MAX_TODOS;
+        if was_truncated {
+            items.truncate(MAX_TODOS);
+        }
+
         let mut mgr = match self.manager.lock() {
             Ok(m) => m,
             Err(e) => return ToolResult::fail(format!("Lock error: {e}")),
         };
 
+        // Detect status-only updates: if the new titles match the existing
+        // titles, just update statuses instead of clearing and recreating.
+        // This avoids duplicate "Created N todos" display when the LLM
+        // calls write_todos again with the same list.
+        let existing_titles: Vec<String> = mgr.all().iter().map(|t| t.title.clone()).collect();
+        let new_titles: Vec<&str> = items.iter().map(|(t, _, _)| t.as_str()).collect();
+        let is_status_only = !existing_titles.is_empty()
+            && existing_titles.len() == new_titles.len()
+            && existing_titles
+                .iter()
+                .zip(new_titles.iter())
+                .all(|(a, b)| a == b);
+
+        if is_status_only {
+            // Collect (id, new_status) pairs first to avoid borrow conflict
+            let updates: Vec<(usize, TodoStatus)> = mgr
+                .all()
+                .iter()
+                .zip(items.iter())
+                .filter(|(todo, (_, status, _))| todo.status != *status)
+                .map(|(todo, (_, status, _))| (todo.id, *status))
+                .collect();
+            for (id, status) in &updates {
+                mgr.set_status(*id, *status);
+            }
+            return if updates.is_empty() {
+                ToolResult::ok("Todos unchanged. Now proceed with the next action.")
+            } else {
+                ToolResult::ok(format!(
+                    "Updated {} todo status(es). Now proceed with the next action.\n\n{}",
+                    updates.len(),
+                    mgr.format_status_sorted()
+                ))
+            };
+        }
+
         mgr.write_todos(items);
-        ToolResult::ok(mgr.format_status_sorted())
+        let count = mgr.total();
+        let truncation_note = if was_truncated {
+            format!(" (truncated to {MAX_TODOS} — this is expected, do NOT call write_todos again)")
+        } else {
+            String::new()
+        };
+        ToolResult::ok(format!(
+            "Created {count} todo(s){truncation_note}. Now proceed with the next action.\n\n{}",
+            mgr.format_status_sorted()
+        ))
     }
 }
 

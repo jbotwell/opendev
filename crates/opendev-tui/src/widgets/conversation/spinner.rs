@@ -12,6 +12,8 @@ use crate::formatters::tool_line::{
 use crate::formatters::tool_registry::format_tool_call_parts_short;
 use crate::widgets::spinner::{COMPACTION_CHAR, COMPLETED_CHAR, CONTINUATION_CHAR, SPINNER_FRAMES};
 
+use crate::app::DisplayRole;
+
 use super::ConversationWidget;
 
 impl<'a> ConversationWidget<'a> {
@@ -147,21 +149,35 @@ impl<'a> ConversationWidget<'a> {
                 }
             }
         } else if let Some(progress) = self.task_progress {
-            let elapsed = progress.started_at.elapsed().as_secs();
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("{} ", self.spinner_char),
-                    Style::default().fg(style_tokens::BLUE_BRIGHT),
-                ),
-                Span::styled(
-                    format!("{}... ", progress.description),
-                    Style::default().fg(style_tokens::SUBTLE),
-                ),
-                Span::styled(
-                    format!("{}s \u{00b7} esc to interrupt", elapsed),
-                    Style::default().fg(style_tokens::SUBTLE),
-                ),
-            ]));
+            // Skip TaskProgress spinner during active reasoning streaming —
+            // the reasoning message renders its own "⟡ Thinking..." line
+            let has_active_thinking = self
+                .messages
+                .iter()
+                .rev()
+                .any(|m| m.role == DisplayRole::Reasoning && m.thinking_duration_secs.is_none());
+            if !has_active_thinking {
+                let elapsed = progress.started_at.elapsed().as_secs();
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("{} ", self.spinner_char),
+                        Style::default().fg(style_tokens::BLUE_BRIGHT),
+                    ),
+                    Span::styled(
+                        if progress.description == "Thinking" {
+                            let suffix = if self.verb_fully_revealed { "... " } else { " " };
+                            format!("{}{}", self.thinking_verb, suffix)
+                        } else {
+                            format!("{}... ", progress.description)
+                        },
+                        Style::default().fg(style_tokens::SUBTLE),
+                    ),
+                    Span::styled(
+                        format!("{}s \u{00b7} esc to interrupt", elapsed),
+                        Style::default().fg(style_tokens::SUBTLE),
+                    ),
+                ]));
+            }
         }
 
         lines
@@ -295,12 +311,10 @@ mod tests {
 
     #[test]
     fn test_25_subagents_all_rendered_individually() {
-        let msgs: Vec<DisplayMessage> = vec![DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "Spawning 25 agents.".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs: Vec<DisplayMessage> = vec![DisplayMessage::new(
+            DisplayRole::Assistant,
+            "Spawning 25 agents.",
+        )];
 
         let tools: Vec<ToolExecution> = (0..25)
             .map(|i| {

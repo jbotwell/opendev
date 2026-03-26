@@ -102,6 +102,7 @@ impl BaseTool for MessageTool {
 
         // Send the webhook
         let client = match reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
             .timeout(std::time::Duration::from_secs(10))
             .build()
         {
@@ -284,12 +285,16 @@ mod tests {
     async fn test_message_bad_webhook_host() {
         let tool = MessageTool;
         let ctx = ToolContext::new("/tmp");
+        // Bind and drop a listener to get a port guaranteed to refuse connections instantly.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
         let args = make_args(&[
             ("channel", serde_json::json!("slack")),
             ("message", serde_json::json!("hello")),
             (
                 "target",
-                serde_json::json!("https://this-host-does-not-exist-12345.invalid/webhook"),
+                serde_json::json!(format!("http://127.0.0.1:{port}/webhook")),
             ),
         ]);
         let result = tool.execute(args, &ctx).await;

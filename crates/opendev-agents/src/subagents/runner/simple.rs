@@ -273,11 +273,12 @@ impl SubagentRunner for SimpleReactRunner {
                 total_tool_calls, "SimpleReactRunner: calling LLM"
             );
 
-            // Build payload and call LLM
+            // Build payload and call LLM (streaming to get per-chunk idle timeout)
             let payload = ctx.caller.build_action_payload(messages, ctx.tool_schemas);
+            let noop_cb = opendev_http::streaming::FnStreamCallback(|_| {});
             let http_result = ctx
                 .http_client
-                .post_json(&payload, ctx.cancel)
+                .post_json_streaming(&payload, ctx.cancel, &noop_cb)
                 .await
                 .map_err(|e| AgentError::LlmError(e.to_string()))?;
 
@@ -576,7 +577,12 @@ impl SubagentRunner for SimpleReactRunner {
             obj.remove("_reasoning_effort");
         }
 
-        match ctx.http_client.post_json(&payload, ctx.cancel).await {
+        let noop_cb = opendev_http::streaming::FnStreamCallback(|_| {});
+        match ctx
+            .http_client
+            .post_json_streaming(&payload, ctx.cancel, &noop_cb)
+            .await
+        {
             Ok(http_result) if http_result.success => {
                 if let Some(body) = http_result.body
                     && let Some(content) = Self::parse_content(&body)

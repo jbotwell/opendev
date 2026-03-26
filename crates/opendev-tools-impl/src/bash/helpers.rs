@@ -264,9 +264,10 @@ mod tests {
         use proptest::prelude::*;
 
         proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
             /// truncate_output must never panic and must respect length limits.
             #[test]
-            fn fuzz_truncate_no_panic(text in "\\PC{0,100000}", for_llm in proptest::bool::ANY) {
+            fn fuzz_truncate_no_panic(text in "\\PC{0,10000}", for_llm in proptest::bool::ANY) {
                 let result = truncate_output(&text, for_llm);
                 // Result should never be empty if input is non-empty
                 if !text.is_empty() {

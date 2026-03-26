@@ -1,6 +1,6 @@
-# AGENTS.md
+# CLAUDE.md
 
-This file provides guidance to coding agents when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Build & Development Commands
 
@@ -105,6 +105,14 @@ echo "hello" | opendev -p "hello"
 Or for interactive TUI testing, launch `opendev` and exercise the feature manually. This catches issues that unit tests cannot — prompt composition, API payload format, TUI rendering, event flow, and real LLM response handling.
 
 **Do NOT consider a feature complete until you have verified it works in the real TUI with a real LLM response.**
+
+### 5. Clean Debug Artifacts
+
+```bash
+cargo clean --profile dev
+```
+
+Reclaims disk space from incremental compilation (can grow to 60GB+). The next test/clippy run rebuilds in ~20-30s.
 
 ## Code Style
 

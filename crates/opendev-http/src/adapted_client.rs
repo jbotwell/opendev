@@ -202,6 +202,9 @@ impl AdaptedClient {
         let mut tool_calls: Vec<serde_json::Value> = Vec::new();
         let mut current_tool_args: std::collections::HashMap<usize, String> =
             std::collections::HashMap::new();
+        // OpenAI Responses API: map output_index → tool_call vec index
+        let mut tool_call_index: std::collections::HashMap<usize, usize> =
+            std::collections::HashMap::new();
         let mut stop_reason: Option<String> = None;
         let mut line_buf = String::new();
         let mut event_type: Option<String> = None;
@@ -212,7 +215,36 @@ impl AdaptedClient {
         // Buffer for incomplete UTF-8 or line fragments
         let mut buf = Vec::new();
 
-        while let Some(chunk_result) = byte_stream.next().await {
+        let mut stream_done = false;
+        let stream_start = std::time::Instant::now();
+        // Maximum total stream duration (5 minutes). Prevents indefinite hangs
+        // when the API sends heartbeat events but never completes.
+        const MAX_STREAM_DURATION: std::time::Duration = std::time::Duration::from_secs(300);
+
+        loop {
+            // Check total stream duration
+            if stream_start.elapsed() > MAX_STREAM_DURATION {
+                warn!(
+                    elapsed_secs = stream_start.elapsed().as_secs(),
+                    "SSE stream total duration exceeded 300s, forcing termination"
+                );
+                break;
+            }
+
+            let chunk_result = match tokio::time::timeout(
+                std::time::Duration::from_secs(120),
+                byte_stream.next(),
+            )
+            .await
+            {
+                Ok(Some(result)) => result,
+                Ok(None) => break, // Stream ended normally
+                Err(_elapsed) => {
+                    warn!("SSE stream idle timeout (120s with no data)");
+                    break; // Exit loop, process accumulated data
+                }
+            };
+
             // Check cancellation
             if let Some(token) = cancel
                 && token.is_cancelled()
@@ -238,6 +270,12 @@ impl AdaptedClient {
 
                 if line.is_empty() {
                     // Empty line = end of SSE event block
+                    if !line_buf.is_empty() && line_buf.trim() == "data: [DONE]" {
+                        stream_done = true;
+                        line_buf.clear();
+                        event_type = None;
+                        continue;
+                    }
                     if !line_buf.is_empty()
                         && let Some(data_json) = crate::streaming::parse_sse_data(&line_buf)
                     {
@@ -247,71 +285,17 @@ impl AdaptedClient {
                         let et = event_type.as_deref().unwrap_or_else(|| {
                             data_json.get("type").and_then(|t| t.as_str()).unwrap_or("")
                         });
-                        // Track metadata from provider-specific events
-                        match et {
-                            "message_delta" => {
-                                // Anthropic: usage and stop_reason
-                                if let Some(usage) = data_json.get("usage") {
-                                    usage_data = Some(usage.clone());
-                                }
-                                if let Some(delta) = data_json.get("delta")
-                                    && let Some(sr) =
-                                        delta.get("stop_reason").and_then(|s| s.as_str())
-                                {
-                                    stop_reason = Some(sr.to_string());
-                                }
-                            }
-                            "content_block_start" => {
-                                // Anthropic: track tool_use blocks
-                                if let Some(cb) = data_json.get("content_block")
-                                    && cb.get("type").and_then(|t| t.as_str()) == Some("tool_use")
-                                {
-                                    let idx = data_json
-                                        .get("index")
-                                        .and_then(|i| i.as_u64())
-                                        .unwrap_or(0)
-                                        as usize;
-                                    tool_calls.push(serde_json::json!({
-                                        "id": cb.get("id").and_then(|i| i.as_str()).unwrap_or(""),
-                                        "type": "function",
-                                        "function": {
-                                            "name": cb.get("name").and_then(|n| n.as_str()).unwrap_or(""),
-                                            "arguments": "",
-                                        }
-                                    }));
-                                    current_tool_args.insert(idx, String::new());
-                                }
-                            }
-                            "content_block_delta" => {
-                                // Anthropic: accumulate tool input
-                                if let Some(delta) = data_json.get("delta")
-                                    && delta.get("type").and_then(|t| t.as_str())
-                                        == Some("input_json_delta")
-                                {
-                                    let idx = data_json
-                                        .get("index")
-                                        .and_then(|i| i.as_u64())
-                                        .unwrap_or(0)
-                                        as usize;
-                                    if let Some(partial) =
-                                        delta.get("partial_json").and_then(|p| p.as_str())
-                                    {
-                                        current_tool_args.entry(idx).or_default().push_str(partial);
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
                         if let Some(stream_event) = adapter.parse_stream_event(et, &data_json) {
+                            debug!(event_type = %et, "Stream event received");
                             match &stream_event {
                                 StreamEvent::Done(body) => {
                                     final_body = Some(body.clone());
+                                    stream_done = true;
                                 }
                                 StreamEvent::TextDelta(text) => {
                                     accumulated_text.push_str(text);
                                 }
                                 StreamEvent::ReasoningBlockStart => {
-                                    // Insert separator between multiple thinking blocks
                                     if !accumulated_reasoning.is_empty() {
                                         accumulated_reasoning.push_str("\n\n");
                                     }
@@ -319,9 +303,50 @@ impl AdaptedClient {
                                 StreamEvent::ReasoningDelta(text) => {
                                     accumulated_reasoning.push_str(text);
                                 }
-                                _ => {}
+                                StreamEvent::FunctionCallStart {
+                                    index,
+                                    call_id,
+                                    name,
+                                } => {
+                                    let tc_idx = tool_calls.len();
+                                    tool_calls.push(serde_json::json!({
+                                        "id": call_id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": name,
+                                            "arguments": "",
+                                        }
+                                    }));
+                                    tool_call_index.insert(*index, tc_idx);
+                                    current_tool_args.insert(tc_idx, String::new());
+                                }
+                                StreamEvent::FunctionCallDelta { index, delta } => {
+                                    if let Some(&tc_idx) = tool_call_index.get(index) {
+                                        current_tool_args
+                                            .entry(tc_idx)
+                                            .or_default()
+                                            .push_str(delta);
+                                    }
+                                }
+                                StreamEvent::FunctionCallDone { index, arguments } => {
+                                    if let Some(&tc_idx) = tool_call_index.get(index) {
+                                        current_tool_args
+                                            .insert(tc_idx, arguments.clone());
+                                    }
+                                }
+                                StreamEvent::UsageUpdate { usage, stop_reason: sr } => {
+                                    if let Some(u) = usage {
+                                        usage_data = Some(u.clone());
+                                    }
+                                    if let Some(r) = sr {
+                                        stop_reason = Some(r.clone());
+                                    }
+                                }
+                                StreamEvent::Error(_) => {}
                             }
                             callback.on_event(&stream_event);
+                        } else {
+                            debug!(event_type = %et, "Unhandled stream event type");
                         }
                     }
                     line_buf.clear();
@@ -334,13 +359,18 @@ impl AdaptedClient {
                 } else if line.starts_with("data: ") {
                     // Process any previous pending data line before starting a new one
                     if !line_buf.is_empty() {
-                        if let Some(data_json) = crate::streaming::parse_sse_data(&line_buf) {
+                        if line_buf.trim() == "data: [DONE]" {
+                            stream_done = true;
+                        } else if let Some(data_json) =
+                            crate::streaming::parse_sse_data(&line_buf)
+                        {
                             let et = event_type.as_deref().unwrap_or_else(|| {
                                 data_json.get("type").and_then(|t| t.as_str()).unwrap_or("")
                             });
                             if let Some(stream_event) = adapter.parse_stream_event(et, &data_json) {
                                 if let StreamEvent::Done(ref body) = stream_event {
                                     final_body = Some(body.clone());
+                                    stream_done = true;
                                 }
                                 callback.on_event(&stream_event);
                             }
@@ -350,6 +380,33 @@ impl AdaptedClient {
                     line_buf = line;
                 }
                 // Ignore other SSE fields (id:, retry:, comments)
+            }
+
+            // Eagerly process pending line_buf for stream-terminating events
+            // that arrive without a trailing blank line (e.g. last chunk).
+            if !stream_done && !line_buf.is_empty() {
+                if line_buf.trim() == "data: [DONE]" {
+                    stream_done = true;
+                } else if let Some(data_json) = crate::streaming::parse_sse_data(&line_buf) {
+                    let et = event_type.as_deref().unwrap_or_else(|| {
+                        data_json.get("type").and_then(|t| t.as_str()).unwrap_or("")
+                    });
+                    if let Some(stream_event) = adapter.parse_stream_event(et, &data_json) {
+                        if let StreamEvent::Done(ref body) = stream_event {
+                            final_body = Some(body.clone());
+                            stream_done = true;
+                        }
+                        callback.on_event(&stream_event);
+                    }
+                }
+                if stream_done {
+                    line_buf.clear();
+                    event_type = None;
+                }
+            }
+
+            if stream_done {
+                break;
             }
         }
 

@@ -408,21 +408,62 @@ impl super::base::ProviderAdapter for OpenAiAdapter {
                 let delta = data.get("delta")?.as_str()?;
                 Some(StreamEvent::TextDelta(delta.to_string()))
             }
-            "response.reasoning_summary_part.added" => {
-                Some(StreamEvent::ReasoningBlockStart)
-            }
+            "response.reasoning_summary_part.added" => Some(StreamEvent::ReasoningBlockStart),
             "response.reasoning_summary_text.delta" => {
                 let delta = data.get("delta")?.as_str()?;
                 Some(StreamEvent::ReasoningDelta(delta.to_string()))
             }
-            "response.completed" => {
-                let response = data.get("response")?;
-                Some(StreamEvent::Done(response.clone()))
+            // ── Function call streaming ──
+            "response.output_item.added" => {
+                let item = data.get("item")?;
+                if item.get("type").and_then(|t| t.as_str()) != Some("function_call") {
+                    return None;
+                }
+                let index = data
+                    .get("output_index")
+                    .and_then(|i| i.as_u64())
+                    .unwrap_or(0) as usize;
+                let call_id = item
+                    .get("call_id")
+                    .or_else(|| item.get("id"))
+                    .and_then(|i| i.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let name = item
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                Some(StreamEvent::FunctionCallStart {
+                    index,
+                    call_id,
+                    name,
+                })
             }
-            "response.incomplete" => {
-                // Incomplete response — still extract what we have
-                let response = data.get("response")?;
-                Some(StreamEvent::Done(response.clone()))
+            "response.function_call_arguments.delta" => {
+                let index = data
+                    .get("output_index")
+                    .and_then(|i| i.as_u64())
+                    .unwrap_or(0) as usize;
+                let delta = data.get("delta")?.as_str()?.to_string();
+                Some(StreamEvent::FunctionCallDelta { index, delta })
+            }
+            "response.function_call_arguments.done" => {
+                let index = data
+                    .get("output_index")
+                    .and_then(|i| i.as_u64())
+                    .unwrap_or(0) as usize;
+                let arguments = data
+                    .get("arguments")
+                    .and_then(|a| a.as_str())
+                    .unwrap_or("{}")
+                    .to_string();
+                Some(StreamEvent::FunctionCallDone { index, arguments })
+            }
+            // ── Stream lifecycle ──
+            "response.completed" | "response.incomplete" => {
+                let response = data.get("response").cloned().unwrap_or_else(|| data.clone());
+                Some(StreamEvent::Done(response))
             }
             "error" => {
                 let msg = data

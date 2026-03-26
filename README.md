@@ -22,7 +22,7 @@
 
 ### Introduction
 
-OpenDev is an open-source, terminal-native coding agent built as a compound AI system. Instead of a single monolithic LLM, it uses a structured ensemble of agents and workflows — each independently bound to a user-configured model.
+OpenDev is an open-source, terminal-native coding agent built as a compound AI system. Instead of a single monolithic LLM, it uses a structured ensemble of agents and workflows -- each independently bound to a user-configured model.
 
 Work is organized into concurrent sessions composed of specialized sub-agents. Each agent executes typed workflows (Execution, Thinking, Compaction) that independently bind to an LLM, enabling fine-grained cost, latency, and capability trade-offs per workflow.
 
@@ -42,6 +42,34 @@ OpenDev is written in **Rust** for maximum performance and minimal resource usag
 - **Multi-provider, multi-model.** Assign different models from different providers to every workflow and session, all running in parallel. Your models, your rules.
 - **TUI + Web UI.** A full terminal UI for power users and a Web UI for visual monitoring. The Web UI supports remote sessions, so you can start a task from your phone and let OpenDev work while you sleep.
 - **Fast.** Written in Rust with a ~3.7MB release binary. Instant startup, low memory footprint.
+
+---
+
+### ⚡ Agent Fleet — Parallel Execution at Scale
+
+<p align="center">
+  <img src="figures/agent_fleet.png" alt="OpenDev Agent Fleet" width="800"/>
+</p>
+
+<p align="center"><em>A fleet of agents, each independently exploring a different crate — all running concurrently in a single session.</em></p>
+
+Need to survey an entire codebase? Refactor across 20 crates? Run a dozen tool calls at once? **Spawn a fleet.**
+
+OpenDev's agent fleet launches multiple sub-agents in parallel, each with its own LLM binding, context window, and tool access. Because the runtime is written in Rust with fully async I/O, there is zero interpreter overhead — agents fan out across your workspace and converge results back in seconds, not minutes.
+
+```
+You                          OpenDev Fleet
+ │                           ┌─ Agent 1 → crate/agents
+ │   "survey all crates"     ├─ Agent 2 → crate/http
+ │ ─────────────────────►    ├─ Agent 3 → crate/tui
+ │                           ├─ Agent 4 → crate/tools
+ │                           ├─  ...
+ │   ◄── aggregated results  └─ Agent N → crate/config
+```
+
+- **Concurrent, not sequential.** Every agent runs its own async task — no GIL, no queue, no waiting.
+- **Rust-native performance.** Near-zero overhead per agent. Memory-safe parallelism via Tokio.
+- **Independent LLM bindings.** Each agent in the fleet can target a different model or provider.
 
 ---
 
@@ -92,6 +120,23 @@ cargo build --release -p opendev-cli
 # Binary at target/release/opendev (or opendev.exe on Windows)
 ```
 
+If you use the repo for development, you may also have a local symlink at `~/.local/bin/opendev` pointing at `target/release/opendev`. That can take precedence over the Homebrew binary in `/opt/homebrew/bin/opendev`.
+
+To test a Homebrew install from a clean shell state:
+
+```bash
+rm -f ~/.local/bin/opendev
+hash -r
+brew uninstall opendev
+brew untap opendev-to/tap
+brew tap opendev-to/tap
+brew install opendev-to/tap/opendev
+which opendev
+opendev --version
+```
+
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for the full local development and Homebrew testing workflow.
+
 > **All release binaries, checksums, and installers are available on the [GitHub Releases](https://github.com/opendev-to/opendev/releases) page.**
 
 #### Supported platforms
@@ -110,10 +155,18 @@ cargo build --release -p opendev-cli
 opendev --version
 ```
 
+If Homebrew reports `Not a valid ref: refs/remotes/origin/main` while auto-updating the tap, remove the stale local tap clone and retry:
+
+```bash
+brew untap opendev-to/tap
+brew tap opendev-to/tap
+brew install opendev-to/tap/opendev
+```
+
 ### Quick Start
 
 ```bash
-# Set an API key (OpenAI, Anthropic, or Fireworks — any one will do)
+# Set an API key (OpenAI, Anthropic, or Fireworks -- any one will do)
 export OPENAI_API_KEY="sk-..."
 # export ANTHROPIC_API_KEY="sk-ant-..."
 # export FIREWORKS_API_KEY="fw_..."
@@ -189,6 +242,8 @@ cargo clippy --workspace      # Lint
 cargo fmt --all               # Format
 cargo test -p opendev-cli     # Test a specific crate
 ```
+
+Detailed local-dev, symlink, Homebrew, and release-testing notes are in [DEVELOPMENT.md](./DEVELOPMENT.md).
 
 ### Web UI
 

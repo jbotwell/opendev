@@ -58,7 +58,7 @@ impl<'a> StatusBarWidget<'a> {
             tokens_used,
             tokens_limit,
             mode,
-            autonomy: AutonomyLevel::Manual,
+            autonomy: AutonomyLevel::SemiAuto,
             context_usage_pct: 0.0,
             session_cost: 0.0,
             mcp_status: None,

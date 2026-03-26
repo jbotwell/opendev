@@ -15,6 +15,25 @@ pub enum StreamEvent {
     /// A new reasoning/thinking block is starting (used to insert separators
     /// between multiple interleaved thinking blocks in a single response).
     ReasoningBlockStart,
+    /// A new function/tool call is starting.
+    /// Fields: `(index, call_id, function_name)`
+    FunctionCallStart {
+        index: usize,
+        call_id: String,
+        name: String,
+    },
+    /// A chunk of function call arguments.
+    FunctionCallDelta { index: usize, delta: String },
+    /// Function call arguments are complete.
+    FunctionCallDone {
+        index: usize,
+        arguments: String,
+    },
+    /// Usage/metadata update (input_tokens, output_tokens, stop_reason).
+    UsageUpdate {
+        usage: Option<Value>,
+        stop_reason: Option<String>,
+    },
     /// The complete response is available (streaming finished).
     /// Contains the full response body for final processing.
     Done(Value),

@@ -9,6 +9,24 @@ pub struct DisplayMessage {
     pub tool_call: Option<DisplayToolCall>,
     /// Whether this message is collapsed.
     pub collapsed: bool,
+    /// When reasoning started (for computing finalized duration).
+    pub thinking_started_at: Option<std::time::Instant>,
+    /// Finalized thinking duration in seconds (set when thinking ends).
+    pub thinking_duration_secs: Option<u64>,
+}
+
+impl DisplayMessage {
+    /// Convenience constructor for the common case (no tool call, not collapsed).
+    pub fn new(role: DisplayRole, content: impl Into<String>) -> Self {
+        Self {
+            role,
+            content: content.into(),
+            tool_call: None,
+            collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

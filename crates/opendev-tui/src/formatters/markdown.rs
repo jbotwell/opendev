@@ -17,6 +17,8 @@ use ratatui::{
 #[derive(Debug, Clone)]
 pub struct MdPalette {
     pub heading: Color,
+    pub heading_2: Color,
+    pub heading_3: Color,
     pub code_fg: Color,
     pub code_bg: Color,
     pub bullet: Color,
@@ -31,6 +33,8 @@ impl Default for MdPalette {
     fn default() -> Self {
         Self {
             heading: style_tokens::HEADING_1,
+            heading_2: style_tokens::HEADING_2,
+            heading_3: style_tokens::HEADING_3,
             code_fg: style_tokens::CODE_FG,
             code_bg: style_tokens::CODE_BG,
             bullet: style_tokens::BULLET,
@@ -49,11 +53,15 @@ impl MdPalette {
     pub fn muted(base: Color) -> Self {
         // Derive slightly brighter heading from the base for contrast
         let heading = dim_color(style_tokens::HEADING_1, 0.50);
+        let heading_2 = dim_color(style_tokens::HEADING_2, 0.50);
+        let heading_3 = dim_color(style_tokens::HEADING_3, 0.50);
         let code_fg = dim_color(style_tokens::CODE_FG, 0.50);
         let bold_fg = dim_color(style_tokens::BOLD_FG, 0.55);
         let link = dim_color(style_tokens::BLUE_BRIGHT, 0.50);
         Self {
             heading,
+            heading_2,
+            heading_3,
             code_fg,
             code_bg: style_tokens::CODE_BG,
             bullet: base,
@@ -159,13 +167,13 @@ impl MarkdownRenderer {
                 continue;
             }
 
-            // Headers
+            // Headers — each level gets a distinct style for visual hierarchy
             if let Some(header) = raw_line.strip_prefix("### ") {
                 let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
                     h,
                     Style::default()
-                        .fg(palette.heading)
+                        .fg(palette.heading_3)
                         .add_modifier(Modifier::BOLD | base_mod),
                 )));
             } else if let Some(header) = raw_line.strip_prefix("## ") {
@@ -173,8 +181,8 @@ impl MarkdownRenderer {
                 lines.push(Line::from(Span::styled(
                     h,
                     Style::default()
-                        .fg(palette.heading)
-                        .add_modifier(Modifier::BOLD | base_mod),
+                        .fg(palette.heading_2)
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED | base_mod),
                 )));
             } else if let Some(header) = raw_line.strip_prefix("# ") {
                 let h: Cow<'static, str> = Cow::Owned(header.to_string());
@@ -182,7 +190,7 @@ impl MarkdownRenderer {
                     h,
                     Style::default()
                         .fg(palette.heading)
-                        .add_modifier(Modifier::BOLD | base_mod),
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED | base_mod),
                 )));
             } else if is_bullet_line(raw_line) {
                 // Bullet list (supports nesting)

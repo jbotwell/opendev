@@ -93,6 +93,7 @@ impl BaseTool for WebFetchTool {
             .unwrap_or("markdown");
 
         let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
             .timeout(std::time::Duration::from_secs(timeout_secs))
             .redirect(reqwest::redirect::Policy::limited(5))
             .build();
@@ -263,14 +264,22 @@ mod tests {
         assert!(result.error.unwrap().contains("http://"));
     }
 
+    /// Bind a TCP listener and immediately drop it to get a port guaranteed to refuse connections.
+    fn closed_port_url() -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        format!("http://127.0.0.1:{port}")
+    }
+
     #[tokio::test]
     async fn test_web_fetch_bad_host() {
         let tool = WebFetchTool;
         let ctx = ToolContext::new("/tmp");
-        let args = make_args(&[(
-            "url",
-            serde_json::json!("http://this-host-does-not-exist-12345.invalid"),
-        )]);
+        let args = make_args(&[
+            ("url", serde_json::json!(closed_port_url())),
+            ("timeout", serde_json::json!(1)),
+        ]);
         let result = tool.execute(args, &ctx).await;
         assert!(!result.success);
     }
@@ -281,15 +290,12 @@ mod tests {
         let tool = WebFetchTool;
         let ctx = ToolContext::new("/tmp");
         let args = make_args(&[
-            (
-                "url",
-                serde_json::json!("http://this-host-does-not-exist-12345.invalid"),
-            ),
+            ("url", serde_json::json!(closed_port_url())),
             ("timeout", serde_json::json!(999)),
         ]);
         // Should not panic — timeout is capped at 120.
         let result = tool.execute(args, &ctx).await;
-        assert!(!result.success); // DNS failure, but no timeout panic
+        assert!(!result.success); // Connection refused, but no timeout panic
     }
 
     #[tokio::test]
@@ -299,14 +305,12 @@ mod tests {
         let ctx = ToolContext::new("/tmp");
         // We can't easily test with a real server, but we can verify the parameter is accepted.
         let args = make_args(&[
-            (
-                "url",
-                serde_json::json!("http://this-host-does-not-exist-12345.invalid"),
-            ),
+            ("url", serde_json::json!(closed_port_url())),
             ("format", serde_json::json!("html")),
+            ("timeout", serde_json::json!(1)),
         ]);
         let result = tool.execute(args, &ctx).await;
-        assert!(!result.success); // DNS failure expected
+        assert!(!result.success); // Connection refused expected
     }
 
     #[test]
