@@ -177,21 +177,12 @@ impl AgentRuntime {
 
         // Configure HTTP client based on provider.
         // Consult the registry for the correct API key env var and base URL,
-        // so registry-based providers (Z.AI, DeepSeek, etc.) work out of the box.
+        // so all registry-based providers work out of the box.
         let provider_info = registry.get_provider(&config.model_provider);
-        let api_key = if let Some(pi) = provider_info
-            && !pi.api_key_env.is_empty()
-        {
-            // Use the registry's env var (e.g. ZHIPU_API_KEY for Z.AI)
-            std::env::var(&pi.api_key_env)
-                .ok()
-                .filter(|k| !k.is_empty())
-                .or_else(|| config.api_key.clone())
-                .or_else(|| config.get_api_key().ok())
-                .unwrap_or_default()
-        } else {
-            config.get_api_key().unwrap_or_default()
-        };
+        let registry_env = provider_info.map(|pi| pi.api_key_env.as_str());
+        let api_key = config
+            .get_api_key_with_env(registry_env)
+            .unwrap_or_default();
         let registry_base_url = provider_info
             .map(|pi| pi.api_base_url.clone())
             .filter(|s| !s.is_empty());
@@ -491,17 +482,15 @@ impl AgentRuntime {
         // If provider changed, rebuild the HTTP client
         if new_provider_id != current_provider {
             let provider_info = registry.get_provider(&new_provider_id);
-            let api_key = if let Some(pi) = provider_info
-                && !pi.api_key_env.is_empty()
-            {
-                std::env::var(&pi.api_key_env).unwrap_or_default()
-            } else {
-                self.config.get_api_key().unwrap_or_default()
-            };
+            let registry_env = provider_info.map(|pi| pi.api_key_env.as_str());
+            let api_key = self
+                .config
+                .get_api_key_with_env(registry_env)
+                .unwrap_or_default();
 
             if api_key.is_empty() {
-                let env_hint = provider_info
-                    .map(|pi| pi.api_key_env.as_str())
+                let env_hint = registry_env
+                    .filter(|s| !s.is_empty())
                     .unwrap_or("API_KEY");
                 return Err(format!(
                     "No API key for provider '{}'. Set {} environment variable.",
