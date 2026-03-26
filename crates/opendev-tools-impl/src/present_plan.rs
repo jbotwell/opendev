@@ -288,7 +288,8 @@ impl BaseTool for PresentPlanTool {
             auto_approve_mode = true;
         }
 
-        // Parse implementation steps into todos
+        // Parse implementation steps into todos (capped at 10 parents;
+        // the LLM's subsequent write_todos call handles proper grouping with children).
         let steps = parse_plan_steps(&plan_content);
         let step_count = steps.len();
 
@@ -297,7 +298,7 @@ impl BaseTool for PresentPlanTool {
             && let Ok(mut todo_mgr) = mgr.lock()
         {
             todo_mgr.clear(); // Clear any previous plan's todos
-            for step in &steps {
+            for step in steps.iter().take(10) {
                 todo_mgr.add(step.clone());
             }
         }

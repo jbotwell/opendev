@@ -11,7 +11,7 @@ mod manager;
 mod parsing;
 mod status;
 
-pub use item::TodoItem;
+pub use item::{SubTodoItem, TodoItem};
 pub use manager::TodoManager;
 pub use parsing::{parse_plan_steps, parse_status, strip_markdown};
 pub use status::TodoStatus;

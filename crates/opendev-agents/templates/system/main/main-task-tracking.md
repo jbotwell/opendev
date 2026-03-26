@@ -1,7 +1,7 @@
 <!--
 name: 'System Prompt: Task Tracking'
 description: Using todos for multi-step work
-version: 2.0.0
+version: 3.0.0
 -->
 
 # Task Tracking
@@ -10,22 +10,32 @@ Use todos for multi-file changes, feature implementation, or build/test/fix cycl
 
 ## Workflow
 
-1. Create todos ONCE at start with `write_todos` (all start as `pending`)
+1. Create todos ONCE at start with `write_todos` (all start as `pending`). **Group sub-steps as children — never create more than 10 parent items.**
 2. Work through todos IN ORDER:
    - `update_todo(id, status="in_progress")` when starting
-   - Do the work
-   - `complete_todo(id)` when finished
+   - Do the work (including all children sub-steps)
+   - `complete_todo(id)` when finished (all children done)
 3. Keep only ONE todo `in_progress` at a time
 4. **NEVER skip todos** - if work was done implicitly, mark it complete
 5. **The system will remind you if todos remain incomplete when you try to finish**
 6. If the user cancels or abandons tasks, call `clear_todos` to remove the entire list
 
+## Hierarchical Todos
+
+When a task involves many steps (especially after receiving a plan), **always use children** to group sub-steps:
+
+- Create 4-8 high-level parent todos (max 10)
+- Put detailed sub-steps in the `children` array of each parent
+- Children appear in your status output but NOT in the user's todo panel
+- Complete the parent todo only after finishing ALL its children
+- When starting a parent todo, work through its children in order
+
 ## When to Use
 
-✅ Multi-file changes
-✅ Feature implementation with multiple steps
-✅ Build/test/fix cycles
-❌ Simple single-file edits
+- Multi-file changes
+- Feature implementation with multiple steps
+- Build/test/fix cycles
+- NOT for simple single-file edits
 
 ## Formatting
 
