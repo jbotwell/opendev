@@ -730,12 +730,13 @@ impl TuiRunner {
                                                         12000,
                                                     );
                                                 let result_summary = if full_result.len() > 200 {
-                                                    format!("{}...", &full_result[..full_result
-                                                        .char_indices()
-                                                        .take_while(|(i, _)| *i < 200)
-                                                        .last()
-                                                        .map(|(i, c)| i + c.len_utf8())
-                                                        .unwrap_or(200)])
+                                                    format!(
+                                                        "{}...",
+                                                        opendev_runtime::safe_truncate(
+                                                            &full_result,
+                                                            200,
+                                                        )
+                                                    )
                                                 } else {
                                                     full_result.clone()
                                                 };

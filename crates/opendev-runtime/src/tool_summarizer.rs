@@ -137,7 +137,7 @@ pub fn summarize_tool_result(tool_name: &str, output: Option<&str>, error: Optio
 }
 
 /// Truncate a string at a char boundary, never in the middle of a multi-byte char.
-fn safe_truncate(s: &str, max_bytes: usize) -> &str {
+pub fn safe_truncate(s: &str, max_bytes: usize) -> &str {
     if s.len() <= max_bytes {
         return s;
     }
@@ -203,14 +203,12 @@ pub fn build_background_result(
     }
 
     // 3. Final safety cap
-    let final_trimmed = safe_truncate(&result, total_budget);
-    if final_trimmed.len() < result.len() {
-        let mut out = final_trimmed.to_string();
-        out.push_str("... [truncated]");
-        out
-    } else {
-        result
+    if result.len() > total_budget {
+        let end = safe_truncate(&result, total_budget).len();
+        result.truncate(end);
+        result.push_str("... [truncated]");
     }
+    result
 }
 
 #[cfg(test)]
