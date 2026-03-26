@@ -309,31 +309,74 @@ impl<'a> ConversationWidget<'a> {
                     Self::render_simple_role(&content, &rs, &mut lines);
                 }
                 DisplayRole::Reasoning => {
-                    let md_lines =
-                        MarkdownRenderer::render_muted(&content, style_tokens::THINKING_BG);
                     let thinking_style = Style::default().fg(style_tokens::THINKING_BG);
-                    let mut leading_consumed = false;
-                    for md_line in md_lines.into_iter() {
-                        let line_text: String = md_line
-                            .spans
-                            .iter()
-                            .map(|s| s.content.to_string())
-                            .collect();
-                        let has_content = !line_text.trim().is_empty();
 
-                        if !leading_consumed && has_content {
-                            let mut spans = vec![Span::styled(
-                                format!("{} ", style_tokens::THINKING_ICON),
-                                thinking_style,
-                            )];
-                            spans.extend(md_line.spans);
-                            lines.push(Line::from(spans));
-                            leading_consumed = true;
-                        } else {
-                            let mut spans =
-                                vec![Span::styled(Indent::THINKING_CONT, thinking_style)];
-                            spans.extend(md_line.spans);
-                            lines.push(Line::from(spans));
+                    if msg.collapsed {
+                        if let Some(secs) = msg.thinking_duration_secs {
+                            // Finalized collapsed: single summary line
+                            let duration_text = if secs == 0 {
+                                "<1".to_string()
+                            } else {
+                                secs.to_string()
+                            };
+                            lines.push(Line::from(vec![
+                                Span::styled(
+                                    format!(
+                                        "{} Thought for {}s",
+                                        style_tokens::THINKING_ICON,
+                                        duration_text
+                                    ),
+                                    thinking_style,
+                                ),
+                                Span::styled(
+                                    " (Ctrl+I to expand)",
+                                    Style::default().fg(style_tokens::SUBTLE),
+                                ),
+                            ]));
+                        } else if let Some(started) = msg.thinking_started_at {
+                            // Streaming: animated "⟡ Thinking... Xs (Ctrl+I to expand)"
+                            let elapsed = started.elapsed().as_secs();
+                            lines.push(Line::from(vec![
+                                Span::styled(
+                                    format!(
+                                        "{} Thinking... {}s",
+                                        style_tokens::THINKING_ICON, elapsed
+                                    ),
+                                    thinking_style,
+                                ),
+                                Span::styled(
+                                    " (Ctrl+I to expand)",
+                                    Style::default().fg(style_tokens::SUBTLE),
+                                ),
+                            ]));
+                        }
+                    } else {
+                        // Expanded: full markdown rendering
+                        let md_lines =
+                            MarkdownRenderer::render_muted(&content, style_tokens::THINKING_BG);
+                        let mut leading_consumed = false;
+                        for md_line in md_lines.into_iter() {
+                            let line_text: String = md_line
+                                .spans
+                                .iter()
+                                .map(|s| s.content.to_string())
+                                .collect();
+                            let has_content = !line_text.trim().is_empty();
+
+                            if !leading_consumed && has_content {
+                                let mut spans = vec![Span::styled(
+                                    format!("{} ", style_tokens::THINKING_ICON),
+                                    thinking_style,
+                                )];
+                                spans.extend(md_line.spans);
+                                lines.push(Line::from(spans));
+                                leading_consumed = true;
+                            } else {
+                                let mut spans =
+                                    vec![Span::styled(Indent::THINKING_CONT, thinking_style)];
+                                spans.extend(md_line.spans);
+                                lines.push(Line::from(spans));
+                            }
                         }
                     }
                 }
@@ -540,12 +583,7 @@ mod tests {
 
     #[test]
     fn test_user_message_rendering() {
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Hello".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Hello")];
         let widget = ConversationWidget::new(&msgs, 0);
         let lines = widget.build_lines();
         assert!(lines.len() >= 2); // message + blank line
@@ -566,6 +604,8 @@ mod tests {
                 nested_calls: vec![],
             }),
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: None,
         }];
         let widget = ConversationWidget::new(&msgs, 0);
         let lines = widget.build_lines();
@@ -575,12 +615,10 @@ mod tests {
 
     #[test]
     fn test_system_reminder_filtered() {
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: "Hello<system-reminder>secret</system-reminder> world".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(
+            DisplayRole::Assistant,
+            "Hello<system-reminder>secret</system-reminder> world",
+        )];
         let widget = ConversationWidget::new(&msgs, 0);
         let lines = widget.build_lines();
         // Should not contain "secret"
@@ -609,6 +647,8 @@ mod tests {
                 nested_calls: vec![],
             }),
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: None,
         }];
         let widget = ConversationWidget::new(&msgs, 0);
         let lines = widget.build_lines();
@@ -625,12 +665,7 @@ mod tests {
 
     #[test]
     fn test_spinner_active_tools() {
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Do something".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Do something")];
         let mut args = std::collections::HashMap::new();
         args.insert("command".into(), serde_json::Value::String("ls -la".into()));
         let tools = vec![ToolExecution {
@@ -660,12 +695,7 @@ mod tests {
 
     #[test]
     fn test_spinner_thinking() {
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Hello".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Hello")];
         let progress = TaskProgress {
             description: "Thinking".to_string(),
             elapsed_secs: 5,
@@ -686,12 +716,7 @@ mod tests {
 
     #[test]
     fn test_spinner_tools_take_priority_over_thinking() {
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Hello".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Hello")];
         let tools = vec![ToolExecution {
             id: "t1".into(),
             name: "read_file".into(),
@@ -727,12 +752,7 @@ mod tests {
 
     #[test]
     fn test_no_spinner_when_idle() {
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Hello".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Hello")];
         let widget = ConversationWidget::new(&msgs, 0);
         let spinner = widget.build_spinner_lines();
         assert!(spinner.is_empty());
@@ -764,6 +784,8 @@ mod tests {
                 }],
             }),
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: None,
         }];
         let widget = ConversationWidget::new(&msgs, 0);
         let lines = widget.build_lines();
@@ -781,12 +803,7 @@ mod tests {
     fn test_render_reserves_bottom_row_gap() {
         use ratatui::buffer::Buffer;
 
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Hello".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Hello")];
         let widget = ConversationWidget::new(&msgs, 0);
 
         // Render into a small area
@@ -856,12 +873,7 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "What is Rust?".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "What is Rust?")];
 
         terminal
             .draw(|frame| {
@@ -889,12 +901,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let msgs = vec![
-            DisplayMessage {
-                role: DisplayRole::User,
-                content: "List files".into(),
-                tool_call: None,
-                collapsed: false,
-            },
+            DisplayMessage::new(DisplayRole::User, "List files"),
             DisplayMessage {
                 role: DisplayRole::Assistant,
                 content: "I'll list the files.".into(),
@@ -908,13 +915,10 @@ mod tests {
                     nested_calls: vec![],
                 }),
                 collapsed: false,
+                thinking_started_at: None,
+                thinking_duration_secs: None,
             },
-            DisplayMessage {
-                role: DisplayRole::Assistant,
-                content: "Here are the files.".into(),
-                tool_call: None,
-                collapsed: false,
-            },
+            DisplayMessage::new(DisplayRole::Assistant, "Here are the files."),
         ];
 
         terminal
@@ -956,18 +960,11 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let msgs = vec![
-            DisplayMessage {
-                role: DisplayRole::User,
-                content: "Explain closures".into(),
-                tool_call: None,
-                collapsed: false,
-            },
-            DisplayMessage {
-                role: DisplayRole::Assistant,
-                content: "Closures capture variables from their scope.".into(),
-                tool_call: None,
-                collapsed: false,
-            },
+            DisplayMessage::new(DisplayRole::User, "Explain closures"),
+            DisplayMessage::new(
+                DisplayRole::Assistant,
+                "Closures capture variables from their scope.",
+            ),
         ];
 
         terminal
@@ -997,15 +994,15 @@ mod tests {
 
         // Create many messages to force scrolling in a small terminal
         let msgs: Vec<DisplayMessage> = (0..50)
-            .map(|i| DisplayMessage {
-                role: if i % 2 == 0 {
-                    DisplayRole::User
-                } else {
-                    DisplayRole::Assistant
-                },
-                content: format!("Message number {i} with enough text to occupy a line"),
-                tool_call: None,
-                collapsed: false,
+            .map(|i| {
+                DisplayMessage::new(
+                    if i % 2 == 0 {
+                        DisplayRole::User
+                    } else {
+                        DisplayRole::Assistant
+                    },
+                    format!("Message number {i} with enough text to occupy a line"),
+                )
             })
             .collect();
 
@@ -1058,6 +1055,8 @@ mod tests {
                 nested_calls: vec![],
             }),
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: None,
         }];
         let widget = ConversationWidget::new(&msgs, 0);
         let lines = widget.build_lines();
@@ -1107,6 +1106,8 @@ mod tests {
                 nested_calls: vec![],
             }),
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: None,
         }];
         let widget = ConversationWidget::new(&msgs, 0);
         let lines = widget.build_lines();
@@ -1133,12 +1134,10 @@ mod tests {
     fn test_spinner_parallel_subagents_finished_before_tool() {
         use crate::widgets::nested_tool::SubagentDisplayState;
 
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Explore the codebase".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(
+            DisplayRole::User,
+            "Explore the codebase",
+        )];
 
         // Create 3 spawn_subagent ToolExecutions (still active — not finished)
         let tasks = [
@@ -1213,12 +1212,7 @@ mod tests {
     fn test_spinner_parallel_subagents_in_progress() {
         use crate::widgets::nested_tool::{NestedToolCallState, SubagentDisplayState};
 
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Explore".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Explore")];
 
         let tasks = ["Search auth code", "Find models"];
         let tools: Vec<ToolExecution> = tasks
@@ -1294,12 +1288,7 @@ mod tests {
 
     #[test]
     fn test_render_lines_include_spinner_content() {
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Do something".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Do something")];
         let mut args = std::collections::HashMap::new();
         args.insert("command".into(), serde_json::Value::String("ls -la".into()));
         let tools = vec![ToolExecution {
@@ -1335,12 +1324,7 @@ mod tests {
         let backend = TestBackend::new(60, 8);
         let mut terminal = Terminal::new(backend).unwrap();
 
-        let msgs = vec![DisplayMessage {
-            role: DisplayRole::User,
-            content: "Explore the repo".into(),
-            tool_call: None,
-            collapsed: false,
-        }];
+        let msgs = vec![DisplayMessage::new(DisplayRole::User, "Explore the repo")];
 
         let tasks = [
             "Search auth code",
@@ -1426,13 +1410,10 @@ mod tests {
                         .into(),
                 tool_call: None,
                 collapsed: false,
+                thinking_started_at: None,
+                thinking_duration_secs: Some(5),
             },
-            DisplayMessage {
-                role: DisplayRole::Assistant,
-                content: "The answer is 42.".into(),
-                tool_call: None,
-                collapsed: false,
-            },
+            DisplayMessage::new(DisplayRole::Assistant, "The answer is 42."),
         ];
 
         terminal

@@ -318,12 +318,12 @@ pub async fn run_interactive(
                     if msg.content.starts_with("[SYSTEM] ") {
                         continue;
                     }
-                    app_state.messages.push(opendev_tui::app::DisplayMessage {
-                        role: opendev_tui::app::DisplayRole::User,
-                        content: msg.content.clone(),
-                        tool_call: None,
-                        collapsed: false,
-                    });
+                    app_state
+                        .messages
+                        .push(opendev_tui::app::DisplayMessage::new(
+                            opendev_tui::app::DisplayRole::User,
+                            msg.content.clone(),
+                        ));
                 }
                 opendev_models::Role::Assistant => {
                     // Add reasoning/thinking trace if present
@@ -339,17 +339,19 @@ pub async fn run_interactive(
                             role: opendev_tui::app::DisplayRole::Reasoning,
                             content: trace.to_string(),
                             tool_call: None,
-                            collapsed: false,
+                            collapsed: true,
+                            thinking_started_at: None,
+                            thinking_duration_secs: Some(0),
                         });
                     }
                     // Add assistant text
                     if !msg.content.is_empty() {
-                        app_state.messages.push(opendev_tui::app::DisplayMessage {
-                            role: opendev_tui::app::DisplayRole::Assistant,
-                            content: msg.content.clone(),
-                            tool_call: None,
-                            collapsed: false,
-                        });
+                        app_state
+                            .messages
+                            .push(opendev_tui::app::DisplayMessage::new(
+                                opendev_tui::app::DisplayRole::Assistant,
+                                msg.content.clone(),
+                            ));
                     }
                     // Add tool calls (skip task_complete — it's an internal control tool)
                     for tc in &msg.tool_calls {
@@ -361,6 +363,8 @@ pub async fn run_interactive(
                             content: String::new(),
                             tool_call: Some(opendev_tui::app::DisplayToolCall::from_model(tc)),
                             collapsed: false,
+                            thinking_started_at: None,
+                            thinking_duration_secs: None,
                         });
                     }
                 }
@@ -371,12 +375,12 @@ pub async fn run_interactive(
 
     // Inject initial message as first user submission (handled by the agent task)
     if let Some(ref msg) = initial_message {
-        app_state.messages.push(opendev_tui::app::DisplayMessage {
-            role: opendev_tui::app::DisplayRole::User,
-            content: msg.clone(),
-            tool_call: None,
-            collapsed: false,
-        });
+        app_state
+            .messages
+            .push(opendev_tui::app::DisplayMessage::new(
+                opendev_tui::app::DisplayRole::User,
+                msg.clone(),
+            ));
     }
 
     // Create and run the TUI runner

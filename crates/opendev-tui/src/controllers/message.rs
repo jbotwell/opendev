@@ -21,12 +21,9 @@ impl MessageController {
 
     /// Handle user message submission — adds it to the display state.
     pub fn handle_user_submit(&self, state: &mut AppState, text: &str) {
-        state.messages.push(DisplayMessage {
-            role: DisplayRole::User,
-            content: text.to_string(),
-            tool_call: None,
-            collapsed: false,
-        });
+        state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::User, text));
         // Reset scroll to follow new content
         state.scroll_offset = 0;
         state.user_scrolled = false;
@@ -44,12 +41,9 @@ impl MessageController {
             return;
         }
         // Start a new assistant message
-        state.messages.push(DisplayMessage {
-            role: DisplayRole::Assistant,
-            content: text.to_string(),
-            tool_call: None,
-            collapsed: false,
-        });
+        state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::Assistant, text));
     }
 
     /// Handle a complete agent message (non-streaming path or final message).
@@ -67,6 +61,8 @@ impl MessageController {
             content: msg.content.clone(),
             tool_call,
             collapsed: false,
+            thinking_started_at: None,
+            thinking_duration_secs: None,
         });
 
         // Auto-scroll to latest message
@@ -121,12 +117,9 @@ mod tests {
         let controller = MessageController::new();
         let mut state = AppState::default();
         // Simulate reasoning arriving first
-        state.messages.push(DisplayMessage {
-            role: DisplayRole::Reasoning,
-            content: "thinking...".to_string(),
-            tool_call: None,
-            collapsed: false,
-        });
+        state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::Reasoning, "thinking..."));
         // Then agent chunk arrives — should create a NEW assistant message
         controller.handle_agent_chunk(&mut state, "Hello");
         assert_eq!(state.messages.len(), 2);

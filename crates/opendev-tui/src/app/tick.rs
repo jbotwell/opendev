@@ -59,6 +59,17 @@ impl App {
             self.state.spinner.tick();
         }
 
+        // Invalidate cache during active thinking for animated elapsed timer
+        if self
+            .state
+            .messages
+            .iter()
+            .rev()
+            .any(|m| m.role == super::DisplayRole::Reasoning && m.thinking_duration_secs.is_none())
+        {
+            self.state.message_generation += 1;
+        }
+
         // Advance todo spinner (for collapsed mode) — stop when all complete
         if !self.state.todo_items.is_empty() {
             let all_done = self

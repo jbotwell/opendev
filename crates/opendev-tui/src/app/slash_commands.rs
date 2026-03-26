@@ -6,33 +6,24 @@ use super::{App, AutonomyLevel, DisplayMessage, DisplayRole, OperationMode};
 
 impl App {
     pub(super) fn push_system_message(&mut self, content: String) {
-        self.state.messages.push(DisplayMessage {
-            role: DisplayRole::System,
-            content,
-            tool_call: None,
-            collapsed: false,
-        });
+        self.state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::System, content));
         self.state.message_generation += 1;
     }
 
     /// Push a slash command echo line (e.g. `❯ /mode plan`).
     pub(super) fn push_slash_echo(&mut self, cmd: &str) {
-        self.state.messages.push(DisplayMessage {
-            role: DisplayRole::SlashCommand,
-            content: cmd.to_string(),
-            tool_call: None,
-            collapsed: false,
-        });
+        self.state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::SlashCommand, cmd));
     }
 
     /// Push a command result line that attaches below the echo.
     pub(super) fn push_command_result(&mut self, content: String) {
-        self.state.messages.push(DisplayMessage {
-            role: DisplayRole::CommandResult,
-            content,
-            tool_call: None,
-            collapsed: false,
-        });
+        self.state
+            .messages
+            .push(DisplayMessage::new(DisplayRole::CommandResult, content));
         self.state.message_generation += 1;
     }
 
@@ -431,6 +422,7 @@ impl App {
                         "  Alt+B       — Toggle task watcher panel",
                         "  Escape      — Interrupt agent",
                         "  Tab         — Accept autocomplete / toggle mode (when empty)",
+                        "  Ctrl+I      — Toggle thinking block expand/collapse",
                         "  Shift+Tab   — Toggle mode",
                         "  PageUp/Down — Scroll conversation",
                     ]

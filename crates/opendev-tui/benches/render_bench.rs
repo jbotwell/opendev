@@ -15,21 +15,11 @@ use opendev_tui::widgets::ConversationWidget;
 // ---------------------------------------------------------------------------
 
 fn make_user_message(content: &str) -> DisplayMessage {
-    DisplayMessage {
-        role: DisplayRole::User,
-        content: content.to_string(),
-        tool_call: None,
-        collapsed: false,
-    }
+    DisplayMessage::new(DisplayRole::User, content)
 }
 
 fn make_assistant_message(content: &str) -> DisplayMessage {
-    DisplayMessage {
-        role: DisplayRole::Assistant,
-        content: content.to_string(),
-        tool_call: None,
-        collapsed: false,
-    }
+    DisplayMessage::new(DisplayRole::Assistant, content)
 }
 
 fn make_assistant_with_tool(content: &str, tool_name: &str) -> DisplayMessage {
@@ -46,6 +36,8 @@ fn make_assistant_with_tool(content: &str, tool_name: &str) -> DisplayMessage {
             nested_calls: vec![],
         }),
         collapsed: false,
+        thinking_started_at: None,
+        thinking_duration_secs: None,
     }
 }
 

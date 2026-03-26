@@ -9,6 +9,26 @@ use super::{
 };
 
 impl App {
+    /// Finalize the most recent unfinalized thinking block by freezing its duration.
+    /// Called when a non-reasoning event arrives (AgentChunk, ToolStarted, etc.).
+    fn finalize_active_thinking(&mut self) {
+        if let Some(msg) = self
+            .state
+            .messages
+            .iter_mut()
+            .rev()
+            .find(|m| m.role == DisplayRole::Reasoning && m.thinking_duration_secs.is_none())
+        {
+            if let Some(started) = msg.thinking_started_at {
+                msg.thinking_duration_secs = Some(started.elapsed().as_secs());
+            } else {
+                // History replay or missing start time
+                msg.thinking_duration_secs = Some(0);
+            }
+            self.state.message_generation += 1;
+        }
+    }
+
     /// Drain the next pending item from the unified queue.
     /// User messages are sent one at a time. Consecutive background results are batched.
     pub(super) fn drain_next_pending(&mut self) {
@@ -159,16 +179,14 @@ impl App {
                 budget_usd,
             } => {
                 self.state.agent_active = false;
-                self.state.messages.push(DisplayMessage {
-                    role: DisplayRole::System,
-                    content: format!(
+                self.state.messages.push(DisplayMessage::new(
+                    DisplayRole::System,
+                    format!(
                         "Session cost budget exhausted: ${:.4} spent of ${:.2} budget. \
                          Agent paused. Use /budget to adjust.",
                         cost_usd, budget_usd
                     ),
-                    tool_call: None,
-                    collapsed: false,
-                });
+                ));
                 self.state.dirty = true;
                 self.state.message_generation += 1;
             }
@@ -202,32 +220,34 @@ impl App {
                 self.state.dirty = true;
             }
             AppEvent::AgentChunk(text) => {
+                self.finalize_active_thinking();
                 self.message_controller
                     .handle_agent_chunk(&mut self.state, &text);
                 self.state.dirty = true;
                 self.state.message_generation += 1;
             }
             AppEvent::AgentMessage(msg) => {
+                self.finalize_active_thinking();
                 self.message_controller
                     .handle_agent_message(&mut self.state, msg);
                 self.state.dirty = true;
                 self.state.message_generation += 1;
             }
             AppEvent::AgentFinished => {
+                self.finalize_active_thinking();
                 self.state.agent_active = false;
                 self.state.backgrounding_pending = false;
                 self.state.dirty = true;
                 self.drain_next_pending();
             }
             AppEvent::AgentError(err) => {
+                self.finalize_active_thinking();
                 self.state.agent_active = false;
                 self.state.backgrounding_pending = false;
-                self.state.messages.push(DisplayMessage {
-                    role: DisplayRole::System,
-                    content: format!("Error: {err}"),
-                    tool_call: None,
-                    collapsed: false,
-                });
+                self.state.messages.push(DisplayMessage::new(
+                    DisplayRole::System,
+                    format!("Error: {err}"),
+                ));
                 self.state.dirty = true;
                 self.state.message_generation += 1;
                 // Continue processing queued items despite the error
@@ -257,7 +277,9 @@ impl App {
                         role: DisplayRole::Reasoning,
                         content,
                         tool_call: None,
-                        collapsed: false,
+                        collapsed: true,
+                        thinking_started_at: Some(std::time::Instant::now()),
+                        thinking_duration_secs: None,
                     });
                 }
                 self.state.dirty = true;
@@ -270,6 +292,7 @@ impl App {
                 tool_name,
                 args,
             } => {
+                self.finalize_active_thinking();
                 // For spawn_subagent, eagerly create SubagentDisplayState now.
                 // This avoids the race where SubagentStarted (forwarded by the bridge task)
                 // arrives after ToolResult (sent directly), causing stats to be lost.
@@ -441,6 +464,8 @@ impl App {
                             nested_calls: Vec::new(),
                         }),
                         collapsed: false,
+                        thinking_started_at: None,
+                        thinking_duration_secs: None,
                     });
                 }
 
@@ -808,12 +833,9 @@ impl App {
                 // Store plan content for display in conversation
                 self.state.plan_content_display = Some(plan_content.clone());
                 // Add plan as a message in the conversation
-                self.state.messages.push(DisplayMessage {
-                    role: DisplayRole::Plan,
-                    content: plan_content.clone(),
-                    tool_call: None,
-                    collapsed: false,
-                });
+                self.state
+                    .messages
+                    .push(DisplayMessage::new(DisplayRole::Plan, plan_content.clone()));
                 self.state.message_generation += 1;
                 // Start the plan approval controller
                 let _rx = self.plan_approval_controller.start(plan_content);
@@ -868,6 +890,7 @@ impl App {
                 self.interrupt_token = Some(token);
             }
             AppEvent::AgentInterrupted => {
+                self.finalize_active_thinking();
                 self.state.agent_active = false;
                 self.state.backgrounding_pending = false;
                 self.state.task_progress = None;
@@ -886,12 +909,10 @@ impl App {
                 }
                 self.state.active_subagents.clear();
                 // Show interrupt feedback in the conversation
-                self.state.messages.push(DisplayMessage {
-                    role: DisplayRole::Interrupt,
-                    content: "Interrupted. What should I do instead?".to_string(),
-                    tool_call: None,
-                    collapsed: false,
-                });
+                self.state.messages.push(DisplayMessage::new(
+                    DisplayRole::Interrupt,
+                    "Interrupted. What should I do instead?",
+                ));
                 self.state.dirty = true;
                 self.state.message_generation += 1;
             }
@@ -958,6 +979,8 @@ impl App {
                             nested_calls: Vec::new(),
                         }),
                         collapsed: false,
+                        thinking_started_at: None,
+                        thinking_duration_secs: None,
                     });
                 }
                 // Mark surviving (finished) subagents as backgrounded.
@@ -977,12 +1000,9 @@ impl App {
                 self.state.message_generation += 1;
             }
             AppEvent::BackgroundNudge { content } => {
-                self.state.messages.push(DisplayMessage {
-                    role: DisplayRole::Assistant,
-                    content,
-                    tool_call: None,
-                    collapsed: false,
-                });
+                self.state
+                    .messages
+                    .push(DisplayMessage::new(DisplayRole::Assistant, content));
                 self.state.dirty = true;
                 self.state.message_generation += 1;
             }
