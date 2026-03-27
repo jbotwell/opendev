@@ -170,12 +170,29 @@ impl AgentRuntime {
         let handler_registry = HandlerRegistry::new();
         let query_enhancer = QueryEnhancer::new(working_dir.to_path_buf());
 
-        // Configure HTTP client based on provider
-        let api_key = config.get_api_key().unwrap_or_default();
+        // Load model registry early — needed for provider metadata (api_key_env,
+        // api_base_url) and model capabilities (temperature, max_tokens).
+        let paths = opendev_config::Paths::new(Some(working_dir.to_path_buf()));
+        let registry = opendev_config::ModelRegistry::load_from_cache(&paths.global_cache_dir());
+
+        // Configure HTTP client based on provider.
+        // Consult the registry for the correct API key env var and base URL,
+        // so all registry-based providers work out of the box.
+        let provider_info = registry.get_provider(&config.model_provider);
+        let registry_env = provider_info.map(|pi| pi.api_key_env.as_str());
+        let api_key = config
+            .get_api_key_with_env(registry_env)
+            .unwrap_or_default();
+        let registry_base_url = provider_info
+            .map(|pi| pi.api_base_url.clone())
+            .filter(|s| !s.is_empty());
 
         // Auto-detect provider from API key if not explicitly set
         let provider = AdaptedClient::resolve_provider(&config.model_provider, &api_key);
         debug!(provider = %provider, "Resolved model provider");
+
+        // Effective base URL: config override > registry > provider default
+        let effective_base_url = config.api_base_url.clone().or(registry_base_url);
 
         let (api_url, headers, adapter): (
             String,
@@ -184,10 +201,7 @@ impl AgentRuntime {
         ) = match provider.as_str() {
             "anthropic" => {
                 let adapter = opendev_http::adapters::anthropic::AnthropicAdapter::new();
-                let url = config
-                    .api_base_url
-                    .clone()
-                    .unwrap_or_else(|| adapter.api_url().to_string());
+                let url = effective_base_url.unwrap_or_else(|| adapter.api_url().to_string());
                 let mut hdrs = HeaderMap::new();
                 // Anthropic uses x-api-key header (not Bearer)
                 if let Ok(val) = HeaderValue::from_str(&api_key) {
@@ -213,10 +227,7 @@ impl AgentRuntime {
             "openai" => {
                 // OpenAI uses /v1/responses (Responses API) with Bearer auth
                 let adapter = opendev_http::adapters::openai::OpenAiAdapter::new();
-                let url = config
-                    .api_base_url
-                    .clone()
-                    .unwrap_or_else(|| adapter.api_url().to_string());
+                let url = effective_base_url.unwrap_or_else(|| adapter.api_url().to_string());
                 let mut hdrs = HeaderMap::new();
                 if let Ok(val) = HeaderValue::from_str(&format!("Bearer {api_key}")) {
                     hdrs.insert(AUTHORIZATION, val);
@@ -232,9 +243,7 @@ impl AgentRuntime {
             }
             "gemini" | "google" => {
                 let adapter = opendev_http::adapters::gemini::GeminiAdapter::new(&config.model);
-                let api_url = config
-                    .api_base_url
-                    .clone()
+                let api_url = effective_base_url
                     .map(|base| {
                         opendev_http::adapters::gemini::gemini_api_url(&base, &config.model)
                     })
@@ -259,8 +268,7 @@ impl AgentRuntime {
                 )
             }
             "azure" => {
-                let base = config
-                    .api_base_url
+                let base = effective_base_url
                     .as_deref()
                     .unwrap_or("https://api.openai.com");
                 let deployment = &config.model;
@@ -276,10 +284,8 @@ impl AgentRuntime {
                 (url, hdrs, None)
             }
             provider => {
-                // OpenAI-compatible providers — use config api_base_url or fall back to OpenAI
-                let url = config
-                    .api_base_url
-                    .clone()
+                // OpenAI-compatible providers — use registry/config base URL or fall back
+                let url = effective_base_url
                     .map(|base| {
                         let trimmed = base.trim_end_matches('/');
                         if trimmed.ends_with("/chat/completions") {
@@ -317,9 +323,6 @@ impl AgentRuntime {
 
         // Check model capabilities via models.dev metadata
         let (supports_temperature, model_max_tokens) = {
-            let paths = opendev_config::Paths::new(Some(working_dir.to_path_buf()));
-            let registry =
-                opendev_config::ModelRegistry::load_from_cache(&paths.global_cache_dir());
             let model_info = registry.find_model_by_id(&config.model);
             let supports_temp = model_info
                 .map(|(_, _, m)| m.supports_temperature)
@@ -479,17 +482,15 @@ impl AgentRuntime {
         // If provider changed, rebuild the HTTP client
         if new_provider_id != current_provider {
             let provider_info = registry.get_provider(&new_provider_id);
-            let api_key = if let Some(pi) = provider_info
-                && !pi.api_key_env.is_empty()
-            {
-                std::env::var(&pi.api_key_env).unwrap_or_default()
-            } else {
-                self.config.get_api_key().unwrap_or_default()
-            };
+            let registry_env = provider_info.map(|pi| pi.api_key_env.as_str());
+            let api_key = self
+                .config
+                .get_api_key_with_env(registry_env)
+                .unwrap_or_default();
 
             if api_key.is_empty() {
-                let env_hint = provider_info
-                    .map(|pi| pi.api_key_env.as_str())
+                let env_hint = registry_env
+                    .filter(|s| !s.is_empty())
                     .unwrap_or("API_KEY");
                 return Err(format!(
                     "No API key for provider '{}'. Set {} environment variable.",

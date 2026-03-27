@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::formatters::style_tokens;
 
@@ -83,7 +84,7 @@ impl Widget for InputWidget<'_> {
         };
         let mode_text = format!(" {mode_label} ");
         let hint_text = "(Shift+Tab) ";
-        let prefix_dashes = 2; // "── " before mode label
+        let prefix_width = "── ".width(); // display width of prefix
 
         let queue_text = match (self.user_msg_count, self.bg_result_count) {
             (0, 0) => String::new(),
@@ -96,7 +97,7 @@ impl Widget for InputWidget<'_> {
             (u, b) => format!("── {} queued (ESC) ", u + b),
         };
 
-        let used = prefix_dashes + mode_text.len() + hint_text.len() + queue_text.len();
+        let used = prefix_width + mode_text.width() + hint_text.width() + queue_text.width();
         let remaining_dashes = (area.width as usize).saturating_sub(used);
 
         let sep_style = Style::default().fg(accent);
@@ -120,7 +121,7 @@ impl Widget for InputWidget<'_> {
             let tag_display = to_kebab_display(tag);
             let tag_section = format!(" {} ", tag_display);
             let trailing = "──";
-            let tag_width = tag_section.len() + trailing.len();
+            let tag_width = tag_section.width() + trailing.width();
             let fill = remaining_dashes.saturating_sub(tag_width);
             spans.push(Span::styled("─".repeat(fill), sep_style));
             spans.push(Span::styled(
@@ -132,6 +133,13 @@ impl Widget for InputWidget<'_> {
             spans.push(Span::styled("─".repeat(remaining_dashes), sep_style));
         }
         let sep_line = Line::from(spans);
+        // Pre-fill entire row with ─ so any rendering gap stays filled
+        buf.set_string(
+            area.left(),
+            area.top(),
+            "─".repeat(area.width as usize),
+            sep_style,
+        );
         buf.set_line(area.left(), area.top(), &sep_line, area.width);
 
         // Rows below separator: multiline input

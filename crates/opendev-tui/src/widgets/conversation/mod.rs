@@ -178,7 +178,7 @@ impl<'a> ConversationWidget<'a> {
     /// Render plan content in a bordered panel with markdown formatting.
     fn render_plan_panel(content: &str, lines: &mut Vec<Line<'_>>) {
         let border_style = Style::default().fg(style_tokens::CYAN);
-        let border_w: usize = 32;
+        let border_w: usize = 60;
         let inner_w = border_w.saturating_sub(1);
         let label = " Plan ";
         let top_after = border_w.saturating_sub(3 + label.len() + 1);
@@ -476,7 +476,14 @@ impl<'a> ConversationWidget<'a> {
         } else if effective_collapsed && !tc.result_lines.is_empty() {
             let count = tc.result_lines.len();
             let verb = crate::formatters::tool_registry::lookup_tool(&tc.name).verb;
-            let label = format!("  {}  {verb} {count} lines", CONTINUATION_CHAR);
+            let label = if !tc.success {
+                format!(
+                    "  {}  {verb} {count} lines (Ctrl+O to expand)",
+                    CONTINUATION_CHAR
+                )
+            } else {
+                format!("  {}  {verb} {count} lines", CONTINUATION_CHAR)
+            };
             lines.push(Line::from(Span::styled(
                 label,
                 Style::default().fg(style_tokens::SUBTLE),

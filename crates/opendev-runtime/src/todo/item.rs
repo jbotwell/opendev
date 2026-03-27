@@ -2,6 +2,16 @@ use serde::{Deserialize, Serialize};
 
 use super::TodoStatus;
 
+/// A sub-step within a parent todo item.
+///
+/// Sub-todos are informational guidance for the LLM — they appear in
+/// `format_status` output but are NOT displayed in the TUI todo panel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubTodoItem {
+    /// Sub-step title text.
+    pub title: String,
+}
+
 /// A single todo item derived from a plan step.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TodoItem {
@@ -21,4 +31,7 @@ pub struct TodoItem {
     pub created_at: String,
     /// When the status last changed.
     pub updated_at: String,
+    /// Sub-steps for this todo (hidden from UI, shown in LLM status output).
+    #[serde(default)]
+    pub children: Vec<SubTodoItem>,
 }

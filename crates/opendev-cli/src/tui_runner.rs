@@ -721,19 +721,24 @@ impl TuiRunner {
 
                                         match result {
                                             Ok(r) => {
-                                                // Cap full_result at 4000 chars
-                                                let full_result = if r.content.len() > 4000 {
+                                                // Build rich result: LLM summary + raw subagent
+                                                // outputs when the summary is too terse
+                                                let full_result =
+                                                    opendev_runtime::build_background_result(
+                                                        &r.content,
+                                                        &r.messages,
+                                                        12000,
+                                                    );
+                                                let result_summary = if full_result.len() > 200 {
                                                     format!(
-                                                        "{}… [truncated, full result in session]",
-                                                        &r.content[..4000]
+                                                        "{}...",
+                                                        opendev_runtime::safe_truncate(
+                                                            &full_result,
+                                                            200,
+                                                        )
                                                     )
                                                 } else {
-                                                    r.content.clone()
-                                                };
-                                                let result_summary = if r.content.len() > 200 {
-                                                    format!("{}...", &r.content[..200])
-                                                } else {
-                                                    r.content
+                                                    full_result.clone()
                                                 };
                                                 let _ = bg_tx.send(
                                                     AppEvent::BackgroundAgentCompleted {

@@ -462,7 +462,10 @@ impl super::base::ProviderAdapter for OpenAiAdapter {
             }
             // ── Stream lifecycle ──
             "response.completed" | "response.incomplete" => {
-                let response = data.get("response").cloned().unwrap_or_else(|| data.clone());
+                let response = data
+                    .get("response")
+                    .cloned()
+                    .unwrap_or_else(|| data.clone());
                 Some(StreamEvent::Done(response))
             }
             "error" => {

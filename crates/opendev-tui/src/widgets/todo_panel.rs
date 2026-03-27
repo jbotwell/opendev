@@ -343,7 +343,11 @@ mod tests {
         let lines = widget.build_lines(done, in_progress, total);
         assert_eq!(lines.len(), 1);
         // Full title should be present (no truncation)
-        let text: String = lines[0].spans.iter().map(|s| s.content.to_string()).collect();
+        let text: String = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
         assert!(text.contains(&"A".repeat(100)));
     }
 

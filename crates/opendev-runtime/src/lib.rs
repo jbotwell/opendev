@@ -50,7 +50,9 @@ pub use interrupt::{InterruptToken, InterruptedError};
 pub use plan_index::PlanIndex;
 pub use plan_names::generate_plan_name;
 pub use session_model::SessionModelManager;
-pub use todo::{TodoItem, TodoManager, TodoStatus, parse_plan_steps, parse_status, strip_markdown};
+pub use todo::{
+    SubTodoItem, TodoItem, TodoManager, TodoStatus, parse_plan_steps, parse_status, strip_markdown,
+};
 
 pub use action_summarizer::summarize_action;
 pub use ask_user_channel::{AskUserReceiver, AskUserRequest, AskUserSender, ask_user_channel};
@@ -81,4 +83,4 @@ pub use tool_approval_channel::{
     ToolApprovalDecision, ToolApprovalReceiver, ToolApprovalRequest, ToolApprovalSender,
     tool_approval_channel,
 };
-pub use tool_summarizer::summarize_tool_result;
+pub use tool_summarizer::{build_background_result, safe_truncate, summarize_tool_result};

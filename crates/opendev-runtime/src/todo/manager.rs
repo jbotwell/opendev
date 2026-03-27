@@ -2,7 +2,7 @@ use chrono::Utc;
 use std::collections::BTreeMap;
 use tracing::{debug, warn};
 
-use super::{TodoItem, TodoStatus};
+use super::{SubTodoItem, TodoItem, TodoStatus};
 
 /// Manager for tracking todos during plan execution.
 ///
@@ -47,18 +47,20 @@ impl TodoManager {
                 log: String::new(),
                 created_at: now.clone(),
                 updated_at: now,
+                children: Vec::new(),
             },
         );
         debug!(id, "Added todo");
         id
     }
 
-    /// Add a new todo item with initial status and active_form. Returns its assigned ID.
+    /// Add a new todo item with initial status, active_form, and children. Returns its assigned ID.
     pub fn add_with_status(
         &mut self,
         title: String,
         status: TodoStatus,
         active_form: String,
+        children: Vec<SubTodoItem>,
     ) -> usize {
         let now = Utc::now().to_rfc3339();
         let id = self.next_id;
@@ -77,6 +79,7 @@ impl TodoManager {
                 log: String::new(),
                 created_at: now.clone(),
                 updated_at: now,
+                children,
             },
         );
         debug!(id, "Added todo with status");
@@ -84,11 +87,11 @@ impl TodoManager {
     }
 
     /// Replace the entire todo list with new items. Resets IDs starting from 1.
-    pub fn write_todos(&mut self, items: Vec<(String, TodoStatus, String)>) {
+    pub fn write_todos(&mut self, items: Vec<(String, TodoStatus, String, Vec<SubTodoItem>)>) {
         self.todos.clear();
         self.next_id = 1;
-        for (title, status, active_form) in items {
-            self.add_with_status(title, status, active_form);
+        for (title, status, active_form, children) in items {
+            self.add_with_status(title, status, active_form, children);
         }
     }
 
@@ -227,6 +230,9 @@ impl TodoManager {
                 "  [{}] {}. {}\n",
                 item.status, item.id, item.title
             ));
+            for child in &item.children {
+                out.push_str(&format!("      - {}\n", child.title));
+            }
         }
 
         out
@@ -353,6 +359,9 @@ impl TodoManager {
                 "  [{}] {}. {}\n",
                 item.status, item.id, item.title
             ));
+            for child in &item.children {
+                out.push_str(&format!("      - {}\n", child.title));
+            }
         }
 
         out
@@ -468,6 +477,7 @@ mod tests {
             "Test item".into(),
             TodoStatus::InProgress,
             "Testing...".into(),
+            Vec::new(),
         );
         assert_eq!(mgr.get(id).unwrap().status, TodoStatus::InProgress);
         assert_eq!(mgr.get(id).unwrap().active_form, "Testing...");
@@ -477,11 +487,12 @@ mod tests {
     fn test_write_todos() {
         let mut mgr = TodoManager::from_steps(&["Old".into()]);
         mgr.write_todos(vec![
-            ("New A".into(), TodoStatus::Pending, String::new()),
+            ("New A".into(), TodoStatus::Pending, String::new(), Vec::new()),
             (
                 "New B".into(),
                 TodoStatus::InProgress,
                 "Working on B".into(),
+                Vec::new(),
             ),
         ]);
         assert_eq!(mgr.total(), 2);
@@ -490,9 +501,44 @@ mod tests {
     }
 
     #[test]
+    fn test_write_todos_with_children() {
+        let mut mgr = TodoManager::new();
+        mgr.write_todos(vec![
+            (
+                "Implement auth".into(),
+                TodoStatus::Pending,
+                "Implementing auth".into(),
+                vec![
+                    SubTodoItem { title: "Add login endpoint".into() },
+                    SubTodoItem { title: "Add token validation".into() },
+                ],
+            ),
+            (
+                "Write tests".into(),
+                TodoStatus::Pending,
+                "Writing tests".into(),
+                vec![
+                    SubTodoItem { title: "Unit tests".into() },
+                ],
+            ),
+        ]);
+        // total() counts only parents
+        assert_eq!(mgr.total(), 2);
+        assert_eq!(mgr.get(1).unwrap().children.len(), 2);
+        assert_eq!(mgr.get(1).unwrap().children[0].title, "Add login endpoint");
+        assert_eq!(mgr.get(2).unwrap().children.len(), 1);
+
+        // format_status includes children
+        let status = mgr.format_status();
+        assert!(status.contains("- Add login endpoint"));
+        assert!(status.contains("- Add token validation"));
+        assert!(status.contains("- Unit tests"));
+    }
+
+    #[test]
     fn test_get_active_todo_message() {
         let mut mgr = TodoManager::new();
-        mgr.add_with_status("Task".into(), TodoStatus::InProgress, "Doing task".into());
+        mgr.add_with_status("Task".into(), TodoStatus::InProgress, "Doing task".into(), Vec::new());
         assert_eq!(
             mgr.get_active_todo_message(),
             Some("Doing task".to_string())

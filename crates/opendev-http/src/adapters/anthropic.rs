@@ -629,10 +629,8 @@ impl super::base::ProviderAdapter for AnthropicAdapter {
                         Some(StreamEvent::ReasoningDelta(text.to_string()))
                     }
                     "input_json_delta" => {
-                        let index = data
-                            .get("index")
-                            .and_then(|i| i.as_u64())
-                            .unwrap_or(0) as usize;
+                        let index =
+                            data.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
                         let partial = delta
                             .get("partial_json")
                             .and_then(|p| p.as_str())
@@ -668,10 +666,8 @@ impl super::base::ProviderAdapter for AnthropicAdapter {
                 match block_type {
                     "thinking" => Some(StreamEvent::ReasoningBlockStart),
                     "tool_use" => {
-                        let index = data
-                            .get("index")
-                            .and_then(|i| i.as_u64())
-                            .unwrap_or(0) as usize;
+                        let index =
+                            data.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
                         let call_id = cb
                             .get("id")
                             .and_then(|i| i.as_str())

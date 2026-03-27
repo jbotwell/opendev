@@ -25,10 +25,7 @@ pub enum StreamEvent {
     /// A chunk of function call arguments.
     FunctionCallDelta { index: usize, delta: String },
     /// Function call arguments are complete.
-    FunctionCallDone {
-        index: usize,
-        arguments: String,
-    },
+    FunctionCallDone { index: usize, arguments: String },
     /// Usage/metadata update (input_tokens, output_tokens, stop_reason).
     UsageUpdate {
         usage: Option<Value>,

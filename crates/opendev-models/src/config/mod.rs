@@ -393,9 +393,79 @@ impl AppConfig {
     }
 
     /// Get the API key from config or the environment.
+    ///
+    /// Resolution order:
+    /// 1. `registry_env_var` (from models.dev registry, e.g. `ZHIPU_API_KEY`)
+    /// 2. Well-known env var for the provider (hardcoded fallback)
+    /// 3. Convention-based env var: `{PROVIDER}_API_KEY` (e.g. `zai` → `ZAI_API_KEY`)
+    /// 4. `self.api_key` (stored in config by the setup wizard)
+    /// 5. `OPENAI_API_KEY` (last resort for truly unknown providers)
+    pub fn get_api_key_with_env(&self, registry_env_var: Option<&str>) -> Result<String, String> {
+        // Try registry env var first (authoritative for models.dev providers)
+        if let Some(env_var) = registry_env_var
+            && !env_var.is_empty()
+            && let Ok(key) = std::env::var(env_var)
+            && !key.is_empty()
+        {
+            return Ok(key);
+        }
+
+        // Try well-known env var for built-in providers
+        let builtin_env = Self::builtin_env_var(&self.model_provider);
+        if !builtin_env.is_empty()
+            && let Ok(key) = std::env::var(builtin_env)
+            && !key.is_empty()
+        {
+            return Ok(key);
+        }
+
+        // Convention-based: derive env var from provider ID → {PROVIDER}_API_KEY
+        // e.g. "zai" → "ZAI_API_KEY", "siliconflow" → "SILICONFLOW_API_KEY"
+        let convention_env = Self::convention_env_var(&self.model_provider);
+        if !convention_env.is_empty()
+            && convention_env != builtin_env
+            && registry_env_var != Some(convention_env.as_str())
+            && let Ok(key) = std::env::var(&convention_env)
+            && !key.is_empty()
+        {
+            return Ok(key);
+        }
+
+        // Fall back to config-stored API key (from setup wizard)
+        if let Some(ref key) = self.api_key {
+            return Ok(key.clone());
+        }
+
+        // Last resort: try OPENAI_API_KEY for unknown providers
+        if builtin_env.is_empty()
+            && registry_env_var.is_none_or(str::is_empty)
+            && let Ok(key) = std::env::var("OPENAI_API_KEY")
+            && !key.is_empty()
+        {
+            return Ok(key);
+        }
+
+        let hint = registry_env_var
+            .filter(|s| !s.is_empty())
+            .or(Some(builtin_env).filter(|s| !s.is_empty()))
+            .or(Some(convention_env.as_str()).filter(|s| !s.is_empty()))
+            .unwrap_or("OPENAI_API_KEY");
+        Err(format!(
+            "No API key found. Set {} environment variable",
+            hint
+        ))
+    }
+
+    /// Convenience wrapper that calls [`get_api_key_with_env`] without registry info.
     pub fn get_api_key(&self) -> Result<String, String> {
-        let env_var = match self.model_provider.as_str() {
-            "fireworks" => "FIREWORKS_API_KEY",
+        self.get_api_key_with_env(None)
+    }
+
+    /// Map well-known provider IDs to their conventional env var names.
+    /// Only covers providers that predate the models.dev registry.
+    fn builtin_env_var(provider: &str) -> &'static str {
+        match provider {
+            "fireworks" | "fireworks-ai" => "FIREWORKS_API_KEY",
             "anthropic" => "ANTHROPIC_API_KEY",
             "openai" => "OPENAI_API_KEY",
             "azure" => "AZURE_OPENAI_API_KEY",
@@ -403,23 +473,32 @@ impl AppConfig {
             "mistral" => "MISTRAL_API_KEY",
             "deepinfra" => "DEEPINFRA_API_KEY",
             "openrouter" => "OPENROUTER_API_KEY",
-            _ => "OPENAI_API_KEY",
-        };
-
-        if let Ok(key) = std::env::var(env_var)
-            && !key.is_empty()
-        {
-            return Ok(key);
+            "deepseek" => "DEEPSEEK_API_KEY",
+            "cohere" => "COHERE_API_KEY",
+            "togetherai" | "together" => "TOGETHER_API_KEY",
+            "perplexity" | "perplexity-agent" => "PERPLEXITY_API_KEY",
+            "xai" => "XAI_API_KEY",
+            "google" | "gemini" => "GOOGLE_GENERATIVE_AI_API_KEY",
+            _ => "",
         }
+    }
 
-        if let Some(ref key) = self.api_key {
-            return Ok(key.clone());
+    /// Derive a convention-based env var from the provider ID.
+    ///
+    /// Strips common suffixes like `-coding-plan`, `-cn`, `-agent`, then
+    /// uppercases and converts hyphens to underscores: `zai` → `ZAI_API_KEY`,
+    /// `siliconflow-cn` → `SILICONFLOW_API_KEY`.
+    fn convention_env_var(provider: &str) -> String {
+        // Strip common suffixes that don't affect the key name
+        let base = provider
+            .strip_suffix("-coding-plan")
+            .or_else(|| provider.strip_suffix("-cn"))
+            .or_else(|| provider.strip_suffix("-agent"))
+            .unwrap_or(provider);
+        if base.is_empty() {
+            return String::new();
         }
-
-        Err(format!(
-            "No API key found. Set {} environment variable",
-            env_var
-        ))
+        format!("{}_API_KEY", base.to_uppercase().replace('-', "_"))
     }
 }
 
@@ -491,24 +570,95 @@ mod tests {
     }
 
     #[test]
-    fn test_get_api_key_custom_provider_uses_openai_env_fallback() {
-        let env_name = "OPENAI_API_KEY";
-        let old = std::env::var(env_name).ok();
-        unsafe {
-            std::env::set_var(env_name, "env-custom-key");
-        }
-
+    fn test_get_api_key_custom_provider_prefers_config_key() {
+        // Unknown provider with config key → prefer config key (explicitly configured)
         let config = AppConfig {
             model_provider: "cloudflare".to_string(),
             api_key: Some("config-custom-key".to_string()),
             ..AppConfig::default()
         };
+        assert_eq!(config.get_api_key().unwrap(), "config-custom-key");
+    }
 
-        assert_eq!(config.get_api_key().unwrap(), "env-custom-key");
-
-        match old {
-            Some(value) => unsafe { std::env::set_var(env_name, value) },
-            None => unsafe { std::env::remove_var(env_name) },
+    #[test]
+    fn test_get_api_key_custom_provider_openai_env_fallback() {
+        // Unknown provider without config key → falls back to OPENAI_API_KEY
+        // (only run assertion if OPENAI_API_KEY is actually set to avoid flaky test)
+        let config_no_key = AppConfig {
+            model_provider: "cloudflare".to_string(),
+            api_key: None,
+            ..AppConfig::default()
+        };
+        if std::env::var("OPENAI_API_KEY").is_ok() {
+            assert!(config_no_key.get_api_key().is_ok());
+        } else {
+            assert!(config_no_key.get_api_key().is_err());
         }
+    }
+
+    #[test]
+    fn test_get_api_key_with_env_prefers_registry() {
+        // Registry env var takes priority over everything else
+        let config = AppConfig {
+            model_provider: "some-unknown-provider".to_string(),
+            api_key: Some("config-key".to_string()),
+            ..AppConfig::default()
+        };
+
+        // With a unique registry env var that IS set
+        let env_name = "OPENDEV_TEST_REGISTRY_KEY_7391";
+        unsafe { std::env::set_var(env_name, "registry-key") };
+        assert_eq!(
+            config.get_api_key_with_env(Some(env_name)).unwrap(),
+            "registry-key"
+        );
+        unsafe { std::env::remove_var(env_name) };
+
+        // With registry env var NOT set → falls back to config key
+        assert_eq!(
+            config
+                .get_api_key_with_env(Some("NONEXISTENT_VAR_XYZ"))
+                .unwrap(),
+            "config-key"
+        );
+
+        // With no registry info at all → same as get_api_key()
+        assert_eq!(config.get_api_key_with_env(None).unwrap(), "config-key");
+    }
+
+    #[test]
+    fn test_builtin_env_var_mapping() {
+        assert_eq!(AppConfig::builtin_env_var("openai"), "OPENAI_API_KEY");
+        assert_eq!(AppConfig::builtin_env_var("anthropic"), "ANTHROPIC_API_KEY");
+        assert_eq!(AppConfig::builtin_env_var("deepseek"), "DEEPSEEK_API_KEY");
+        assert_eq!(AppConfig::builtin_env_var("fireworks-ai"), "FIREWORKS_API_KEY");
+        assert_eq!(AppConfig::builtin_env_var("xai"), "XAI_API_KEY");
+        assert_eq!(AppConfig::builtin_env_var("unknown-provider"), "");
+    }
+
+    #[test]
+    fn test_convention_env_var() {
+        assert_eq!(AppConfig::convention_env_var("zai"), "ZAI_API_KEY");
+        assert_eq!(
+            AppConfig::convention_env_var("zai-coding-plan"),
+            "ZAI_API_KEY"
+        );
+        assert_eq!(
+            AppConfig::convention_env_var("siliconflow-cn"),
+            "SILICONFLOW_API_KEY"
+        );
+        assert_eq!(
+            AppConfig::convention_env_var("siliconflow"),
+            "SILICONFLOW_API_KEY"
+        );
+        assert_eq!(
+            AppConfig::convention_env_var("perplexity-agent"),
+            "PERPLEXITY_API_KEY"
+        );
+        assert_eq!(
+            AppConfig::convention_env_var("nano-gpt"),
+            "NANO_GPT_API_KEY"
+        );
+        assert_eq!(AppConfig::convention_env_var(""), "");
     }
 }

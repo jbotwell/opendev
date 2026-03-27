@@ -216,6 +216,7 @@ impl AdaptedClient {
         let mut buf = Vec::new();
 
         let mut stream_done = false;
+        let mut stream_end_reason: Option<&str> = None;
         let stream_start = std::time::Instant::now();
         // Maximum total stream duration (5 minutes). Prevents indefinite hangs
         // when the API sends heartbeat events but never completes.
@@ -228,6 +229,7 @@ impl AdaptedClient {
                     elapsed_secs = stream_start.elapsed().as_secs(),
                     "SSE stream total duration exceeded 300s, forcing termination"
                 );
+                stream_end_reason = Some("stream duration exceeded 5 minutes");
                 break;
             }
 
@@ -238,10 +240,14 @@ impl AdaptedClient {
             .await
             {
                 Ok(Some(result)) => result,
-                Ok(None) => break, // Stream ended normally
+                Ok(None) => {
+                    stream_end_reason = Some("connection closed by server");
+                    break;
+                }
                 Err(_elapsed) => {
                     warn!("SSE stream idle timeout (120s with no data)");
-                    break; // Exit loop, process accumulated data
+                    stream_end_reason = Some("idle timeout (120s with no data)");
+                    break;
                 }
             };
 
@@ -257,6 +263,7 @@ impl AdaptedClient {
                 Err(e) => {
                     warn!(error = %e, "SSE stream error");
                     callback.on_event(&StreamEvent::Error(e.to_string()));
+                    stream_end_reason = Some("network error during stream");
                     break;
                 }
             };
@@ -486,10 +493,14 @@ impl AdaptedClient {
                 debug!("Streaming complete, built response from accumulated deltas");
                 Ok(HttpResult::ok(200, response))
             }
-            None => Ok(HttpResult::fail(
-                "No complete response received from stream",
-                false,
-            )),
+            None => {
+                let reason = stream_end_reason.unwrap_or("unknown");
+                warn!(reason = %reason, "Stream ended with no content");
+                Ok(HttpResult::fail(
+                    format!("No response received from stream ({reason})"),
+                    true,
+                ))
+            }
         }
     }
 
