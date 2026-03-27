@@ -145,6 +145,25 @@ impl<'a> IterationEmitter<'a> {
     }
 }
 
+/// Build the display string for a tool result sent to the TUI.
+///
+/// On success: return the output text.
+/// On failure: return the error message followed by the output (stdout/stderr)
+/// so the user can see *why* the command failed, not just the exit code.
+fn tool_result_display_output(result: &ToolResult) -> String {
+    if result.success {
+        return result.output.as_deref().unwrap_or("").to_string();
+    }
+    let error = result
+        .error
+        .as_deref()
+        .unwrap_or("Tool execution failed");
+    match result.output.as_deref() {
+        Some(output) if !output.is_empty() => format!("{error}\n{output}"),
+        _ => error.to_string(),
+    }
+}
+
 impl ReactLoop {
     #[allow(clippy::too_many_arguments)]
     pub async fn run<M>(
@@ -803,18 +822,12 @@ impl ReactLoop {
                         for (tc_id, t_name, tool_result) in results {
                             parallel_tool_names.push(t_name.clone());
                             {
-                                let output_str = if tool_result.success {
-                                    tool_result.output.as_deref().unwrap_or("")
-                                } else {
-                                    tool_result
-                                        .error
-                                        .as_deref()
-                                        .unwrap_or("Tool execution failed")
-                                };
+                                let output_str =
+                                    tool_result_display_output(&tool_result);
                                 emitter.emit_tool_result(
                                     &tc_id,
                                     &t_name,
-                                    output_str,
+                                    &output_str,
                                     tool_result.success,
                                 );
                                 emitter.emit_tool_finished(&tc_id, tool_result.success);
@@ -1248,18 +1261,12 @@ impl ReactLoop {
                         // Skip emitting the tool result to the TUI when interrupted —
                         // the AgentInterrupted event already shows the message.
                         if !was_interrupted {
-                            let output_str = if tool_result.success {
-                                tool_result.output.as_deref().unwrap_or("")
-                            } else {
-                                tool_result
-                                    .error
-                                    .as_deref()
-                                    .unwrap_or("Tool execution failed")
-                            };
+                            let output_str =
+                                tool_result_display_output(&tool_result);
                             emitter.emit_tool_result(
                                 tool_call_id_str,
                                 tool_name,
-                                output_str,
+                                &output_str,
                                 tool_result.success,
                             );
                         } else if task_monitor.is_some_and(|m| m.is_background_requested()) {

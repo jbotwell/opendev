@@ -476,7 +476,14 @@ impl<'a> ConversationWidget<'a> {
         } else if effective_collapsed && !tc.result_lines.is_empty() {
             let count = tc.result_lines.len();
             let verb = crate::formatters::tool_registry::lookup_tool(&tc.name).verb;
-            let label = format!("  {}  {verb} {count} lines", CONTINUATION_CHAR);
+            let label = if !tc.success {
+                format!(
+                    "  {}  {verb} {count} lines (Ctrl+O to expand)",
+                    CONTINUATION_CHAR
+                )
+            } else {
+                format!("  {}  {verb} {count} lines", CONTINUATION_CHAR)
+            };
             lines.push(Line::from(Span::styled(
                 label,
                 Style::default().fg(style_tokens::SUBTLE),
