@@ -627,6 +627,12 @@ impl ReactLoop {
                         && let Some(task) = self.config.original_task.as_deref()
                     {
                         completion_nudge_sent = true;
+                        info!(
+                            iteration,
+                            content_len = content.len(),
+                            content_preview = &content[..content.len().min(80)],
+                            "Completion nudge firing — pre-nudge content"
+                        );
                         let nudge =
                             get_reminder("implicit_completion_nudge", &[("original_task", task)]);
                         append_nudge(messages, &nudge);
@@ -645,6 +651,23 @@ impl ReactLoop {
 
                     iter_metrics.total_duration_ms = iter_start.elapsed().as_millis() as u64;
                     self.push_metrics(iter_metrics);
+
+                    // If content was suppressed during nudge verification,
+                    // emit it now so the TUI displays the final response.
+                    if completion_nudge_sent {
+                        info!(
+                            iteration,
+                            content_len = content.len(),
+                            content_preview = &content[..content.len().min(120)],
+                            "Post-nudge acceptance — emitting suppressed content"
+                        );
+                        if !content.is_empty() {
+                            if let Some(cb) = event_callback {
+                                cb.on_agent_chunk(&content);
+                            }
+                        }
+                    }
+
                     // Play completion sound (respects 30s cooldown)
                     play_finish_sound();
                     let mut result = AgentResult::ok(content, messages.clone());
