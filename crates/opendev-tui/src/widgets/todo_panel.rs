@@ -19,6 +19,21 @@ use ratatui::{
 /// Spinner frames for the active-todo display (rotating arrow cycle).
 const SPINNER_FRAMES: &[char] = &['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
 
+/// Compute the todo panel height from item count and expanded state.
+///
+/// Shared helper so callers don't duplicate the formula.
+/// Returns 0 when `item_count` is 0 (no panel).
+pub fn todo_panel_height(item_count: usize, expanded: bool) -> u16 {
+    if item_count == 0 {
+        return 0;
+    }
+    if !expanded {
+        return 3;
+    }
+    // 2 borders + items (capped at 12 total rows)
+    (item_count as u16 + 2).min(12)
+}
+
 /// Status of a single todo item for display purposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TodoDisplayStatus {
@@ -137,7 +152,15 @@ impl<'a> TodoPanelWidget<'a> {
                 ),
             };
 
-            let display_title = item.title.clone();
+            let display_title = if item.title.trim().is_empty() {
+                item.active_form
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or("(untitled)")
+                    .to_string()
+            } else {
+                item.title.clone()
+            };
 
             lines.push(Line::from(vec![
                 Span::styled(symbol, style),
@@ -488,6 +511,61 @@ mod tests {
         assert!(
             top_row.contains("Ctrl+T to toggle"),
             "Expected hint in title, got: {top_row}"
+        );
+    }
+
+    #[test]
+    fn test_todo_panel_height_helper() {
+        assert_eq!(todo_panel_height(0, true), 0);
+        assert_eq!(todo_panel_height(0, false), 0);
+        assert_eq!(todo_panel_height(3, true), 5); // 3 + 2 borders
+        assert_eq!(todo_panel_height(3, false), 3); // collapsed
+        assert_eq!(todo_panel_height(10, true), 12); // 10 + 2 = 12 (at cap)
+        assert_eq!(todo_panel_height(15, true), 12); // capped at 12
+    }
+
+    #[test]
+    fn test_empty_title_shows_fallback() {
+        let items = vec![TodoDisplayItem {
+            id: 1,
+            title: "".into(),
+            status: TodoDisplayStatus::InProgress,
+            active_form: Some("Working on it".into()),
+        }];
+        let widget = TodoPanelWidget::new(&items);
+        let (done, in_progress, total) = widget.counts();
+        let lines = widget.build_lines(done, in_progress, total);
+        assert_eq!(lines.len(), 1);
+        let text: String = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
+        assert!(
+            text.contains("Working on it"),
+            "Empty title should fall back to active_form, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_empty_title_no_active_form_shows_untitled() {
+        let items = vec![TodoDisplayItem {
+            id: 1,
+            title: "  ".into(),
+            status: TodoDisplayStatus::Pending,
+            active_form: None,
+        }];
+        let widget = TodoPanelWidget::new(&items);
+        let (done, in_progress, total) = widget.counts();
+        let lines = widget.build_lines(done, in_progress, total);
+        let text: String = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
+        assert!(
+            text.contains("(untitled)"),
+            "Empty title with no active_form should show (untitled), got: {text}"
         );
     }
 }

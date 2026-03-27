@@ -48,16 +48,8 @@ fn display_message_hash(msg: &DisplayMessage) -> u64 {
 
 impl App {
     fn conversation_viewport_height(&self) -> usize {
-        let has_todos = !self.state.todo_items.is_empty();
-        let todo_height: u16 = if has_todos {
-            if self.state.todo_expanded {
-                (self.state.todo_items.len() as u16 + 3).min(12)
-            } else {
-                3
-            }
-        } else {
-            0
-        };
+        let todo_height =
+            crate::widgets::todo_panel_height(self.state.todo_items.len(), self.state.todo_expanded);
         let input_lines = self.state.input_buffer.matches('\n').count() + 1;
         let input_height = (input_lines as u16 + 1).min(8);
         let conv_height = self

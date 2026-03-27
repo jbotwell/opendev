@@ -41,17 +41,8 @@ impl App {
 
         // Layout: conversation (flexible) | todo panel (if active) | input | status bar
         let has_todos = !self.state.todo_items.is_empty();
-        let todo_height: u16 = if has_todos {
-            if self.state.todo_expanded {
-                // 2 borders + 1 progress bar + items (capped at 12)
-                (self.state.todo_items.len() as u16 + 3).min(12)
-            } else {
-                // Collapsed: border top + 1 line + border bottom
-                3
-            }
-        } else {
-            0
-        };
+        let todo_height =
+            crate::widgets::todo_panel_height(self.state.todo_items.len(), self.state.todo_expanded);
 
         let chunks = layout::Layout::default()
             .direction(layout::Direction::Vertical)
@@ -308,16 +299,8 @@ impl App {
     /// Called after render so mouse position mapping uses fresh data.
     pub(super) fn update_selection_geometry(&mut self) {
         // Recompute the conversation content area dimensions
-        let has_todos = !self.state.todo_items.is_empty();
-        let todo_height: u16 = if has_todos {
-            if self.state.todo_expanded {
-                (self.state.todo_items.len() as u16 + 3).min(12)
-            } else {
-                3
-            }
-        } else {
-            0
-        };
+        let todo_height =
+            crate::widgets::todo_panel_height(self.state.todo_items.len(), self.state.todo_expanded);
         let input_lines = self.state.input_buffer.matches('\n').count() + 1;
         let input_height = (input_lines as u16 + 1).min(8);
 
