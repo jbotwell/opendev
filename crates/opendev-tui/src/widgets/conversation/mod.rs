@@ -472,7 +472,7 @@ impl<'a> ConversationWidget<'a> {
                     lines.push(Line::from(vec![
                         Span::styled(prefix_char, Style::default().fg(style_tokens::SUBTLE)),
                         Span::styled(
-                            result_line.clone(),
+                            strip_ansi(result_line),
                             Style::default().fg(style_tokens::SUBTLE),
                         ),
                     ]));
