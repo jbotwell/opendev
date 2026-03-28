@@ -485,10 +485,7 @@ mod tests {
 
     #[test]
     fn test_validate_max_length_rejected() {
-        let schema = make_schema(
-            json!({"name": {"type": "string", "maxLength": 5}}),
-            vec![],
-        );
+        let schema = make_schema(json!({"name": {"type": "string", "maxLength": 5}}), vec![]);
         let mut args = HashMap::new();
         args.insert("name".into(), json!("toolong"));
         assert!(validate_args(&args, &schema).is_err());
@@ -498,10 +495,7 @@ mod tests {
 
     #[test]
     fn test_validate_max_items_ok() {
-        let schema = make_schema(
-            json!({"items": {"type": "array", "maxItems": 3}}),
-            vec![],
-        );
+        let schema = make_schema(json!({"items": {"type": "array", "maxItems": 3}}), vec![]);
         let mut args = HashMap::new();
         args.insert("items".into(), json!(["a", "b"]));
         assert!(validate_args(&args, &schema).is_ok());
@@ -509,10 +503,7 @@ mod tests {
 
     #[test]
     fn test_validate_max_items_exceeded() {
-        let schema = make_schema(
-            json!({"items": {"type": "array", "maxItems": 2}}),
-            vec![],
-        );
+        let schema = make_schema(json!({"items": {"type": "array", "maxItems": 2}}), vec![]);
         let mut args = HashMap::new();
         args.insert("items".into(), json!(["a", "b", "c"]));
         let result = validate_args(&args, &schema);
@@ -522,10 +513,7 @@ mod tests {
 
     #[test]
     fn test_validate_min_items_rejected() {
-        let schema = make_schema(
-            json!({"items": {"type": "array", "minItems": 1}}),
-            vec![],
-        );
+        let schema = make_schema(json!({"items": {"type": "array", "minItems": 1}}), vec![]);
         let mut args = HashMap::new();
         args.insert("items".into(), json!([]));
         let result = validate_args(&args, &schema);
@@ -571,7 +559,10 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("tags[1]"), "Expected tags[1] in: {err}");
-        assert!(err.contains("below minimum"), "Expected 'below minimum' in: {err}");
+        assert!(
+            err.contains("below minimum"),
+            "Expected 'below minimum' in: {err}"
+        );
     }
 
     // --- oneOf tests ---
@@ -653,10 +644,7 @@ mod tests {
             vec![],
         );
         let mut args = HashMap::new();
-        args.insert(
-            "todos".into(),
-            json!([{"status": "in_progress"}]),
-        );
+        args.insert("todos".into(), json!([{"status": "in_progress"}]));
         let result = validate_args(&args, &schema);
         assert!(
             result.is_err(),

@@ -631,7 +631,10 @@ mod tests {
         assert_eq!(AppConfig::builtin_env_var("openai"), "OPENAI_API_KEY");
         assert_eq!(AppConfig::builtin_env_var("anthropic"), "ANTHROPIC_API_KEY");
         assert_eq!(AppConfig::builtin_env_var("deepseek"), "DEEPSEEK_API_KEY");
-        assert_eq!(AppConfig::builtin_env_var("fireworks-ai"), "FIREWORKS_API_KEY");
+        assert_eq!(
+            AppConfig::builtin_env_var("fireworks-ai"),
+            "FIREWORKS_API_KEY"
+        );
         assert_eq!(AppConfig::builtin_env_var("xai"), "XAI_API_KEY");
         assert_eq!(AppConfig::builtin_env_var("unknown-provider"), "");
     }

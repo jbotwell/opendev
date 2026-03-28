@@ -755,7 +755,10 @@ fn format_parts_inner(
             format!("\"{pattern}\"")
         };
         if let Some(lang) = args.get("lang").and_then(|v| v.as_str()) {
-            return ("AST-Grep".to_string(), format!("{pattern_display} [{lang}]"));
+            return (
+                "AST-Grep".to_string(),
+                format!("{pattern_display} [{lang}]"),
+            );
         }
         return ("AST-Grep".to_string(), pattern_display);
     }

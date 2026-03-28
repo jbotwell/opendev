@@ -330,9 +330,7 @@ impl ToolResultSanitizer {
                 .rev()
                 .collect();
             let omitted = content.len() - head_size - tail_size;
-            format!(
-                "{head}\n\n[... {omitted} bytes omitted from overflow file ...]\n\n{tail}"
-            )
+            format!("{head}\n\n[... {omitted} bytes omitted from overflow file ...]\n\n{tail}")
         } else {
             content.to_string()
         };

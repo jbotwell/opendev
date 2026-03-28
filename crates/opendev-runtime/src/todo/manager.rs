@@ -340,9 +340,7 @@ impl TodoManager {
     /// Whether any todo has been started (moved beyond Pending).
     /// Returns true if at least one todo is InProgress or Completed.
     pub fn has_work_in_progress(&self) -> bool {
-        self.todos
-            .values()
-            .any(|t| t.status != TodoStatus::Pending)
+        self.todos.values().any(|t| t.status != TodoStatus::Pending)
     }
 
     /// Format the todo list sorted by status: doing -> todo -> done.
@@ -495,7 +493,12 @@ mod tests {
     fn test_write_todos() {
         let mut mgr = TodoManager::from_steps(&["Old".into()]);
         mgr.write_todos(vec![
-            ("New A".into(), TodoStatus::Pending, String::new(), Vec::new()),
+            (
+                "New A".into(),
+                TodoStatus::Pending,
+                String::new(),
+                Vec::new(),
+            ),
             (
                 "New B".into(),
                 TodoStatus::InProgress,
@@ -517,17 +520,21 @@ mod tests {
                 TodoStatus::Pending,
                 "Implementing auth".into(),
                 vec![
-                    SubTodoItem { title: "Add login endpoint".into() },
-                    SubTodoItem { title: "Add token validation".into() },
+                    SubTodoItem {
+                        title: "Add login endpoint".into(),
+                    },
+                    SubTodoItem {
+                        title: "Add token validation".into(),
+                    },
                 ],
             ),
             (
                 "Write tests".into(),
                 TodoStatus::Pending,
                 "Writing tests".into(),
-                vec![
-                    SubTodoItem { title: "Unit tests".into() },
-                ],
+                vec![SubTodoItem {
+                    title: "Unit tests".into(),
+                }],
             ),
         ]);
         // total() counts only parents
@@ -546,7 +553,12 @@ mod tests {
     #[test]
     fn test_get_active_todo_message() {
         let mut mgr = TodoManager::new();
-        mgr.add_with_status("Task".into(), TodoStatus::InProgress, "Doing task".into(), Vec::new());
+        mgr.add_with_status(
+            "Task".into(),
+            TodoStatus::InProgress,
+            "Doing task".into(),
+            Vec::new(),
+        );
         assert_eq!(
             mgr.get_active_todo_message(),
             Some("Doing task".to_string())
@@ -682,8 +694,18 @@ mod tests {
 
         // Write entirely new todos
         mgr.write_todos(vec![
-            ("New X".into(), TodoStatus::Pending, String::new(), Vec::new()),
-            ("New Y".into(), TodoStatus::InProgress, "Working on Y".into(), Vec::new()),
+            (
+                "New X".into(),
+                TodoStatus::Pending,
+                String::new(),
+                Vec::new(),
+            ),
+            (
+                "New Y".into(),
+                TodoStatus::InProgress,
+                "Working on Y".into(),
+                Vec::new(),
+            ),
         ]);
 
         assert_eq!(mgr.total(), 2);

@@ -333,7 +333,9 @@ mod tests {
         );
         assert!(content.len() >= 500, "test content must be >= 500 chars");
         let content = &content;
-        let messages = vec![serde_json::json!({"role": "tool", "name": "spawn_subagent", "content": "raw output"})];
+        let messages = vec![
+            serde_json::json!({"role": "tool", "name": "spawn_subagent", "content": "raw output"}),
+        ];
         let result = build_background_result(content, &messages, 12000);
         // Content is > 500 chars, so subagent outputs should NOT be appended
         assert!(!result.contains("## Subagent Outputs"));
@@ -367,9 +369,8 @@ mod tests {
     #[test]
     fn test_background_result_no_subagent_tools() {
         let content = "Ok.";
-        let messages = vec![
-            serde_json::json!({"role": "tool", "name": "read_file", "content": "data"}),
-        ];
+        let messages =
+            vec![serde_json::json!({"role": "tool", "name": "read_file", "content": "data"})];
         let result = build_background_result(content, &messages, 12000);
         // Thin content but no spawn_subagent results → no appendix
         assert_eq!(result, "Ok.");

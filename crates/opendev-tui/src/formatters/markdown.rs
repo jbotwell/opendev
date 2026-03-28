@@ -426,9 +426,7 @@ fn parse_inline_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<
                     }
                 }
                 let code: Cow<'static, str> = Cow::Owned(text[code_start..code_end].to_string());
-                let mut style = Style::default()
-                    .fg(palette.code_fg)
-                    .add_modifier(base_mod);
+                let mut style = Style::default().fg(palette.code_fg).add_modifier(base_mod);
                 if in_bold {
                     style = style.add_modifier(Modifier::BOLD);
                 }

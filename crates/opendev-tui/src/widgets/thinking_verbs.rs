@@ -181,7 +181,11 @@ mod tests {
     #[test]
     fn test_all_verbs_ascii() {
         for verb in THINKING_VERBS {
-            assert!(verb.is_ascii(), "Verb '{}' contains non-ASCII characters", verb);
+            assert!(
+                verb.is_ascii(),
+                "Verb '{}' contains non-ASCII characters",
+                verb
+            );
         }
     }
 
