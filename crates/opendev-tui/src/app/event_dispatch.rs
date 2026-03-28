@@ -3,15 +3,41 @@
 use crate::event::AppEvent;
 use crate::widgets::{TodoDisplayItem, TodoDisplayStatus};
 
-use super::{
-    App, AutonomyLevel, DisplayMessage, DisplayRole, DisplayToolCall, OperationMode, ToolExecution,
-    ToolState,
-};
+use super::{App, DisplayRole};
+
+/// Map TodoManager items to TUI display items.
+pub(super) fn map_todo_items(mgr: &opendev_runtime::TodoManager) -> Vec<TodoDisplayItem> {
+    mgr.all()
+        .iter()
+        .map(|item| TodoDisplayItem {
+            id: item.id,
+            title: item.title.clone(),
+            status: match item.status {
+                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
+                opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
+                opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
+            },
+            active_form: if item.active_form.is_empty() {
+                None
+            } else {
+                Some(item.active_form.clone())
+            },
+        })
+        .collect()
+}
 
 impl App {
+    /// Synchronize TUI todo display items from the shared TodoManager.
+    pub(super) fn sync_todo_display(&mut self) {
+        if let Some(ref mgr) = self.state.todo_manager
+            && let Ok(mgr) = mgr.lock()
+        {
+            self.state.todo_items = map_todo_items(&mgr);
+        }
+    }
     /// Finalize the most recent unfinalized thinking block by freezing its duration.
     /// Called when a non-reasoning event arrives (AgentChunk, ToolStarted, etc.).
-    fn finalize_active_thinking(&mut self) {
+    pub(super) fn finalize_active_thinking(&mut self) {
         if let Some(msg) = self
             .state
             .messages
@@ -176,611 +202,84 @@ impl App {
             AppEvent::BudgetExhausted {
                 cost_usd,
                 budget_usd,
-            } => {
-                self.state.agent_active = false;
-                self.state.messages.push(DisplayMessage::new(
-                    DisplayRole::System,
-                    format!(
-                        "Session cost budget exhausted: ${:.4} spent of ${:.2} budget. \
-                         Agent paused. Use /budget to adjust.",
-                        cost_usd, budget_usd
-                    ),
-                ));
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
+            } => self.handle_budget_exhausted(cost_usd, budget_usd),
 
             // File change summary events
             AppEvent::FileChangeSummary {
                 files,
                 additions,
                 deletions,
-            } => {
-                if files > 0 {
-                    self.state.file_changes = Some((files, additions, deletions));
-                }
-                self.state.dirty = true;
-            }
+            } => self.handle_file_change_summary(files, additions, deletions),
 
             // Context usage events
-            AppEvent::ContextUsage(pct) => {
-                self.state.context_usage_pct = pct;
-                self.state.dirty = true;
-            }
+            AppEvent::ContextUsage(pct) => self.handle_context_usage(pct),
 
             // Agent events
-            AppEvent::AgentStarted => {
-                self.state.agent_active = true;
-                self.state.backgrounded_task_info = None;
-                // Clear finished (non-backgrounded) subagents from previous query
-                self.state
-                    .active_subagents
-                    .retain(|s| !s.finished || s.backgrounded);
-                // Auto-resume next pending todo when agent restarts after interrupt
-                // (reset_stuck_todos reverted InProgress→Pending; restore it now)
-                if let Some(ref mgr) = self.state.todo_manager
-                    && let Ok(mut mgr) = mgr.lock()
-                    && mgr.has_todos()
-                    && !mgr.all_completed()
-                    && mgr.in_progress_count() == 0
-                {
-                    if let Some(next) = mgr.next_pending() {
-                        let id = next.id;
-                        mgr.start(id);
-                    }
-                    self.state.todo_items = mgr
-                        .all()
-                        .iter()
-                        .map(|item| TodoDisplayItem {
-                            id: item.id,
-                            title: item.title.clone(),
-                            status: match item.status {
-                                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
-                                opendev_runtime::TodoStatus::InProgress => {
-                                    TodoDisplayStatus::InProgress
-                                }
-                                opendev_runtime::TodoStatus::Completed => {
-                                    TodoDisplayStatus::Completed
-                                }
-                            },
-                            active_form: if item.active_form.is_empty() {
-                                None
-                            } else {
-                                Some(item.active_form.clone())
-                            },
-                        })
-                        .collect();
-                }
-                self.state.dirty = true;
-            }
-            AppEvent::AgentChunk(text) => {
-                self.finalize_active_thinking();
-                self.message_controller
-                    .handle_agent_chunk(&mut self.state, &text);
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::AgentMessage(msg) => {
-                self.finalize_active_thinking();
-                self.message_controller
-                    .handle_agent_message(&mut self.state, msg);
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::AgentFinished => {
-                self.finalize_active_thinking();
-                self.state.agent_active = false;
-                self.state.backgrounding_pending = false;
-                self.state.dirty = true;
-                self.drain_next_pending();
-            }
-            AppEvent::AgentError(err) => {
-                self.finalize_active_thinking();
-                self.state.agent_active = false;
-                self.state.backgrounding_pending = false;
-                self.state.messages.push(DisplayMessage::new(
-                    DisplayRole::System,
-                    format!("Error: {err}"),
-                ));
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-                // Continue processing queued items despite the error
-                self.drain_next_pending();
-            }
+            AppEvent::AgentStarted => self.handle_agent_started(),
+            AppEvent::AgentChunk(text) => self.handle_agent_chunk(text),
+            AppEvent::AgentMessage(msg) => self.handle_agent_message(msg),
+            AppEvent::AgentFinished => self.handle_agent_finished(),
+            AppEvent::AgentError(err) => self.handle_agent_error(err),
 
             // Reasoning events
-            AppEvent::ReasoningBlockStart => {
-                // Insert separator between multiple thinking blocks
-                if let Some(last) = self.state.messages.last_mut()
-                    && last.role == DisplayRole::Reasoning
-                    && !last.content.is_empty()
-                {
-                    last.content.push_str("\n\n");
-                    self.state.dirty = true;
-                    self.state.message_generation += 1;
-                }
-            }
-            AppEvent::ReasoningContent(content) => {
-                // Append to previous reasoning message in this turn (streaming sends deltas)
-                if let Some(last) = self.state.messages.last_mut()
-                    && last.role == DisplayRole::Reasoning
-                {
-                    last.content.push_str(&content);
-                } else {
-                    self.state.messages.push(DisplayMessage {
-                        role: DisplayRole::Reasoning,
-                        content,
-                        tool_call: None,
-                        collapsed: !self.state.thinking_expanded,
-                        thinking_started_at: Some(std::time::Instant::now()),
-                        thinking_duration_secs: None,
-                    });
-                }
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
+            AppEvent::ReasoningBlockStart => self.handle_reasoning_block_start(),
+            AppEvent::ReasoningContent(content) => self.handle_reasoning_content(content),
 
             // Tool events
             AppEvent::ToolStarted {
                 tool_id,
                 tool_name,
                 args,
-            } => {
-                self.finalize_active_thinking();
-                // For spawn_subagent, eagerly create SubagentDisplayState now.
-                // This avoids the race where SubagentStarted (forwarded by the bridge task)
-                // arrives after ToolResult (sent directly), causing stats to be lost.
-                if tool_name == "spawn_subagent" {
-                    // If all existing subagents are finished, this is a new batch — clear stale entries
-                    let all_finished = !self.state.active_subagents.is_empty()
-                        && self.state.active_subagents.iter().all(|s| s.finished);
-                    if all_finished {
-                        self.state.active_subagents.retain(|s| s.backgrounded);
-                    }
-
-                    let agent_name = args
-                        .get("agent_type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Agent")
-                        .to_string();
-                    let task = args
-                        .get("task")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
-                        String::new(), // subagent_id filled in by SubagentStarted later
-                        agent_name,
-                        task,
-                    );
-                    sa.parent_tool_id = Some(tool_id.clone());
-                    sa.description = args
-                        .get("description")
-                        .and_then(|v| v.as_str())
-                        .map(String::from);
-                    self.state.active_subagents.push(sa);
-                }
-
-                self.state.active_tools.push(ToolExecution {
-                    id: tool_id,
-                    name: tool_name,
-                    output_lines: Vec::new(),
-                    state: ToolState::Running,
-                    elapsed_secs: 0,
-                    started_at: std::time::Instant::now(),
-                    tick_count: 0,
-                    parent_id: None,
-                    depth: 0,
-                    args,
-                });
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::ToolOutput { tool_id, output } => {
-                if let Some(tool) = self.state.active_tools.iter_mut().find(|t| t.id == tool_id) {
-                    tool.output_lines.push(output);
-                }
-                self.state.dirty = true;
-            }
+            } => self.handle_tool_started(tool_id, tool_name, args),
+            AppEvent::ToolOutput { tool_id, output } => self.handle_tool_output(tool_id, output),
             AppEvent::ToolResult {
                 tool_id,
                 tool_name,
                 output,
                 success,
                 args: result_args,
-            } => {
-                // Look up stored args from the ToolStarted event, fall back to result args
-                let arguments = self
-                    .state
-                    .active_tools
-                    .iter()
-                    .find(|t| t.id == tool_id)
-                    .map(|t| t.args.clone())
-                    .unwrap_or(result_args);
-
-                // Check if this is a todo tool for special handling
-                let is_todo_tool = matches!(
-                    tool_name.as_str(),
-                    "write_todos" | "update_todo" | "complete_todo" | "list_todos" | "clear_todos"
-                );
-
-                let (display_lines, collapsed) = if tool_name == "ask_user" {
-                    // Format as "· question → answer"
-                    let question = arguments
-                        .get("question")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("question");
-                    let answer = output.strip_prefix("User answered: ").unwrap_or(&output);
-                    (vec![format!("· {question} → {answer}")], false)
-                } else if is_todo_tool {
-                    let summary = crate::formatters::todo_formatter::summarize_todo_result(
-                        &tool_name, &output,
-                    );
-                    (vec![summary], false)
-                } else if tool_name == "present_plan" {
-                    // Plan content is already displayed via PlanApprovalRequested → DisplayRole::Plan.
-                    // Show brief approval confirmation instead of full plan content.
-                    let step_count = output
-                        .split_once(" steps)")
-                        .and_then(|(before, _)| before.rsplit(", ").next())
-                        .and_then(|s| s.parse::<usize>().ok())
-                        .unwrap_or(0);
-                    if step_count > 0 {
-                        (
-                            vec![format!("Plan approved · {step_count} todos created")],
-                            false,
-                        )
-                    } else {
-                        (vec!["Plan approved".to_string()], false)
-                    }
-                } else {
-                    use crate::widgets::conversation::is_diff_tool;
-                    let result_lines: Vec<String> =
-                        output.lines().take(50).map(|l| l.to_string()).collect();
-                    let lines = if result_lines.is_empty() && !output.is_empty() {
-                        vec![output.clone()]
-                    } else {
-                        result_lines
-                    };
-                    use crate::formatters::tool_registry::{ToolCategory, categorize_tool};
-                    let is_file_read = categorize_tool(&tool_name) == ToolCategory::FileRead;
-                    let collapse = is_file_read || (lines.len() > 5 && !is_diff_tool(&tool_name));
-                    (lines, collapse)
-                };
-
-                // For spawn_subagent, extract stats from tracked subagent state
-                // Each subagent is treated independently — no grouping
-                // Skip if the subagent was backgrounded — "Sent to background" message
-                // was already created by AgentBackgrounded handler.
-                if tool_name == "spawn_subagent"
-                    && self
-                        .state
-                        .active_subagents
-                        .iter()
-                        .any(|s| s.backgrounded && s.parent_tool_id.as_deref() == Some(&tool_id))
-                {
-                    // Remove the backgrounded subagent from tracking
-                    self.state.active_tools.retain(|t| t.id != tool_id);
-                    self.state.dirty = true;
-                    return;
-                }
-                if tool_name == "spawn_subagent" {
-                    // Remove matching subagent from active list, creating a persistent summary
-                    let subagent_idx = self
-                        .state
-                        .active_subagents
-                        .iter()
-                        .position(|s| s.parent_tool_id.as_deref() == Some(&tool_id))
-                        .or_else(|| {
-                            let task_text =
-                                arguments.get("task").and_then(|v| v.as_str()).unwrap_or("");
-                            self.state
-                                .active_subagents
-                                .iter()
-                                .position(|s| s.task == task_text)
-                        });
-                    if let Some(idx) = subagent_idx {
-                        let removed = self.state.active_subagents.remove(idx);
-                        self.state.bg_subagent_map.remove(&removed.subagent_id);
-
-                        // Create persistent completion summary in conversation
-                        let summary_line = removed.completion_summary();
-                        self.state.messages.push(DisplayMessage {
-                            role: DisplayRole::Assistant,
-                            content: String::new(),
-                            tool_call: Some(DisplayToolCall {
-                                name: tool_name.clone(),
-                                arguments,
-                                summary: None,
-                                success,
-                                collapsed: false,
-                                result_lines: vec![summary_line],
-                                nested_calls: Vec::new(),
-                            }),
-                            collapsed: false,
-                            thinking_started_at: None,
-                            thinking_duration_secs: None,
-                        });
-                    }
-                } else if !display_lines.is_empty() {
-                    self.state.messages.push(DisplayMessage {
-                        role: DisplayRole::Assistant,
-                        content: String::new(),
-                        tool_call: Some(DisplayToolCall {
-                            name: tool_name.clone(),
-                            arguments,
-                            summary: None,
-                            success,
-                            collapsed,
-                            result_lines: display_lines,
-                            nested_calls: Vec::new(),
-                        }),
-                        collapsed: false,
-                        thinking_started_at: None,
-                        thinking_duration_secs: None,
-                    });
-                }
-
-                // Refresh todo panel from shared manager after any todo tool or present_plan
-                if (is_todo_tool || tool_name == "present_plan")
-                    && let Some(ref mgr) = self.state.todo_manager
-                    && let Ok(mgr) = mgr.lock()
-                {
-                    self.state.todo_items = mgr
-                        .all()
-                        .iter()
-                        .map(|item| TodoDisplayItem {
-                            id: item.id,
-                            title: item.title.clone(),
-                            status: match item.status {
-                                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
-                                opendev_runtime::TodoStatus::InProgress => {
-                                    TodoDisplayStatus::InProgress
-                                }
-                                opendev_runtime::TodoStatus::Completed => {
-                                    TodoDisplayStatus::Completed
-                                }
-                            },
-                            active_form: if item.active_form.is_empty() {
-                                None
-                            } else {
-                                Some(item.active_form.clone())
-                            },
-                        })
-                        .collect();
-                    if (tool_name == "write_todos" || tool_name == "present_plan")
-                        && !self.state.todo_items.is_empty()
-                    {
-                        self.state.todo_expanded = true;
-                    }
-                    if tool_name == "clear_todos" {
-                        self.state.todo_items.clear();
-                    }
-                }
-
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
+            } => self.handle_tool_result(tool_id, tool_name, output, success, result_args),
             AppEvent::ToolFinished { tool_id, success } => {
-                if let Some(tool) = self.state.active_tools.iter_mut().find(|t| t.id == tool_id) {
-                    tool.state = if success {
-                        ToolState::Completed
-                    } else {
-                        ToolState::Error
-                    };
-                }
-                // Remove finished tools after a brief display period
-                self.state.active_tools.retain(|t| !t.is_finished());
-                self.state.dirty = true;
-                self.state.message_generation += 1;
+                self.handle_tool_finished(tool_id, success)
             }
             AppEvent::ToolApprovalRequired {
                 tool_id: _,
                 tool_name: _,
                 description,
-            } => {
-                // Legacy event without channel — activate controller without response_tx
-                let wd = self.state.working_dir.clone();
-                let _rx = self.approval_controller.start(description, wd);
-                self.state.dirty = true;
-            }
+            } => self.handle_tool_approval_required(description),
             AppEvent::ToolApprovalRequested {
                 command,
                 working_dir,
                 response_tx,
-            } => {
-                // Check autonomy level to decide whether to auto-approve.
-                let auto_approve = match self.state.autonomy {
-                    AutonomyLevel::Auto => true,
-                    AutonomyLevel::SemiAuto => opendev_runtime::is_safe_command(&command),
-                    AutonomyLevel::Manual => false,
-                };
-
-                if auto_approve {
-                    let _ = response_tx.send(opendev_runtime::ToolApprovalDecision {
-                        approved: true,
-                        choice: "yes".to_string(),
-                        command,
-                    });
-                } else {
-                    let _rx = self.approval_controller.start(command, working_dir);
-                    self.approval_response_tx = Some(response_tx);
-                }
-                self.state.dirty = true;
-            }
+            } => self.handle_tool_approval_requested(command, working_dir, response_tx),
             AppEvent::AskUserRequested {
                 question,
                 options,
                 default,
                 response_tx,
-            } => {
-                self.ask_user_controller.start(question, options, default);
-                self.ask_user_response_tx = Some(response_tx);
-                self.state.dirty = true;
-            }
+            } => self.handle_ask_user_requested(question, options, default, response_tx),
 
-            // Subagent events — use subagent_id for lookup to support parallel subagents
+            // Subagent events
             AppEvent::SubagentStarted {
                 subagent_id,
                 subagent_name,
                 task,
                 cancel_token,
-            } => {
-                // SubagentDisplayState was eagerly created at ToolStarted time (same channel,
-                // guaranteed ordering). Now we just fill in the subagent_id so subsequent
-                // SubagentToolCall/Finished events (which use subagent_id) can find it.
-                // Match by parent_tool_id first (reliable), then fall back to task text
-                let found = self.state.active_subagents.iter_mut().find(|s| {
-                    s.subagent_id.is_empty()
-                        && (s.parent_tool_id.as_ref().is_some_and(|ptid| {
-                            self.state.active_tools.iter().any(|t| {
-                                t.id == *ptid
-                                    && t.name == "spawn_subagent"
-                                    && t.args.get("task").and_then(|v| v.as_str()) == Some(&task)
-                            })
-                        }) || s.task == task)
-                });
-                if let Some(sa) = found {
-                    sa.subagent_id = subagent_id.clone();
-                    sa.name = subagent_name;
-                    if let Some(token) = cancel_token {
-                        self.state.subagent_cancel_tokens.insert(subagent_id, token);
-                    }
-                } else {
-                    // Fallback: create if not found (e.g. ToolStarted was missed)
-                    let parent_tool_id = self
-                        .state
-                        .active_tools
-                        .iter()
-                        .find(|t| {
-                            t.name == "spawn_subagent"
-                                && t.args.get("task").and_then(|v| v.as_str()) == Some(&task)
-                        })
-                        .map(|t| t.id.clone());
-                    if parent_tool_id.is_some() {
-                        let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
-                            subagent_id.clone(),
-                            subagent_name,
-                            task,
-                        );
-                        sa.parent_tool_id = parent_tool_id;
-                        self.state.active_subagents.push(sa);
-                        if let Some(token) = cancel_token {
-                            self.state.subagent_cancel_tokens.insert(subagent_id, token);
-                        }
-                    } else if let Some(bg_task_id) = self
-                        .state
-                        .bg_agent_manager
-                        .all_tasks()
-                        .iter()
-                        .find(|t| t.is_running() && t.pending_spawn_count > 0)
-                        .map(|t| t.task_id.clone())
-                    {
-                        // Route to background task
-                        self.state
-                            .bg_subagent_map
-                            .insert(subagent_id.clone(), bg_task_id.clone());
-                        self.state
-                            .bg_agent_manager
-                            .decrement_pending_spawn(&bg_task_id);
-                        self.state.bg_agent_manager.push_activity(
-                            &bg_task_id,
-                            format!("\u{25b8} {subagent_name}: {task}"),
-                        );
-                        // Create display entry so task watcher shows tool-level detail
-                        let mut sa = crate::widgets::nested_tool::SubagentDisplayState::new(
-                            subagent_id.clone(),
-                            subagent_name,
-                            task,
-                        );
-                        sa.backgrounded = true;
-                        self.state.active_subagents.push(sa);
-                        if let Some(token) = cancel_token {
-                            self.state.subagent_cancel_tokens.insert(subagent_id, token);
-                        }
-                    }
-                }
-                self.state.dirty = true;
-            }
+            } => self.handle_subagent_started(subagent_id, subagent_name, task, cancel_token),
             AppEvent::SubagentToolCall {
                 subagent_id,
                 tool_name,
                 tool_id,
                 args,
                 ..
-            } => {
-                if let Some(subagent) = self
-                    .state
-                    .active_subagents
-                    .iter_mut()
-                    .find(|s| s.subagent_id == subagent_id)
-                {
-                    let is_bg = subagent.backgrounded;
-                    subagent.add_tool_call(tool_name.clone(), tool_id, args);
-                    // Also update bg_agent_manager for backgrounded subagents
-                    if is_bg
-                        && let Some(bg_task_id) =
-                            self.state.bg_subagent_map.get(&subagent_id).cloned()
-                    {
-                        let count = self
-                            .state
-                            .bg_agent_manager
-                            .get_task(&bg_task_id)
-                            .map(|t| t.tool_call_count + 1)
-                            .unwrap_or(1);
-                        self.state
-                            .bg_agent_manager
-                            .update_progress(&bg_task_id, tool_name, count);
-                    }
-                } else if let Some(bg_task_id) =
-                    self.state.bg_subagent_map.get(&subagent_id).cloned()
-                {
-                    let count = self
-                        .state
-                        .bg_agent_manager
-                        .get_task(&bg_task_id)
-                        .map(|t| t.tool_call_count + 1)
-                        .unwrap_or(1);
-                    self.state
-                        .bg_agent_manager
-                        .update_progress(&bg_task_id, tool_name, count);
-                }
-                self.state.dirty = true;
-            }
+            } => self.handle_subagent_tool_call(subagent_id, tool_name, tool_id, args),
             AppEvent::SubagentToolComplete {
                 subagent_id,
                 tool_name,
                 tool_id,
                 success,
                 ..
-            } => {
-                if let Some(subagent) = self
-                    .state
-                    .active_subagents
-                    .iter_mut()
-                    .find(|s| s.subagent_id == subagent_id)
-                {
-                    let is_bg = subagent.backgrounded;
-                    subagent.complete_tool_call(&tool_id, success);
-                    if is_bg
-                        && let Some(bg_task_id) =
-                            self.state.bg_subagent_map.get(&subagent_id).cloned()
-                    {
-                        let icon = if success { "\u{2713}" } else { "\u{2717}" };
-                        self.state
-                            .bg_agent_manager
-                            .push_activity(&bg_task_id, format!("  {icon} {tool_name}"));
-                    }
-                } else if let Some(bg_task_id) =
-                    self.state.bg_subagent_map.get(&subagent_id).cloned()
-                {
-                    let icon = if success { "\u{2713}" } else { "\u{2717}" };
-                    self.state
-                        .bg_agent_manager
-                        .push_activity(&bg_task_id, format!("  {icon} {tool_name}"));
-                }
-                self.state.dirty = true;
-            }
+            } => self.handle_subagent_tool_complete(subagent_id, tool_name, tool_id, success),
             AppEvent::SubagentFinished {
                 subagent_id,
                 success,
@@ -788,304 +287,49 @@ impl App {
                 tool_call_count,
                 shallow_warning,
                 ..
-            } => {
-                if let Some(subagent) = self
-                    .state
-                    .active_subagents
-                    .iter_mut()
-                    .find(|s| s.subagent_id == subagent_id)
-                {
-                    let is_bg = subagent.backgrounded;
-                    subagent.finish(
-                        success,
-                        result_summary.clone(),
-                        tool_call_count,
-                        shallow_warning,
-                    );
-                    if is_bg
-                        && let Some(bg_task_id) =
-                            self.state.bg_subagent_map.get(&subagent_id).cloned()
-                    {
-                        let status = if success { "completed" } else { "failed" };
-                        self.state.bg_agent_manager.push_activity(
-                            &bg_task_id,
-                            format!("  Subagent {status} · {tool_call_count} tools"),
-                        );
-                    }
-                } else if let Some(bg_task_id) =
-                    self.state.bg_subagent_map.get(&subagent_id).cloned()
-                {
-                    let status = if success { "completed" } else { "failed" };
-                    self.state.bg_agent_manager.push_activity(
-                        &bg_task_id,
-                        format!("  Subagent {status} · {tool_call_count} tools"),
-                    );
-                }
-                // Clean up per-subagent cancel token
-                self.state.subagent_cancel_tokens.remove(&subagent_id);
-                // Remove finished subagents after marking them
-                // (keep them for one more render so the user sees the result)
-                // Clamp focus after potential visibility change
-                let total_visible = self.state.active_subagents.len()
-                    + self
-                        .state
-                        .bg_agent_manager
-                        .all_tasks()
-                        .iter()
-                        .filter(|t| !t.hidden)
-                        .count();
-                if total_visible > 0 {
-                    self.state.task_watcher_focus =
-                        self.state.task_watcher_focus.min(total_visible - 1);
-                } else {
-                    self.state.task_watcher_focus = 0;
-                }
-                self.state.dirty = true;
-            }
-
+            } => self.handle_subagent_finished(
+                subagent_id,
+                success,
+                result_summary,
+                tool_call_count,
+                shallow_warning,
+            ),
             AppEvent::SubagentTokenUpdate {
                 subagent_id,
                 input_tokens,
                 output_tokens,
                 ..
-            } => {
-                if let Some(subagent) = self
-                    .state
-                    .active_subagents
-                    .iter_mut()
-                    .find(|s| s.subagent_id == subagent_id)
-                {
-                    subagent.add_tokens(input_tokens, output_tokens);
-                }
-                self.state.dirty = true;
-            }
+            } => self.handle_subagent_token_update(subagent_id, input_tokens, output_tokens),
 
             // Task progress events
             AppEvent::TaskProgressStarted { description } => {
-                self.state.task_progress = Some(crate::widgets::progress::TaskProgress {
-                    description,
-                    elapsed_secs: 0,
-                    token_display: None,
-                    interrupted: false,
-                    started_at: std::time::Instant::now(),
-                });
-                self.state.dirty = true;
+                self.handle_task_progress_started(description)
             }
-            AppEvent::TaskProgressFinished => {
-                self.state.task_progress = None;
-                self.state.dirty = true;
-            }
+            AppEvent::TaskProgressFinished => self.handle_task_progress_finished(),
 
-            // UI events
             // Plan approval events
             AppEvent::PlanApprovalRequested {
                 plan_content,
                 response_tx,
-            } => {
-                // Store plan content for display in conversation
-                self.state.plan_content_display = Some(plan_content.clone());
-                // Add plan as a message in the conversation
-                self.state
-                    .messages
-                    .push(DisplayMessage::new(DisplayRole::Plan, plan_content.clone()));
-                self.state.message_generation += 1;
-                // Start the plan approval controller
-                let _rx = self.plan_approval_controller.start(plan_content);
-                // Store the oneshot sender to forward the decision back to the tool
-                self.plan_approval_response_tx = Some(response_tx);
-                self.state.dirty = true;
-            }
+            } => self.handle_plan_approval_requested(plan_content, response_tx),
 
-            AppEvent::UserSubmit(ref msg) => {
-                // Consume pending plan request and prepend sentinel
-                let forwarded = if self.state.pending_plan_request {
-                    self.state.pending_plan_request = false;
-                    self.state.mode = OperationMode::Normal;
-                    format!("\x00__PLAN_MODE__{}", msg)
-                } else {
-                    msg.clone()
-                };
-                // Forward to backend if channel is configured
-                if let Some(ref tx) = self.user_message_tx {
-                    let _ = tx.send(forwarded);
-                    self.state.agent_active = true;
-                }
-                self.state.dirty = true;
-            }
-            AppEvent::Interrupt => {
-                // Cancel all active prompt controllers
-                if self.ask_user_controller.active() {
-                    self.ask_user_controller.cancel();
-                    self.ask_user_response_tx.take();
-                }
-                if self.plan_approval_controller.active() {
-                    self.plan_approval_controller.cancel();
-                    self.plan_approval_response_tx.take();
-                }
-                if self.approval_controller.active() {
-                    self.approval_controller.cancel();
-                    self.approval_response_tx.take();
-                }
-                if self.state.agent_active {
-                    if let Some(ref token) = self.interrupt_token {
-                        token.request(); // Signals all layers simultaneously
-                    }
-                    self.state.agent_active = false;
-                    self.state.backgrounding_pending = false;
-                    self.state
-                        .pending_queue
-                        .retain(|item| !matches!(item, super::PendingItem::UserMessage(_)));
-                }
-                self.state.dirty = true;
-            }
-            AppEvent::SetInterruptToken(token) => {
-                self.interrupt_token = Some(token);
-            }
-            AppEvent::AgentInterrupted => {
-                self.finalize_active_thinking();
-                self.state.agent_active = false;
-                self.state.backgrounding_pending = false;
-                self.state.task_progress = None;
-                // Clear active tools
-                self.state.active_tools.clear();
-                // Mark any active subagents as interrupted and clear
-                for subagent in &mut self.state.active_subagents {
-                    if !subagent.finished {
-                        subagent.finish(
-                            false,
-                            "Interrupted".to_string(),
-                            subagent.tool_call_count,
-                            None,
-                        );
-                    }
-                }
-                self.state.active_subagents.clear();
-                // Re-sync TUI todo display after interrupt
-                // (InProgress items were reset to Pending by reset_stuck_todos)
-                if let Some(ref mgr) = self.state.todo_manager
-                    && let Ok(mgr) = mgr.lock()
-                {
-                    self.state.todo_items = mgr
-                        .all()
-                        .iter()
-                        .map(|item| TodoDisplayItem {
-                            id: item.id,
-                            title: item.title.clone(),
-                            status: match item.status {
-                                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
-                                opendev_runtime::TodoStatus::InProgress => {
-                                    TodoDisplayStatus::InProgress
-                                }
-                                opendev_runtime::TodoStatus::Completed => {
-                                    TodoDisplayStatus::Completed
-                                }
-                            },
-                            active_form: if item.active_form.is_empty() {
-                                None
-                            } else {
-                                Some(item.active_form.clone())
-                            },
-                        })
-                        .collect();
-                }
-                // Show interrupt feedback in the conversation
-                self.state.messages.push(DisplayMessage::new(
-                    DisplayRole::Interrupt,
-                    "Interrupted. What should I do instead?",
-                ));
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::ModeChanged(mode) => {
-                self.state.mode = match mode.as_str() {
-                    "plan" => OperationMode::Plan,
-                    _ => OperationMode::Normal,
-                };
-                self.state.dirty = true;
-            }
-            AppEvent::KillTask(id) => {
-                let tm = self.task_manager.clone();
-                let tx = self.event_tx.clone();
-                let id_display = id.clone();
-                tokio::spawn(async move {
-                    let mut mgr = tm.lock().await;
-                    let msg = if mgr.get_task(&id).is_some() {
-                        if mgr.kill_task(&id).await {
-                            format!("Killed task '{id}'.")
-                        } else {
-                            format!("Failed to kill task '{id}'.")
-                        }
-                    } else {
-                        format!("Task '{id}' not found.")
-                    };
-                    let _ = tx.send(AppEvent::AgentError(msg));
-                });
-                self.push_system_message(format!("Killing task '{id_display}'..."));
-                self.state.dirty = true;
-            }
-            AppEvent::CompactionStarted => {
-                self.state.compaction_active = true;
-                self.state.dirty = true;
-            }
+            AppEvent::UserSubmit(ref msg) => self.handle_user_submit(msg),
+            AppEvent::Interrupt => self.handle_interrupt(),
+            AppEvent::SetInterruptToken(token) => self.handle_set_interrupt_token(token),
+            AppEvent::AgentInterrupted => self.handle_agent_interrupted(),
+            AppEvent::ModeChanged(mode) => self.handle_mode_changed(mode),
+            AppEvent::KillTask(id) => self.handle_kill_task(id),
+            AppEvent::CompactionStarted => self.handle_compaction_started(),
             AppEvent::CompactionFinished { success, message } => {
-                self.state.compaction_active = false;
-                if success {
-                    self.push_system_message(message);
-                } else {
-                    self.push_system_message(format!("Compaction failed: {message}"));
-                }
-                self.state.dirty = true;
+                self.handle_compaction_finished(success, message)
             }
 
             // Background agent events
             AppEvent::AgentBackgrounded {
                 task_id,
                 query_summary: _,
-            } => {
-                self.state.backgrounding_pending = false;
-
-                // Close out any active tools with "Sent to background" result
-                for tool in std::mem::take(&mut self.state.active_tools) {
-                    self.state.messages.push(DisplayMessage {
-                        role: DisplayRole::Assistant,
-                        content: String::new(),
-                        tool_call: Some(DisplayToolCall {
-                            name: tool.name.clone(),
-                            arguments: tool.args.clone(),
-                            summary: None,
-                            success: true,
-                            collapsed: false,
-                            result_lines: vec!["Sent to background".to_string()],
-                            nested_calls: Vec::new(),
-                        }),
-                        collapsed: false,
-                        thinking_started_at: None,
-                        thinking_duration_secs: None,
-                    });
-                }
-                // Mark surviving (finished) subagents as backgrounded.
-                // Non-finished subagents are removed — their foreground processes
-                // were cancelled by the background interrupt. The bg runtime will
-                // re-spawn them with new IDs and SubagentStarted will create fresh
-                // display entries.
-                for sa in &mut self.state.active_subagents {
-                    sa.backgrounded = true;
-                }
-                self.state.active_subagents.retain(|s| s.finished);
-                self.state.task_progress = None;
-
-                self.state.backgrounded_task_info =
-                    Some((task_id.clone(), std::time::Instant::now()));
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::BackgroundNudge { content } => {
-                self.state
-                    .messages
-                    .push(DisplayMessage::new(DisplayRole::Assistant, content));
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
+            } => self.handle_agent_backgrounded(task_id),
+            AppEvent::BackgroundNudge { content } => self.handle_background_nudge(content),
             AppEvent::BackgroundAgentCompleted {
                 task_id,
                 success,
@@ -1093,190 +337,39 @@ impl App {
                 full_result,
                 cost_usd,
                 tool_call_count,
-            } => {
-                // Check if the task was killed before queuing results
-                let was_killed = self
-                    .state
-                    .bg_agent_manager
-                    .get_task(&task_id)
-                    .is_some_and(|t| {
-                        t.state == crate::managers::background_agents::BackgroundAgentState::Killed
-                    });
-
-                // Use the higher tool count — bg_agent_manager tracks subagent
-                // tools via update_progress, while the callback only counts
-                // top-level tool calls.
-                let tracked_count = self
-                    .state
-                    .bg_agent_manager
-                    .get_task(&task_id)
-                    .map(|t| t.tool_call_count)
-                    .unwrap_or(0);
-                let total_tools = tracked_count.max(tool_call_count);
-
-                self.state.bg_agent_manager.mark_completed(
-                    &task_id,
-                    success,
-                    result_summary.clone(),
-                    total_tools,
-                    cost_usd,
-                );
-                self.state.last_task_completion =
-                    Some((task_id.clone(), std::time::Instant::now()));
-
-                // When a bg task was killed, mark all its child subagents as killed too
-                if was_killed {
-                    let killed_subagent_ids: Vec<String> = self
-                        .state
-                        .bg_subagent_map
-                        .iter()
-                        .filter(|(_, bg_id)| *bg_id == &task_id)
-                        .map(|(sa_id, _)| sa_id.clone())
-                        .collect();
-                    for sa_id in &killed_subagent_ids {
-                        if let Some(sa) = self
-                            .state
-                            .active_subagents
-                            .iter_mut()
-                            .find(|s| s.subagent_id == *sa_id)
-                            && !sa.finished
-                        {
-                            sa.finish(false, "Killed".to_string(), sa.tool_call_count, None);
-                        }
-                        self.state.bg_subagent_map.remove(sa_id);
-                        self.state.subagent_cancel_tokens.remove(sa_id);
-                    }
-                }
-
-                // Clean up child subagents belonging to this completed task
-                let child_sa_ids: Vec<String> = self
-                    .state
-                    .bg_subagent_map
-                    .iter()
-                    .filter(|(_, bg_id)| *bg_id == &task_id)
-                    .map(|(sa_id, _)| sa_id.clone())
-                    .collect();
-                for sa_id in &child_sa_ids {
-                    self.state.bg_subagent_map.remove(sa_id);
-                }
-                // Remove finished backgrounded subagents belonging to this completed task
-                self.state.active_subagents.retain(|s| {
-                    !(s.backgrounded && s.finished && child_sa_ids.contains(&s.subagent_id))
-                });
-
-                // Clear backgrounded_task_info if it matches this task
-                if let Some((ref info_id, _)) = self.state.backgrounded_task_info
-                    && info_id == &task_id
-                {
-                    self.state.backgrounded_task_info = None;
-                }
-
-                // Queue successful, non-killed results for injection
-                if success && !was_killed {
-                    let query = self
-                        .state
-                        .bg_agent_manager
-                        .get_task(&task_id)
-                        .map(|t| t.query.clone())
-                        .unwrap_or_default();
-                    self.state
-                        .pending_queue
-                        .push_back(super::PendingItem::BackgroundResult {
-                            task_id: task_id.clone(),
-                            query,
-                            result: full_result,
-                            success,
-                            tool_call_count: total_tools,
-                            cost_usd,
-                        });
-
-                    // If idle, drain immediately
-                    if !self.state.agent_active {
-                        self.drain_next_pending();
-                    }
-                }
-
-                self.state.dirty = true;
-            }
+            } => self.handle_background_agent_completed(
+                task_id,
+                success,
+                result_summary,
+                full_result,
+                cost_usd,
+                tool_call_count,
+            ),
             AppEvent::BackgroundAgentProgress {
                 task_id,
                 tool_name,
                 tool_count,
-            } => {
-                if tool_name == "spawn_subagent" {
-                    self.state
-                        .bg_agent_manager
-                        .increment_pending_spawn(&task_id);
-                }
-                self.state
-                    .bg_agent_manager
-                    .update_progress(&task_id, tool_name, tool_count);
-                self.state.dirty = true;
-            }
+            } => self.handle_background_agent_progress(task_id, tool_name, tool_count),
             AppEvent::BackgroundAgentActivity { task_id, line } => {
-                self.state.bg_agent_manager.push_activity(&task_id, line);
-                self.state.dirty = true;
+                self.handle_background_agent_activity(task_id, line)
             }
             AppEvent::BackgroundAgentKilled { task_id } => {
-                self.push_system_message(format!("Background agent [{task_id}] killed."));
-                self.state.dirty = true;
+                self.handle_background_agent_killed(task_id)
             }
             AppEvent::SetBackgroundAgentToken {
                 task_id,
                 query,
                 session_id,
                 interrupt_token,
-            } => {
-                self.state
-                    .bg_agent_manager
-                    .add_task(task_id, query, session_id, interrupt_token);
-                self.state.dirty = true;
-            }
+            } => self.handle_set_background_agent_token(task_id, query, session_id, interrupt_token),
 
             // Undo/Redo/Share events
-            AppEvent::SnapshotTaken { hash } => {
-                self.state.undo_stack.push(hash);
-                self.state.redo_stack.clear();
-            }
-            AppEvent::UndoResult { success, message } => {
-                use crate::widgets::toast::{Toast, ToastLevel};
-                let level = if success {
-                    ToastLevel::Success
-                } else {
-                    ToastLevel::Warning
-                };
-                self.state.toasts.push(Toast::new(message, level));
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::RedoResult { success, message } => {
-                use crate::widgets::toast::{Toast, ToastLevel};
-                let level = if success {
-                    ToastLevel::Success
-                } else {
-                    ToastLevel::Warning
-                };
-                self.state.toasts.push(Toast::new(message, level));
-                self.state.dirty = true;
-                self.state.message_generation += 1;
-            }
-            AppEvent::ShareResult { path } => {
-                use crate::widgets::toast::{Toast, ToastLevel};
-                self.state
-                    .toasts
-                    .push(Toast::new(format!("Shared: {path}"), ToastLevel::Success));
-                self.state.dirty = true;
-            }
-            AppEvent::FileChanged { paths } => {
-                // Just mark dirty — file changes are informational
-                let _ = paths;
-                self.state.dirty = true;
-            }
-
-            AppEvent::SessionTitleUpdated(title) => {
-                self.state.session_title = Some(title);
-                self.state.dirty = true;
-            }
+            AppEvent::SnapshotTaken { hash } => self.handle_snapshot_taken(hash),
+            AppEvent::UndoResult { success, message } => self.handle_undo_result(success, message),
+            AppEvent::RedoResult { success, message } => self.handle_redo_result(success, message),
+            AppEvent::ShareResult { path } => self.handle_share_result(path),
+            AppEvent::FileChanged { paths } => self.handle_file_changed(paths),
+            AppEvent::SessionTitleUpdated(title) => self.handle_session_title_updated(title),
 
             AppEvent::Quit => {
                 self.state.running = false;

@@ -14,6 +14,11 @@
 mod cache;
 mod enums;
 mod event_dispatch;
+mod handle_agent;
+mod handle_background;
+mod handle_subagent;
+mod handle_tools;
+mod handle_ui;
 mod key_handler;
 mod render;
 mod slash_commands;
@@ -239,10 +244,13 @@ impl App {
 
             // Only render when state has changed
             if self.state.dirty {
-                // Rebuild cached conversation lines if messages changed or scroll
-                // moved (scroll affects viewport culling boundaries).
+                // Rebuild cached conversation lines if messages changed, scroll
+                // moved (scroll affects viewport culling boundaries), or terminal
+                // width changed (cached lines are pre-wrapped to a specific width).
+                let content_width = self.state.terminal_width.saturating_sub(1);
                 if self.state.lines_generation != self.state.message_generation
                     || self.state.cached_scroll_offset != self.state.scroll_offset
+                    || self.state.cached_width != content_width
                 {
                     self.rebuild_cached_lines();
                     self.state.lines_generation = self.state.message_generation;
