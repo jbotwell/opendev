@@ -534,9 +534,20 @@ mod tests {
         let (d, ip, t) = widget1.counts();
         let line1 = widget1.build_lines(d, ip, t);
 
-        let text0: String = line0[0].spans.iter().map(|s| s.content.to_string()).collect();
-        let text1: String = line1[0].spans.iter().map(|s| s.content.to_string()).collect();
-        assert_ne!(text0, text1, "Different ticks should produce different spinner chars");
+        let text0: String = line0[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
+        let text1: String = line1[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
+        assert_ne!(
+            text0, text1,
+            "Different ticks should produce different spinner chars"
+        );
     }
 
     #[test]
@@ -550,10 +561,20 @@ mod tests {
         let widget = TodoPanelWidget::new(&items).with_spinner_tick(0);
         let (d, ip, t) = widget.counts();
         let lines = widget.build_lines(d, ip, t);
-        let text: String = lines[0].spans.iter().map(|s| s.content.to_string()).collect();
-        assert!(text.contains('\u{25CB}'), "Pending should show ○, got: {text}");
+        let text: String = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
+        assert!(
+            text.contains('\u{25CB}'),
+            "Pending should show ○, got: {text}"
+        );
         for frame in SPINNER_FRAMES {
-            assert!(!text.contains(*frame), "Pending should not show spinner {frame}, got: {text}");
+            assert!(
+                !text.contains(*frame),
+                "Pending should not show spinner {frame}, got: {text}"
+            );
         }
     }
 
@@ -585,7 +606,11 @@ mod tests {
         let lines = widget.build_lines(d, ip, t);
 
         // Item 2 (index 1) should show spinner
-        let text1: String = lines[1].spans.iter().map(|s| s.content.to_string()).collect();
+        let text1: String = lines[1]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
         let expected_spinner = SPINNER_FRAMES[3 % SPINNER_FRAMES.len()];
         assert!(
             text1.contains(expected_spinner),
@@ -620,25 +645,38 @@ mod tests {
         widget.render(Rect::new(0, 0, 80, 7), &mut buf);
 
         // Extract item rows (row 0 is title border, items start at row 1)
-        let row1: String = (0..80).map(|x| buf.cell((x, 1)).unwrap().symbol().to_string()).collect();
-        let row2: String = (0..80).map(|x| buf.cell((x, 2)).unwrap().symbol().to_string()).collect();
-        let row3: String = (0..80).map(|x| buf.cell((x, 3)).unwrap().symbol().to_string()).collect();
+        let row1: String = (0..80)
+            .map(|x| buf.cell((x, 1)).unwrap().symbol().to_string())
+            .collect();
+        let row2: String = (0..80)
+            .map(|x| buf.cell((x, 2)).unwrap().symbol().to_string())
+            .collect();
+        let row3: String = (0..80)
+            .map(|x| buf.cell((x, 3)).unwrap().symbol().to_string())
+            .collect();
 
-        assert!(row1.contains('\u{2714}'), "Completed should show ✔, got: {row1}");
-        assert!(row2.contains(SPINNER_FRAMES[0]), "InProgress should show spinner, got: {row2}");
-        assert!(row3.contains('\u{25CB}'), "Pending should show ○, got: {row3}");
+        assert!(
+            row1.contains('\u{2714}'),
+            "Completed should show ✔, got: {row1}"
+        );
+        assert!(
+            row2.contains(SPINNER_FRAMES[0]),
+            "InProgress should show spinner, got: {row2}"
+        );
+        assert!(
+            row3.contains('\u{25CB}'),
+            "Pending should show ○, got: {row3}"
+        );
     }
 
     #[test]
     fn test_collapsed_no_in_progress_shows_working() {
-        let items = vec![
-            TodoDisplayItem {
-                id: 1,
-                title: "Task A".into(),
-                status: TodoDisplayStatus::Pending,
-                active_form: None,
-            },
-        ];
+        let items = vec![TodoDisplayItem {
+            id: 1,
+            title: "Task A".into(),
+            status: TodoDisplayStatus::Pending,
+            active_form: None,
+        }];
         let widget = TodoPanelWidget::new(&items).with_expanded(false);
         let (done, _, total) = widget.counts();
         let line = widget.build_collapsed_line(done, total);
@@ -665,7 +703,9 @@ mod tests {
                 active_form: Some("Building project".into()),
             },
         ];
-        let widget = TodoPanelWidget::new(&items).with_expanded(false).with_spinner_tick(5);
+        let widget = TodoPanelWidget::new(&items)
+            .with_expanded(false)
+            .with_spinner_tick(5);
         let (done, _, total) = widget.counts();
         let line = widget.build_collapsed_line(done, total);
         let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
@@ -673,7 +713,10 @@ mod tests {
             text.contains("Building project"),
             "Collapsed mode should show active_form after resume, got: {text}"
         );
-        assert!(text.contains("(1/2)"), "Should show progress count, got: {text}");
+        assert!(
+            text.contains("(1/2)"),
+            "Should show progress count, got: {text}"
+        );
     }
 
     #[test]
@@ -683,24 +726,47 @@ mod tests {
 
         // Items added — panel visible
         let items = vec![
-            TodoDisplayItem { id: 1, title: "A".into(), status: TodoDisplayStatus::Pending, active_form: None },
-            TodoDisplayItem { id: 2, title: "B".into(), status: TodoDisplayStatus::Pending, active_form: None },
+            TodoDisplayItem {
+                id: 1,
+                title: "A".into(),
+                status: TodoDisplayStatus::Pending,
+                active_form: None,
+            },
+            TodoDisplayItem {
+                id: 2,
+                title: "B".into(),
+                status: TodoDisplayStatus::Pending,
+                active_form: None,
+            },
         ];
         let w = TodoPanelWidget::new(&items);
         assert_eq!(w.required_height(), 4); // 2 items + 2 borders
 
         // All done — panel hides
         let done_items = vec![
-            TodoDisplayItem { id: 1, title: "A".into(), status: TodoDisplayStatus::Completed, active_form: None },
-            TodoDisplayItem { id: 2, title: "B".into(), status: TodoDisplayStatus::Completed, active_form: None },
+            TodoDisplayItem {
+                id: 1,
+                title: "A".into(),
+                status: TodoDisplayStatus::Completed,
+                active_form: None,
+            },
+            TodoDisplayItem {
+                id: 2,
+                title: "B".into(),
+                status: TodoDisplayStatus::Completed,
+                active_form: None,
+            },
         ];
         let w = TodoPanelWidget::new(&done_items);
         assert_eq!(w.required_height(), 0);
 
         // New pending items — panel visible again
-        let new_items = vec![
-            TodoDisplayItem { id: 3, title: "C".into(), status: TodoDisplayStatus::Pending, active_form: None },
-        ];
+        let new_items = vec![TodoDisplayItem {
+            id: 3,
+            title: "C".into(),
+            status: TodoDisplayStatus::Pending,
+            active_form: None,
+        }];
         let w = TodoPanelWidget::new(&new_items);
         assert_eq!(w.required_height(), 3); // 1 item + 2 borders
     }
@@ -716,7 +782,11 @@ mod tests {
             })
             .collect();
         let w = TodoPanelWidget::new(&items);
-        assert_eq!(w.required_height(), 12, "15 items should be capped at 12 rows");
+        assert_eq!(
+            w.required_height(),
+            12,
+            "15 items should be capped at 12 rows"
+        );
     }
 
     #[test]
@@ -735,7 +805,11 @@ mod tests {
             let widget = TodoPanelWidget::new(&items).with_spinner_tick(0);
             let (d, ip, t) = widget.counts();
             let lines = widget.build_lines(d, ip, t);
-            let text: String = lines[0].spans.iter().map(|s| s.content.to_string()).collect();
+            let text: String = lines[0]
+                .spans
+                .iter()
+                .map(|s| s.content.to_string())
+                .collect();
             assert!(
                 text.contains(expected_char),
                 "Status {status:?} should show '{expected_char}', got: {text}"
@@ -760,7 +834,11 @@ mod tests {
         let w = TodoPanelWidget::new(&items).with_spinner_tick(0);
         let (d, ip, t) = w.counts();
         let lines = w.build_lines(d, ip, t);
-        let text: String = lines[0].spans.iter().map(|s| s.content.to_string()).collect();
+        let text: String = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
         assert!(text.contains('\u{25CB}'), "Pending phase should show ○");
 
         // InProgress phase
@@ -768,7 +846,11 @@ mod tests {
         let w = TodoPanelWidget::new(&items).with_spinner_tick(2);
         let (d, ip, t) = w.counts();
         let lines = w.build_lines(d, ip, t);
-        let text: String = lines[0].spans.iter().map(|s| s.content.to_string()).collect();
+        let text: String = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
         assert!(
             text.contains(SPINNER_FRAMES[2]),
             "InProgress phase should show spinner"
@@ -779,7 +861,11 @@ mod tests {
         let w = TodoPanelWidget::new(&items).with_spinner_tick(0);
         let (d, ip, t) = w.counts();
         let lines = w.build_lines(d, ip, t);
-        let text: String = lines[0].spans.iter().map(|s| s.content.to_string()).collect();
+        let text: String = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
         assert!(text.contains('\u{2714}'), "Completed phase should show ✔");
     }
 
@@ -795,59 +881,90 @@ mod tests {
         mgr.start(2);
 
         // Verify pre-interrupt state
-        let display: Vec<TodoDisplayItem> = mgr.all().iter().map(|item| TodoDisplayItem {
-            id: item.id,
-            title: item.title.clone(),
-            status: match item.status {
-                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
-                opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
-                opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
-            },
-            active_form: None,
-        }).collect();
+        let display: Vec<TodoDisplayItem> = mgr
+            .all()
+            .iter()
+            .map(|item| TodoDisplayItem {
+                id: item.id,
+                title: item.title.clone(),
+                status: match item.status {
+                    opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
+                    opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
+                    opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
+                },
+                active_form: None,
+            })
+            .collect();
         assert_eq!(display[1].status, TodoDisplayStatus::InProgress);
 
         // Simulate interrupt: reset_stuck_todos + sync
         mgr.reset_stuck_todos();
-        let display: Vec<TodoDisplayItem> = mgr.all().iter().map(|item| TodoDisplayItem {
-            id: item.id,
-            title: item.title.clone(),
-            status: match item.status {
-                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
-                opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
-                opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
-            },
-            active_form: None,
-        }).collect();
-        assert_eq!(display[1].status, TodoDisplayStatus::Pending, "After interrupt, item should be Pending");
-        assert!(display.iter().all(|i| i.status != TodoDisplayStatus::InProgress));
+        let display: Vec<TodoDisplayItem> = mgr
+            .all()
+            .iter()
+            .map(|item| TodoDisplayItem {
+                id: item.id,
+                title: item.title.clone(),
+                status: match item.status {
+                    opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
+                    opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
+                    opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
+                },
+                active_form: None,
+            })
+            .collect();
+        assert_eq!(
+            display[1].status,
+            TodoDisplayStatus::Pending,
+            "After interrupt, item should be Pending"
+        );
+        assert!(
+            display
+                .iter()
+                .all(|i| i.status != TodoDisplayStatus::InProgress)
+        );
 
         // Simulate resume: start next pending + sync
         if let Some(next) = mgr.next_pending() {
             let id = next.id;
             mgr.start(id);
         }
-        let display: Vec<TodoDisplayItem> = mgr.all().iter().map(|item| TodoDisplayItem {
-            id: item.id,
-            title: item.title.clone(),
-            status: match item.status {
-                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
-                opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
-                opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
-            },
-            active_form: None,
-        }).collect();
+        let display: Vec<TodoDisplayItem> = mgr
+            .all()
+            .iter()
+            .map(|item| TodoDisplayItem {
+                id: item.id,
+                title: item.title.clone(),
+                status: match item.status {
+                    opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
+                    opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
+                    opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
+                },
+                active_form: None,
+            })
+            .collect();
 
         // Item 2 should be InProgress again (it's the first pending after item 1 which is completed)
-        assert_eq!(display[1].status, TodoDisplayStatus::InProgress, "After resume, item should be InProgress");
+        assert_eq!(
+            display[1].status,
+            TodoDisplayStatus::InProgress,
+            "After resume, item should be InProgress"
+        );
 
         // Widget should render spinner for the resumed item
         let widget = TodoPanelWidget::new(&display).with_spinner_tick(4);
         let (d, ip, t) = widget.counts();
         let lines = widget.build_lines(d, ip, t);
-        let text: String = lines[1].spans.iter().map(|s| s.content.to_string()).collect();
+        let text: String = lines[1]
+            .spans
+            .iter()
+            .map(|s| s.content.to_string())
+            .collect();
         let expected = SPINNER_FRAMES[4 % SPINNER_FRAMES.len()];
-        assert!(text.contains(expected), "Resumed item should show spinner '{expected}', got: {text}");
+        assert!(
+            text.contains(expected),
+            "Resumed item should show spinner '{expected}', got: {text}"
+        );
     }
 
     #[test]
@@ -859,23 +976,45 @@ mod tests {
 
         // Write todos
         mgr.write_todos(vec![
-            ("Setup".into(), opendev_runtime::TodoStatus::Pending, "Setting up".into(), Vec::new()),
-            ("Build".into(), opendev_runtime::TodoStatus::Pending, "Building".into(), Vec::new()),
-            ("Test".into(), opendev_runtime::TodoStatus::Pending, "Testing".into(), Vec::new()),
+            (
+                "Setup".into(),
+                opendev_runtime::TodoStatus::Pending,
+                "Setting up".into(),
+                Vec::new(),
+            ),
+            (
+                "Build".into(),
+                opendev_runtime::TodoStatus::Pending,
+                "Building".into(),
+                Vec::new(),
+            ),
+            (
+                "Test".into(),
+                opendev_runtime::TodoStatus::Pending,
+                "Testing".into(),
+                Vec::new(),
+            ),
         ]);
         assert_eq!(mgr.total(), 3);
 
         let to_display = |mgr: &TodoManager| -> Vec<TodoDisplayItem> {
-            mgr.all().iter().map(|item| TodoDisplayItem {
-                id: item.id,
-                title: item.title.clone(),
-                status: match item.status {
-                    opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
-                    opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
-                    opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
-                },
-                active_form: if item.active_form.is_empty() { None } else { Some(item.active_form.clone()) },
-            }).collect()
+            mgr.all()
+                .iter()
+                .map(|item| TodoDisplayItem {
+                    id: item.id,
+                    title: item.title.clone(),
+                    status: match item.status {
+                        opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
+                        opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
+                        opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
+                    },
+                    active_form: if item.active_form.is_empty() {
+                        None
+                    } else {
+                        Some(item.active_form.clone())
+                    },
+                })
+                .collect()
         };
 
         // Start first
@@ -912,21 +1051,44 @@ mod tests {
 
         // Recreate with entirely new todos
         mgr.write_todos(vec![
-            ("New X".into(), opendev_runtime::TodoStatus::Pending, String::new(), Vec::new()),
-            ("New Y".into(), opendev_runtime::TodoStatus::InProgress, "Doing Y".into(), Vec::new()),
-            ("New Z".into(), opendev_runtime::TodoStatus::Pending, String::new(), Vec::new()),
+            (
+                "New X".into(),
+                opendev_runtime::TodoStatus::Pending,
+                String::new(),
+                Vec::new(),
+            ),
+            (
+                "New Y".into(),
+                opendev_runtime::TodoStatus::InProgress,
+                "Doing Y".into(),
+                Vec::new(),
+            ),
+            (
+                "New Z".into(),
+                opendev_runtime::TodoStatus::Pending,
+                String::new(),
+                Vec::new(),
+            ),
         ]);
 
-        let display: Vec<TodoDisplayItem> = mgr.all().iter().map(|item| TodoDisplayItem {
-            id: item.id,
-            title: item.title.clone(),
-            status: match item.status {
-                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
-                opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
-                opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
-            },
-            active_form: if item.active_form.is_empty() { None } else { Some(item.active_form.clone()) },
-        }).collect();
+        let display: Vec<TodoDisplayItem> = mgr
+            .all()
+            .iter()
+            .map(|item| TodoDisplayItem {
+                id: item.id,
+                title: item.title.clone(),
+                status: match item.status {
+                    opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
+                    opendev_runtime::TodoStatus::InProgress => TodoDisplayStatus::InProgress,
+                    opendev_runtime::TodoStatus::Completed => TodoDisplayStatus::Completed,
+                },
+                active_form: if item.active_form.is_empty() {
+                    None
+                } else {
+                    Some(item.active_form.clone())
+                },
+            })
+            .collect();
 
         assert_eq!(display.len(), 3);
         assert_eq!(display[0].title, "New X");

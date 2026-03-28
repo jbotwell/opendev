@@ -319,9 +319,7 @@ impl BaseTool for SpawnSubagentTool {
                         content.len(),
                         MAX_SUBAGENT_OUTPUT
                     ));
-                    output.push_str(
-                        opendev_runtime::safe_truncate(content, half),
-                    );
+                    output.push_str(opendev_runtime::safe_truncate(content, half));
                     output.push_str(&format!(
                         "\n\n[...truncated {} chars...]\n\n",
                         content.len() - MAX_SUBAGENT_OUTPUT
@@ -351,10 +349,7 @@ impl BaseTool for SpawnSubagentTool {
                         subagent_name: agent_type.to_string(),
                         success: effective_success,
                         result_summary: if content.len() > 200 {
-                            format!(
-                                "{}...",
-                                opendev_runtime::safe_truncate(content, 200)
-                            )
+                            format!("{}...", opendev_runtime::safe_truncate(content, 200))
                         } else {
                             content.clone()
                         },

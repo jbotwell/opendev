@@ -4,9 +4,7 @@
 //! Provides consistent spinner animation for tool execution, thinking phases,
 //! and agent activity indicators.
 
-use super::thinking_verbs::{
-    self, THINKING_VERBS,
-};
+use super::thinking_verbs::{self, THINKING_VERBS};
 
 /// Braille-dot spinner frames (matches Python `SPINNER_FRAMES`).
 pub const SPINNER_FRAMES: &[char] = &[

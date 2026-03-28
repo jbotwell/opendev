@@ -48,8 +48,10 @@ fn display_message_hash(msg: &DisplayMessage) -> u64 {
 
 impl App {
     fn conversation_viewport_height(&self) -> usize {
-        let todo_height =
-            crate::widgets::todo_panel_height(self.state.todo_items.len(), self.state.todo_expanded);
+        let todo_height = crate::widgets::todo_panel_height(
+            self.state.todo_items.len(),
+            self.state.todo_expanded,
+        );
         let input_lines = self.state.input_buffer.matches('\n').count() + 1;
         let input_height = (input_lines as u16 + 1).min(8);
         let conv_height = self
@@ -151,7 +153,11 @@ impl App {
                     } else if is_bash {
                         // Bash preview: ≤4 lines shown inline, >4 shows 5 (2+ellipsis+2), 0 shows 1
                         let n = tc.result_lines.len();
-                        if n == 0 { 1 } else { n.min(4).max(if n > 4 { 5 } else { n }) }
+                        if n == 0 {
+                            1
+                        } else {
+                            n.min(4).max(if n > 4 { 5 } else { n })
+                        }
                     } else if !tc.result_lines.is_empty() {
                         1
                     } else {
@@ -408,10 +414,8 @@ impl App {
                     } else if let Some(started) = msg.thinking_started_at {
                         // Streaming: shimmer wave "⟡ Thinking... Xs (Ctrl+I to expand)"
                         let elapsed = started.elapsed().as_secs();
-                        let text = format!(
-                            "{} Thinking... {}s",
-                            style_tokens::THINKING_ICON, elapsed
-                        );
+                        let text =
+                            format!("{} Thinking... {}s", style_tokens::THINKING_ICON, elapsed);
                         let highlight = ratatui::style::Color::Rgb(200, 200, 220);
                         let mut spans = style_tokens::shimmer_line(
                             &text,
@@ -604,9 +608,8 @@ impl App {
             use crate::widgets::conversation::{
                 is_diff_tool, parse_unified_diff, render_diff_entries,
             };
-            let is_bash =
-                crate::formatters::tool_registry::lookup_tool(&tc.name).result_format
-                    == ResultFormat::Bash;
+            let is_bash = crate::formatters::tool_registry::lookup_tool(&tc.name).result_format
+                == ResultFormat::Bash;
             let effective_collapsed = tc.collapsed && !is_diff_tool(&tc.name);
             if !effective_collapsed && !tc.result_lines.is_empty() {
                 let use_diff = is_diff_tool(&tc.name);

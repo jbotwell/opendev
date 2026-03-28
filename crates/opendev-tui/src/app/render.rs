@@ -21,7 +21,10 @@ impl App {
             .spinner_char(self.state.spinner.current())
             .compaction_active(self.state.compaction_active)
             .backgrounding_pending(self.state.backgrounding_pending)
-            .thinking_verb(self.state.spinner.current_verb(), self.state.spinner.verb_fade_intensity());
+            .thinking_verb(
+                self.state.spinner.current_verb(),
+                self.state.spinner.verb_fade_intensity(),
+            );
         widget
             .build_spinner_lines()
             .iter()
@@ -41,8 +44,10 @@ impl App {
 
         // Layout: conversation (flexible) | todo panel (if active) | input | status bar
         let has_todos = !self.state.todo_items.is_empty();
-        let todo_height =
-            crate::widgets::todo_panel_height(self.state.todo_items.len(), self.state.todo_expanded);
+        let todo_height = crate::widgets::todo_panel_height(
+            self.state.todo_items.len(),
+            self.state.todo_expanded,
+        );
 
         let chunks = layout::Layout::default()
             .direction(layout::Direction::Vertical)
@@ -85,7 +90,10 @@ impl App {
                     .spinner_char(self.state.spinner.current())
                     .compaction_active(self.state.compaction_active)
                     .backgrounding_pending(self.state.backgrounding_pending)
-                    .thinking_verb(self.state.spinner.current_verb(), self.state.spinner.verb_fade_intensity());
+                    .thinking_verb(
+                        self.state.spinner.current_verb(),
+                        self.state.spinner.verb_fade_intensity(),
+                    );
             if !self.state.cached_lines.is_empty() {
                 conversation = conversation.cached_lines(&self.state.cached_lines);
             }
@@ -299,8 +307,10 @@ impl App {
     /// Called after render so mouse position mapping uses fresh data.
     pub(super) fn update_selection_geometry(&mut self) {
         // Recompute the conversation content area dimensions
-        let todo_height =
-            crate::widgets::todo_panel_height(self.state.todo_items.len(), self.state.todo_expanded);
+        let todo_height = crate::widgets::todo_panel_height(
+            self.state.todo_items.len(),
+            self.state.todo_expanded,
+        );
         let input_lines = self.state.input_buffer.matches('\n').count() + 1;
         let input_height = (input_lines as u16 + 1).min(8);
 

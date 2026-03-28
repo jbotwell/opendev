@@ -151,11 +151,10 @@ impl<'a> ConversationWidget<'a> {
         } else if let Some(progress) = self.task_progress {
             // Skip TaskProgress spinner during active reasoning streaming —
             // the reasoning message renders its own "⟡ Thinking..." line
-            let has_active_thinking = self
-                .messages
-                .iter()
-                .rev()
-                .any(|m| m.role == DisplayRole::Reasoning && m.thinking_duration_secs.is_none());
+            let has_active_thinking =
+                self.messages.iter().rev().any(|m| {
+                    m.role == DisplayRole::Reasoning && m.thinking_duration_secs.is_none()
+                });
             if !has_active_thinking {
                 let elapsed = progress.started_at.elapsed().as_secs();
                 lines.push(Line::from(vec![
@@ -177,7 +176,8 @@ impl<'a> ConversationWidget<'a> {
                             let r = dr as f32 + (sr as f32 - dr as f32) * t;
                             let g = dg as f32 + (sg as f32 - dg as f32) * t;
                             let b = db as f32 + (sb as f32 - db as f32) * t;
-                            Style::default().fg(ratatui::style::Color::Rgb(r as u8, g as u8, b as u8))
+                            Style::default()
+                                .fg(ratatui::style::Color::Rgb(r as u8, g as u8, b as u8))
                         } else {
                             Style::default().fg(style_tokens::SUBTLE)
                         },

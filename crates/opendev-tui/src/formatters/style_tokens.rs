@@ -326,7 +326,12 @@ pub const THINKING_ICON: &str = "\u{27e1}"; // ⟡
 /// `tick` drives the wave position. Each character gets an interpolated color
 /// between `base` (dim) and `highlight` (bright) based on distance from the
 /// wave center, using a gaussian falloff with a ~4-char wide window.
-pub fn shimmer_line(text: &str, tick: u64, base: Color, highlight: Color) -> Vec<ratatui::text::Span<'static>> {
+pub fn shimmer_line(
+    text: &str,
+    tick: u64,
+    base: Color,
+    highlight: Color,
+) -> Vec<ratatui::text::Span<'static>> {
     use ratatui::style::Style;
     use ratatui::text::Span;
 
