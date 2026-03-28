@@ -502,9 +502,7 @@ impl AgentRuntime {
                 .unwrap_or_default();
 
             if api_key.is_empty() {
-                let env_hint = registry_env
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or("API_KEY");
+                let env_hint = registry_env.filter(|s| !s.is_empty()).unwrap_or("API_KEY");
                 return Err(format!(
                     "No API key for provider '{}'. Set {} environment variable.",
                     new_provider_id, env_hint

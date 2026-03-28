@@ -1012,14 +1012,20 @@ mod tests {
         let tool = AstGrepTool;
         let ctx = ToolContext::new(tmp.path());
         let args = make_args(&[
-            ("pattern", serde_json::json!("pub struct $NAME { $$$FIELDS }")),
+            (
+                "pattern",
+                serde_json::json!("pub struct $NAME { $$$FIELDS }"),
+            ),
             ("lang", serde_json::json!("rust")),
         ]);
 
         let result = tool.execute(args, &ctx).await;
         assert!(result.success, "should succeed: {:?}", result.output);
         let output = result.output.unwrap_or_default();
-        assert!(output.contains("Config"), "should find struct Config: {output}");
+        assert!(
+            output.contains("Config"),
+            "should find struct Config: {output}"
+        );
     }
 
     #[tokio::test]
@@ -1041,14 +1047,20 @@ mod tests {
         let tool = AstGrepTool;
         let ctx = ToolContext::new(tmp.path());
         let args = make_args(&[
-            ("pattern", serde_json::json!("impl $TRAIT for $TYPE { $$$BODY }")),
+            (
+                "pattern",
+                serde_json::json!("impl $TRAIT for $TYPE { $$$BODY }"),
+            ),
             ("lang", serde_json::json!("rust")),
         ]);
 
         let result = tool.execute(args, &ctx).await;
         assert!(result.success);
         let output = result.output.unwrap_or_default();
-        assert!(output.contains("Bar"), "should find impl Bar for Foo: {output}");
+        assert!(
+            output.contains("Bar"),
+            "should find impl Bar for Foo: {output}"
+        );
     }
 
     #[tokio::test]
@@ -1076,7 +1088,10 @@ mod tests {
         let result = tool.execute(args, &ctx).await;
         assert!(result.success);
         let output = result.output.unwrap_or_default();
-        assert!(output.contains("greet"), "should find greet function: {output}");
+        assert!(
+            output.contains("greet"),
+            "should find greet function: {output}"
+        );
     }
 
     #[tokio::test]
@@ -1118,7 +1133,10 @@ mod tests {
         let tool = AstGrepTool;
         let ctx = ToolContext::new(tmp.path());
         let args = make_args(&[
-            ("pattern", serde_json::json!("pub struct $NAME { $$$FIELDS }")),
+            (
+                "pattern",
+                serde_json::json!("pub struct $NAME { $$$FIELDS }"),
+            ),
             ("lang", serde_json::json!("rust")),
         ]);
 
@@ -1234,14 +1252,20 @@ mod tests {
         let tool = AstGrepTool;
         let ctx = ToolContext::new(tmp.path());
         let args = make_args(&[
-            ("pattern", serde_json::json!("func $NAME($$$ARGS) { $$$BODY }")),
+            (
+                "pattern",
+                serde_json::json!("func $NAME($$$ARGS) { $$$BODY }"),
+            ),
             ("lang", serde_json::json!("go")),
         ]);
 
         let result = tool.execute(args, &ctx).await;
         assert!(result.success);
         let output = result.output.unwrap_or_default();
-        assert!(output.contains("greet"), "should find greet function: {output}");
+        assert!(
+            output.contains("greet"),
+            "should find greet function: {output}"
+        );
     }
 
     #[tokio::test]

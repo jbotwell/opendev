@@ -233,23 +233,21 @@ impl AdaptedClient {
                 break;
             }
 
-            let chunk_result = match tokio::time::timeout(
-                std::time::Duration::from_secs(120),
-                byte_stream.next(),
-            )
-            .await
-            {
-                Ok(Some(result)) => result,
-                Ok(None) => {
-                    stream_end_reason = Some("connection closed by server");
-                    break;
-                }
-                Err(_elapsed) => {
-                    warn!("SSE stream idle timeout (120s with no data)");
-                    stream_end_reason = Some("idle timeout (120s with no data)");
-                    break;
-                }
-            };
+            let chunk_result =
+                match tokio::time::timeout(std::time::Duration::from_secs(120), byte_stream.next())
+                    .await
+                {
+                    Ok(Some(result)) => result,
+                    Ok(None) => {
+                        stream_end_reason = Some("connection closed by server");
+                        break;
+                    }
+                    Err(_elapsed) => {
+                        warn!("SSE stream idle timeout (120s with no data)");
+                        stream_end_reason = Some("idle timeout (120s with no data)");
+                        break;
+                    }
+                };
 
             // Check cancellation
             if let Some(token) = cancel
@@ -337,11 +335,13 @@ impl AdaptedClient {
                                 }
                                 StreamEvent::FunctionCallDone { index, arguments } => {
                                     if let Some(&tc_idx) = tool_call_index.get(index) {
-                                        current_tool_args
-                                            .insert(tc_idx, arguments.clone());
+                                        current_tool_args.insert(tc_idx, arguments.clone());
                                     }
                                 }
-                                StreamEvent::UsageUpdate { usage, stop_reason: sr } => {
+                                StreamEvent::UsageUpdate {
+                                    usage,
+                                    stop_reason: sr,
+                                } => {
                                     if let Some(u) = usage {
                                         usage_data = Some(u.clone());
                                     }
@@ -368,8 +368,7 @@ impl AdaptedClient {
                     if !line_buf.is_empty() {
                         if line_buf.trim() == "data: [DONE]" {
                             stream_done = true;
-                        } else if let Some(data_json) =
-                            crate::streaming::parse_sse_data(&line_buf)
+                        } else if let Some(data_json) = crate::streaming::parse_sse_data(&line_buf)
                         {
                             let et = event_type.as_deref().unwrap_or_else(|| {
                                 data_json.get("type").and_then(|t| t.as_str()).unwrap_or("")

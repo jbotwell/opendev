@@ -235,9 +235,7 @@ impl App {
                             id: item.id,
                             title: item.title.clone(),
                             status: match item.status {
-                                opendev_runtime::TodoStatus::Pending => {
-                                    TodoDisplayStatus::Pending
-                                }
+                                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
                                 opendev_runtime::TodoStatus::InProgress => {
                                     TodoDisplayStatus::InProgress
                                 }
@@ -974,9 +972,7 @@ impl App {
                             id: item.id,
                             title: item.title.clone(),
                             status: match item.status {
-                                opendev_runtime::TodoStatus::Pending => {
-                                    TodoDisplayStatus::Pending
-                                }
+                                opendev_runtime::TodoStatus::Pending => TodoDisplayStatus::Pending,
                                 opendev_runtime::TodoStatus::InProgress => {
                                     TodoDisplayStatus::InProgress
                                 }

@@ -2630,6 +2630,7 @@ dependencies = [
  "opendev-runtime",
  "opendev-tools-core",
  "ratatui",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",

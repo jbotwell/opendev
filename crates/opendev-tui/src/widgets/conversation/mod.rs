@@ -349,12 +349,9 @@ impl<'a> ConversationWidget<'a> {
                         } else if let Some(started) = msg.thinking_started_at {
                             // Streaming: shimmer wave animation
                             let elapsed = started.elapsed().as_secs();
-                            let text = format!(
-                                "{} Thinking... {}s",
-                                style_tokens::THINKING_ICON, elapsed
-                            );
-                            let highlight =
-                                ratatui::style::Color::Rgb(200, 200, 220);
+                            let text =
+                                format!("{} Thinking... {}s", style_tokens::THINKING_ICON, elapsed);
+                            let highlight = ratatui::style::Color::Rgb(200, 200, 220);
                             let mut spans = style_tokens::shimmer_line(
                                 &text,
                                 0, // fallback path has no tick_count
@@ -441,9 +438,8 @@ impl<'a> ConversationWidget<'a> {
         let tool_line = format_tool_call(tc, Some(self.working_dir));
         lines.push(tool_line);
 
-        let is_bash =
-            crate::formatters::tool_registry::lookup_tool(&tc.name).result_format
-                == ResultFormat::Bash;
+        let is_bash = crate::formatters::tool_registry::lookup_tool(&tc.name).result_format
+            == ResultFormat::Bash;
 
         // Collapsible result lines (diff tools are never collapsed)
         let effective_collapsed = tc.collapsed && !check_diff_tool(&tc.name);

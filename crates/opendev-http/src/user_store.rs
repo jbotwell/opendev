@@ -121,7 +121,9 @@ impl UserStore {
                 std::fs::create_dir_all(parent)?;
             }
             // Write to temp file, then rename (atomic)
-            let tmp_path = self.users_file.with_extension(format!("tmp.{}", Uuid::new_v4()));
+            let tmp_path = self
+                .users_file
+                .with_extension(format!("tmp.{}", Uuid::new_v4()));
 
             #[cfg(unix)]
             {
@@ -171,7 +173,9 @@ impl UserStore {
         }
 
         // Write to temp file, then rename (atomic)
-        let tmp_path = self.users_file.with_extension(format!("tmp.{}", Uuid::new_v4()));
+        let tmp_path = self
+            .users_file
+            .with_extension(format!("tmp.{}", Uuid::new_v4()));
 
         #[cfg(unix)]
         {
@@ -189,8 +193,6 @@ impl UserStore {
         Ok(())
     }
 
-
-
     /// Check and tighten file permissions on Unix.
     #[cfg(unix)]
     fn check_permissions(&self) {
@@ -202,8 +204,10 @@ impl UserStore {
                     "User store file {:?} has loose permissions ({:o}). Tightening to 0600.",
                     self.users_file, mode
                 );
-                let _ =
-                    std::fs::set_permissions(&self.users_file, std::fs::Permissions::from_mode(0o600));
+                let _ = std::fs::set_permissions(
+                    &self.users_file,
+                    std::fs::Permissions::from_mode(0o600),
+                );
             }
         }
     }
