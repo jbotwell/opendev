@@ -108,6 +108,25 @@ lto = "thin"    # Faster CI builds with thin LTO
 - **CHANGELOG.md** -- Keep a Changelog format, drives release notes
 - **Cargo.toml** `[workspace.package].version` -- single source of truth for version
 
+## Bundled Microsandbox Runtime
+
+Release archives for supported platforms (macOS ARM, Linux x86_64, Linux ARM64) include the microsandbox runtime in a `runtime/msb/` directory. This enables the `sandbox_exec` tool without requiring users to install microsandbox separately.
+
+**Version management:** The bundled microsandbox version is set via the `MSB_VERSION` env var at the top of `.github/workflows/release.yml`. To upgrade:
+
+1. Update `MSB_VERSION` in `release.yml`
+2. Test locally with the new version
+3. The next release will bundle the updated runtime
+
+**Platform coverage:**
+- macOS ARM64 (Apple Silicon): bundled
+- Linux x86_64: bundled
+- Linux ARM64: bundled
+- macOS Intel: not available (microsandbox limitation)
+- Windows: not available (microsandbox limitation)
+
+The Homebrew formula also includes microsandbox as a `resource` block, installed to `libexec/msb/`.
+
 ## CI Secrets
 
 | Secret | Purpose |

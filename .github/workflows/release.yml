@@ -17,6 +17,11 @@ name: Release
 permissions:
   "contents": "write"
 
+env:
+  # Microsandbox version to bundle with OpenDev releases.
+  # Update this when upgrading the bundled runtime.
+  MSB_VERSION: "0.3.3"
+
 # This task will run whenever you push a git tag that looks like a version
 # like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
 # Various formats will be parsed into a VERSION and an optional PACKAGE_NAME, where
@@ -157,6 +162,49 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
+      - name: Bundle microsandbox runtime
+        if: "!contains(join(matrix.targets, ' '), 'windows') && !contains(join(matrix.targets, ' '), 'x86_64-apple')"
+        shell: bash
+        run: |
+          # Map cargo target triple to microsandbox release platform
+          TARGET="${{ join(matrix.targets, ' ') }}"
+          case "$TARGET" in
+            *aarch64-apple-darwin*)     MSB_PLATFORM="darwin-aarch64" ;;
+            *x86_64-unknown-linux-gnu*) MSB_PLATFORM="linux-x86_64" ;;
+            *aarch64-unknown-linux-gnu*)MSB_PLATFORM="linux-aarch64" ;;
+            *) echo "No microsandbox for $TARGET, skipping"; exit 0 ;;
+          esac
+
+          echo "Downloading microsandbox v${MSB_VERSION} for ${MSB_PLATFORM}..."
+          curl -L --retry 3 \
+            "https://github.com/nicholasgasior/microsandbox/releases/download/v${MSB_VERSION}/microsandbox-${MSB_PLATFORM}.tar.gz" \
+            -o msb-release.tar.gz
+          mkdir -p msb-extracted
+          tar xzf msb-release.tar.gz -C msb-extracted
+
+          # Inject into the cargo-dist archive
+          ARCHIVE=$(find target/distrib -name "opendev-cli-*.tar.xz" 2>/dev/null | head -1)
+          if [ -z "$ARCHIVE" ]; then
+            echo "No .tar.xz archive found, skipping microsandbox bundle"
+            exit 0
+          fi
+          echo "Injecting microsandbox into $ARCHIVE..."
+
+          TMPDIR=$(mktemp -d)
+          tar xf "$ARCHIVE" -C "$TMPDIR"
+          INNER=$(ls "$TMPDIR")
+
+          # Place runtime files inside the archive
+          mkdir -p "$TMPDIR/$INNER/runtime/msb/bin" "$TMPDIR/$INNER/runtime/msb/lib"
+          cp msb-extracted/bin/* "$TMPDIR/$INNER/runtime/msb/bin/" 2>/dev/null || true
+          cp msb-extracted/lib/* "$TMPDIR/$INNER/runtime/msb/lib/" 2>/dev/null || true
+
+          # Re-archive with xz compression
+          (cd "$TMPDIR" && tar cf - "$INNER") | xz > "$ARCHIVE"
+          rm -rf "$TMPDIR" msb-extracted msb-release.tar.gz
+
+          echo "Bundled microsandbox ${MSB_PLATFORM} into $(basename $ARCHIVE)"
+
       - name: "Upload artifacts"
         uses: actions/upload-artifact@v6
         with:
@@ -309,6 +357,23 @@ jobs:
           # formula filename (`opendev.rb` -> `Opendev`).
           perl -0pi -e 's/^class\s+\w+\s+< Formula$/class Opendev < Formula/m' "$FORMULA"
           grep -q '^class Opendev < Formula$' "$FORMULA"
+
+          # Add microsandbox runtime as a Homebrew resource (macOS ARM only)
+          MSB_URL="https://github.com/nicholasgasior/microsandbox/releases/download/v${MSB_VERSION}/microsandbox-darwin-aarch64.tar.gz"
+          curl -sL "$MSB_URL" -o /tmp/msb-darwin.tar.gz
+          MSB_SHA=$(sha256sum /tmp/msb-darwin.tar.gz | cut -d' ' -f1)
+          rm -f /tmp/msb-darwin.tar.gz
+
+          # Write resource block to a temp file, then inject after first sha256 line
+          printf '\n  resource "microsandbox" do\n    on_arm do\n      url "%s"\n      sha256 "%s"\n    end\n  end\n' "$MSB_URL" "$MSB_SHA" > /tmp/msb-resource.rb
+          awk '/^\s+sha256 "/ && !done { print; while ((getline line < "/tmp/msb-resource.rb") > 0) print line; done=1; next } { print }' "$FORMULA" > "${FORMULA}.tmp"
+          mv "${FORMULA}.tmp" "$FORMULA"
+
+          # Insert microsandbox install logic after bin.install "opendev"
+          sed -i 's|bin\.install "opendev"|bin.install "opendev"\n    resource("microsandbox").stage do\n      (libexec/"msb/bin").install Dir["bin/*"]\n      (libexec/"msb/lib").install Dir["lib/*"]\n    end|' "$FORMULA"
+          rm -f /tmp/msb-resource.rb
+
+          echo "Patched Homebrew formula with microsandbox resource (SHA: ${MSB_SHA})"
 
           # Clone the tap's canonical branch explicitly to avoid publishing
           # into an unexpected local HEAD state.
