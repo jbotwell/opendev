@@ -1,11 +1,13 @@
 //! Configuration models.
 
 mod agent;
+mod channels;
 mod formatter;
 mod permissions;
 mod realm;
 
 pub use agent::{AgentConfigInline, ModelVariant};
+pub use channels::{ChannelsConfig, DmPolicy, TelegramChannelConfig, is_channels_default};
 pub use formatter::{FormatterConfig, FormatterOverride, FormatterOverrides};
 pub use permissions::{PermissionConfig, ToolPermission};
 pub use realm::SandboxConfig;
@@ -292,6 +294,10 @@ pub struct AppConfig {
     #[serde(default, skip_serializing_if = "FormatterConfig::is_default")]
     pub formatter: FormatterConfig,
 
+    // Channel integrations (Telegram, etc.)
+    #[serde(default, skip_serializing_if = "is_channels_default")]
+    pub channels: ChannelsConfig,
+
     // Sandbox execution configuration (microsandbox microVMs)
     #[serde(default)]
     pub sandbox: SandboxConfig,
@@ -379,6 +385,7 @@ impl Default for AppConfig {
             agents: HashMap::new(),
             model_variants: HashMap::new(),
             formatter: FormatterConfig::default(),
+            channels: ChannelsConfig::default(),
             sandbox: SandboxConfig::default(),
             config_version: default_config_version(),
         }

@@ -4,6 +4,8 @@
 //! runs them through the agent pipeline, and sends events back to update
 //! the UI.
 
+pub mod remote;
+
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -20,11 +22,17 @@ use opendev_runtime::InterruptToken;
 use opendev_tui::app::AppState;
 use opendev_tui::{App, AppEvent};
 
+use opendev_channels::telegram::remote::{
+    RemoteCommandReceiver, RemoteEvent, RemoteEventSender,
+};
+
 use crate::runtime::AgentRuntime;
 
-/// Event callback that forwards agent events to the TUI via AppEvent channel.
+/// Event callback that forwards agent events to the TUI via AppEvent channel,
+/// and optionally broadcasts to a remote session (Telegram).
 struct TuiEventCallback {
     tx: mpsc::UnboundedSender<AppEvent>,
+    remote_tx: Option<RemoteEventSender>,
 }
 
 impl AgentEventCallback for TuiEventCallback {
@@ -39,6 +47,12 @@ impl AgentEventCallback for TuiEventCallback {
             tool_name: tool_name.to_string(),
             args: args.clone(),
         });
+        if let Some(ref rtx) = self.remote_tx {
+            let _ = rtx.send(RemoteEvent::ToolStarted {
+                tool_name: tool_name.to_string(),
+                args: args.clone(),
+            });
+        }
     }
 
     fn on_tool_finished(&self, tool_id: &str, success: bool) {
@@ -46,10 +60,10 @@ impl AgentEventCallback for TuiEventCallback {
             tool_id: tool_id.to_string(),
             success,
         });
+        // ToolFinished remote event is sent via on_tool_result for more info
     }
 
     fn on_tool_result(&self, tool_id: &str, tool_name: &str, output: &str, success: bool) {
-        // Args will be looked up from the stored ToolExecution in app.rs
         let _ = self.tx.send(AppEvent::ToolResult {
             tool_id: tool_id.to_string(),
             tool_name: tool_name.to_string(),
@@ -57,10 +71,20 @@ impl AgentEventCallback for TuiEventCallback {
             success,
             args: std::collections::HashMap::new(),
         });
+        if let Some(ref rtx) = self.remote_tx {
+            let _ = rtx.send(RemoteEvent::ToolResult {
+                tool_name: tool_name.to_string(),
+                output: output.to_string(),
+                success,
+            });
+        }
     }
 
     fn on_agent_chunk(&self, text: &str) {
         let _ = self.tx.send(AppEvent::AgentChunk(text.to_string()));
+        if let Some(ref rtx) = self.remote_tx {
+            let _ = rtx.send(RemoteEvent::AgentChunk(text.to_string()));
+        }
     }
 
     fn on_reasoning(&self, content: &str) {
@@ -75,6 +99,9 @@ impl AgentEventCallback for TuiEventCallback {
 
     fn on_context_usage(&self, pct: f64) {
         let _ = self.tx.send(AppEvent::ContextUsage(pct));
+        if let Some(ref rtx) = self.remote_tx {
+            let _ = rtx.send(RemoteEvent::ContextUsage(pct));
+        }
     }
 
     fn on_file_changed(&self, files: usize, additions: u64, deletions: u64) {
@@ -83,6 +110,13 @@ impl AgentEventCallback for TuiEventCallback {
             additions,
             deletions,
         });
+        if let Some(ref rtx) = self.remote_tx {
+            let _ = rtx.send(RemoteEvent::FileChangeSummary {
+                files,
+                additions,
+                deletions,
+            });
+        }
     }
 }
 
@@ -144,6 +178,12 @@ pub struct TuiRunner {
     runtime: AgentRuntime,
     system_prompt: String,
     initial_message: Option<String>,
+    /// Remote event sender for Telegram remote control.
+    remote_event_tx: Option<RemoteEventSender>,
+    /// Remote command receiver for Telegram remote control.
+    remote_command_rx: Option<RemoteCommandReceiver>,
+    /// Remote bridge for handling approval request resolution.
+    remote_bridge: Option<Arc<opendev_channels::telegram::RemoteSessionBridge>>,
 }
 
 impl TuiRunner {
@@ -153,12 +193,28 @@ impl TuiRunner {
             runtime,
             system_prompt,
             initial_message: None,
+            remote_event_tx: None,
+            remote_command_rx: None,
+            remote_bridge: None,
         }
     }
 
     /// Set an initial message to send to the agent when the TUI starts.
     pub fn with_initial_message(mut self, msg: Option<String>) -> Self {
         self.initial_message = msg;
+        self
+    }
+
+    /// Attach a Telegram remote control session.
+    pub fn with_remote_control(
+        mut self,
+        event_tx: RemoteEventSender,
+        command_rx: RemoteCommandReceiver,
+        bridge: Arc<opendev_channels::telegram::RemoteSessionBridge>,
+    ) -> Self {
+        self.remote_event_tx = Some(event_tx);
+        self.remote_command_rx = Some(command_rx);
+        self.remote_bridge = Some(bridge);
         self
     }
 
@@ -300,14 +356,26 @@ impl TuiRunner {
         }
 
         // Create the event callback for tool/agent events
+        let remote_event_tx = self.remote_event_tx.take();
         let callback = TuiEventCallback {
             tx: event_tx.clone(),
+            remote_tx: remote_event_tx.clone(),
         };
+
+        // Spawn remote control bridges (Telegram → TUI)
+        if let Some(remote_rx) = self.remote_command_rx.take() {
+            remote::spawn_command_listener(remote_rx, user_tx.clone(), event_tx.clone());
+        }
+
+        if let (Some(bridge), Some(rtx)) = (self.remote_bridge.take(), remote_event_tx.clone()) {
+            remote::spawn_approval_bridge(bridge, rtx, event_tx.clone(), &mut self.runtime);
+        }
 
         // Spawn the agent listener task
         let system_prompt = self.system_prompt;
         let mut runtime = self.runtime;
 
+        let remote_tx_for_agent = remote_event_tx.clone();
         tokio::spawn(async move {
             while let Some(msg) = user_rx.recv().await {
                 // Handle reasoning effort change sentinel
@@ -458,6 +526,9 @@ impl TuiRunner {
                 let _ = event_tx.send(AppEvent::TaskProgressStarted {
                     description: "Thinking".to_string(),
                 });
+                if let Some(ref rtx) = remote_tx_for_agent {
+                    let _ = rtx.send(RemoteEvent::AgentStarted);
+                }
 
                 // Run the query through the agent pipeline with event callback
                 match runtime
@@ -816,18 +887,34 @@ impl TuiRunner {
 
                         if result.interrupted {
                             let _ = event_tx.send(AppEvent::AgentInterrupted);
+                            if let Some(ref rtx) = remote_tx_for_agent {
+                                let _ = rtx.send(RemoteEvent::AgentInterrupted);
+                            }
                         } else {
                             let _ = event_tx.send(AppEvent::AgentFinished);
+                            if let Some(ref rtx) = remote_tx_for_agent {
+                                let _ = rtx.send(RemoteEvent::AgentFinished);
+                            }
                             if !result.success {
                                 let _ = event_tx.send(AppEvent::AgentError(
                                     "Agent completed with errors".to_string(),
                                 ));
                             }
                         }
+
+                        // Forward session title to remote
+                        if let Some(ref rtx) = remote_tx_for_agent
+                            && let Some(title) = runtime.session_manager.get_metadata("title")
+                        {
+                            let _ = rtx.send(RemoteEvent::SessionTitleUpdated(title));
+                        }
                     }
                     Err(e) => {
                         let _ = event_tx.send(AppEvent::TaskProgressFinished);
                         let _ = event_tx.send(AppEvent::AgentError(e.to_string()));
+                        if let Some(ref rtx) = remote_tx_for_agent {
+                            let _ = rtx.send(RemoteEvent::AgentError(e.to_string()));
+                        }
                     }
                 }
             }

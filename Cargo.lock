@@ -4012,11 +4012,15 @@ version = "0.1.4"
 dependencies = [
  "async-trait",
  "chrono",
+ "libc",
  "opendev-models",
+ "reqwest 0.13.2",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "tracing",
  "uuid",
 ]
@@ -4031,6 +4035,7 @@ dependencies = [
  "crossterm",
  "dirs-next",
  "opendev-agents",
+ "opendev-channels",
  "opendev-config",
  "opendev-context",
  "opendev-history",

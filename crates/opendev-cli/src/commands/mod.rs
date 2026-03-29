@@ -1,4 +1,6 @@
-//! Subcommand handlers for setup, config, MCP, session, and run commands.
+//! Subcommand handlers for setup, config, MCP, session, channel, and run commands.
+
+mod channel;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -8,6 +10,8 @@ use tracing::info;
 
 use crate::cli::*;
 use crate::helpers::*;
+
+pub use channel::{handle_channel, handle_remote};
 
 /// Handle the top-level `opendev setup` command.
 pub async fn handle_setup() {
