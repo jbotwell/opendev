@@ -7,6 +7,7 @@
 <p align="center">
   <a href="https://github.com/opendev-to/opendev/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/opendev-to/opendev?style=flat-square&color=blue" /></a>
   <a href="https://github.com/opendev-to/opendev/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/opendev-to/opendev/total?style=flat-square&color=brightgreen" /></a>
+  <a href="https://crates.io/crates/opendev-cli"><img alt="crates.io" src="https://img.shields.io/crates/d/opendev-cli?style=flat-square&label=crates.io&color=e6522c" /></a>
   <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <a href="https://www.rust-lang.org/"><img alt="Rust" src="https://img.shields.io/badge/rust-%3E%3D1.94-orange.svg?style=flat-square" /></a>
   <a href="https://github.com/opendev-to/opendev/actions/workflows/release.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/opendev-to/opendev/release.yml?style=flat-square&label=CI" /></a>
@@ -77,6 +78,12 @@ You                          OpenDev Fleet
 ---
 
 ### Installation
+
+#### From crates.io (all platforms)
+
+```bash
+cargo install opendev-cli
+```
 
 #### macOS
 
