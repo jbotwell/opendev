@@ -4,18 +4,11 @@ use std::time::Duration;
 
 use tempfile::TempDir;
 
-use super::{DirectoryRegistry, now_millis};
+use super::DirectoryRegistry;
+use crate::event_bus::now_ms;
 
-/// Helper: create a canonicalized temp dir.
 fn tmp_dir() -> TempDir {
-    let t = TempDir::new().unwrap();
-    // On macOS /tmp -> /private/var/..., canonicalize for stable paths.
-    let canon = t.path().canonicalize().unwrap();
-    // Re-wrap so the canonical path is used everywhere.
-    // We keep the original TempDir alive (it owns the cleanup).
-    // We'll just use canon via the TempDir we return.
-    drop(canon);
-    t
+    TempDir::new().unwrap()
 }
 
 fn canon(t: &TempDir) -> std::path::PathBuf {
@@ -74,7 +67,7 @@ async fn test_cleanup_idle_removes_old_contexts() {
     let ctx = registry.get_or_create(&p).await.unwrap();
 
     // Manually backdate last_activity by 200ms.
-    let old = now_millis().saturating_sub(200);
+    let old = now_ms().saturating_sub(200);
     ctx.last_activity.store(old, Ordering::Relaxed);
 
     let removed = registry.cleanup_idle().await;

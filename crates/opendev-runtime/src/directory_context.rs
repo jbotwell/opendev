@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -16,18 +16,10 @@ use tracing::{debug, info};
 
 use opendev_history::SessionManager;
 
-use crate::event_bus::EventBus;
+use crate::event_bus::{EventBus, now_ms};
 
 #[cfg(test)]
 mod tests;
-
-/// Return current wall-clock time as milliseconds since the Unix epoch.
-fn now_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
 
 // ---------------------------------------------------------------------------
 // DirectoryContext
@@ -58,7 +50,7 @@ impl DirectoryContext {
             session_manager: RwLock::new(session_manager),
             event_bus,
             created_at: Instant::now(),
-            last_activity: AtomicU64::new(now_millis()),
+            last_activity: AtomicU64::new(now_ms()),
         }
     }
 
@@ -84,13 +76,13 @@ impl DirectoryContext {
 
     /// Record current time as the last activity.
     pub fn touch(&self) {
-        self.last_activity.store(now_millis(), Ordering::Relaxed);
+        self.last_activity.store(now_ms(), Ordering::Relaxed);
     }
 
     /// Duration since the last activity.
     pub fn idle_duration(&self) -> Duration {
         let last = self.last_activity.load(Ordering::Relaxed);
-        let now = now_millis();
+        let now = now_ms();
         Duration::from_millis(now.saturating_sub(last))
     }
 
@@ -205,12 +197,11 @@ impl DirectoryRegistry {
         let before = contexts.len();
         contexts.retain(|path, ctx| {
             let idle = ctx.idle_duration();
-            if idle > self.max_idle {
+            let keep = idle <= self.max_idle;
+            if !keep {
                 debug!(?path, ?idle, "Removing idle DirectoryContext");
-                false
-            } else {
-                true
             }
+            keep
         });
         let removed = before - contexts.len();
         if removed > 0 {
