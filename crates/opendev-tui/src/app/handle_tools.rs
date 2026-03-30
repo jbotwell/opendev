@@ -24,8 +24,12 @@ impl App {
             // Clear stale subagent entries before adding new ones:
             // - All finished non-backgrounded subagents (previous batch completed)
             // - Orphaned unfinished subagents whose parent tool is gone (race condition)
-            let active_tool_ids: std::collections::HashSet<&str> =
-                self.state.active_tools.iter().map(|t| t.id.as_str()).collect();
+            let active_tool_ids: std::collections::HashSet<&str> = self
+                .state
+                .active_tools
+                .iter()
+                .map(|t| t.id.as_str())
+                .collect();
             self.state.active_subagents.retain(|s| {
                 if s.backgrounded {
                     return true;

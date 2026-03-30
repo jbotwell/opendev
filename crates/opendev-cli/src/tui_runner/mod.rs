@@ -22,9 +22,7 @@ use opendev_runtime::InterruptToken;
 use opendev_tui::app::AppState;
 use opendev_tui::{App, AppEvent, ExitInfo};
 
-use opendev_channels::telegram::remote::{
-    RemoteCommandReceiver, RemoteEvent, RemoteEventSender,
-};
+use opendev_channels::telegram::remote::{RemoteCommandReceiver, RemoteEvent, RemoteEventSender};
 
 use crate::runtime::AgentRuntime;
 
