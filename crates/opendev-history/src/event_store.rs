@@ -5,6 +5,9 @@
 //! guards session state transitions.
 
 use std::collections::HashMap;
+use std::io::{BufRead, Write};
+use std::path::PathBuf;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -15,6 +18,8 @@ use opendev_models::file_change::FileChange;
 use opendev_models::message::ToolCall;
 use opendev_models::session::Session;
 use opendev_models::transition::{TransitionError, ValidateTransition};
+
+use crate::file_locks::FileLock;
 
 // ---------------------------------------------------------------------------
 // SessionEvent
@@ -117,6 +122,156 @@ impl EventEnvelope {
             data: serde_json::to_value(event).expect("SessionEvent must be serializable"),
             timestamp: Utc::now(),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// EventStore
+// ---------------------------------------------------------------------------
+
+/// JSONL-file-backed event store.
+///
+/// Each aggregate (session) gets its own event log file at
+/// `{sessions_dir}/{aggregate_id}.events.jsonl`. Events are append-only
+/// JSONL lines, each containing a serialized `EventEnvelope`.
+pub struct EventStore {
+    /// Base directory where event log files are stored.
+    sessions_dir: PathBuf,
+}
+
+/// Default timeout for file lock acquisition.
+const LOCK_TIMEOUT: Duration = Duration::from_secs(5);
+
+impl EventStore {
+    /// Create a new event store rooted at `sessions_dir`.
+    pub fn new(sessions_dir: PathBuf) -> Self {
+        Self { sessions_dir }
+    }
+
+    /// Returns the path to the event log file for a given aggregate.
+    pub fn event_log_path(&self, aggregate_id: &str) -> PathBuf {
+        self.sessions_dir
+            .join(format!("{}.events.jsonl", aggregate_id))
+    }
+
+    /// Append events to the aggregate's event log. Returns the created envelopes.
+    ///
+    /// Acquires an exclusive file lock, reads the current max sequence number,
+    /// then appends each event as a JSON line with an incrementing seq.
+    pub fn append(
+        &self,
+        aggregate_id: &str,
+        events: Vec<SessionEvent>,
+    ) -> Result<Vec<EventEnvelope>, String> {
+        if events.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let path = self.event_log_path(aggregate_id);
+        let _lock =
+            FileLock::acquire(&path, LOCK_TIMEOUT).map_err(|e| format!("lock failed: {e}"))?;
+
+        // Read current max seq from the last line of the file.
+        let mut last_seq = self.read_last_seq(&path);
+
+        // Open file in append mode (create if needed).
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| format!("open failed: {e}"))?;
+
+        let mut envelopes = Vec::with_capacity(events.len());
+        for event in &events {
+            last_seq += 1;
+            let envelope = EventEnvelope::new(aggregate_id, last_seq, event);
+            let line =
+                serde_json::to_string(&envelope).map_err(|e| format!("serialize failed: {e}"))?;
+            writeln!(file, "{}", line).map_err(|e| format!("write failed: {e}"))?;
+            envelopes.push(envelope);
+        }
+
+        file.flush().map_err(|e| format!("flush failed: {e}"))?;
+        // _lock drops here, releasing the file lock.
+
+        Ok(envelopes)
+    }
+
+    /// Load all events for the given aggregate, sorted by seq.
+    pub fn load(&self, aggregate_id: &str) -> Result<Vec<EventEnvelope>, String> {
+        let path = self.event_log_path(aggregate_id);
+        let file = match std::fs::File::open(&path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+            Err(e) => return Err(format!("open failed: {e}")),
+        };
+        let reader = std::io::BufReader::new(file);
+
+        let mut envelopes = Vec::new();
+        for (i, line) in reader.lines().enumerate() {
+            let line = line.map_err(|e| format!("read line {} failed: {e}", i + 1))?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            let envelope: EventEnvelope = serde_json::from_str(&line)
+                .map_err(|e| format!("parse line {} failed: {e}", i + 1))?;
+            envelopes.push(envelope);
+        }
+
+        envelopes.sort_by_key(|e| e.seq);
+        Ok(envelopes)
+    }
+
+    /// Load events with seq strictly greater than `after_seq`.
+    pub fn load_since(
+        &self,
+        aggregate_id: &str,
+        after_seq: u64,
+    ) -> Result<Vec<EventEnvelope>, String> {
+        let mut envelopes = self.load(aggregate_id)?;
+        envelopes.retain(|e| e.seq > after_seq);
+        Ok(envelopes)
+    }
+
+    /// Return the highest sequence number for the aggregate, or 0 if none.
+    pub fn latest_seq(&self, aggregate_id: &str) -> Result<u64, String> {
+        let path = self.event_log_path(aggregate_id);
+        Ok(self.read_last_seq(&path))
+    }
+
+    /// Check whether the aggregate has any persisted events.
+    pub fn has_events(&self, aggregate_id: &str) -> bool {
+        let path = self.event_log_path(aggregate_id);
+        match std::fs::metadata(&path) {
+            Ok(meta) => meta.len() > 0,
+            Err(_) => false,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Private helpers
+    // -----------------------------------------------------------------------
+
+    /// Read the last line of a JSONL file and extract its seq, or return 0.
+    fn read_last_seq(&self, path: &std::path::Path) -> u64 {
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return 0,
+        };
+
+        // Walk backwards to find the last non-empty line.
+        let text = String::from_utf8_lossy(&bytes);
+        for line in text.lines().rev() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok(envelope) = serde_json::from_str::<EventEnvelope>(trimmed) {
+                return envelope.seq;
+            }
+            break;
+        }
+        0
     }
 }
 

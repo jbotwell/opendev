@@ -4,6 +4,7 @@ use chrono::Utc;
 use opendev_models::file_change::{FileChange, FileChangeType};
 use opendev_models::session::Session;
 use opendev_models::transition::ValidateTransition;
+use tempfile::TempDir;
 
 use super::*;
 
@@ -292,4 +293,111 @@ fn test_validate_valid_transitions() {
         metadata: HashMap::new(),
     };
     assert!(session.validate_transition(&event).is_ok());
+}
+
+// ---------------------------------------------------------------------------
+// EventStore tests
+// ---------------------------------------------------------------------------
+
+fn make_temp_store() -> (TempDir, EventStore) {
+    let dir = TempDir::new().expect("create temp dir");
+    let path = dir.path().canonicalize().expect("canonicalize");
+    let store = EventStore::new(path);
+    (dir, store)
+}
+
+fn sample_events(n: usize) -> Vec<SessionEvent> {
+    (0..n)
+        .map(|i| SessionEvent::TitleChanged {
+            title: format!("title-{i}"),
+        })
+        .collect()
+}
+
+#[test]
+fn test_event_store_append_and_load() {
+    let (_dir, store) = make_temp_store();
+    let events = sample_events(3);
+    let envelopes = store.append("sess-1", events).unwrap();
+    assert_eq!(envelopes.len(), 3);
+
+    let loaded = store.load("sess-1").unwrap();
+    assert_eq!(loaded.len(), 3);
+    for (i, env) in loaded.iter().enumerate() {
+        assert_eq!(env.seq, (i + 1) as u64);
+        assert_eq!(env.aggregate_id, "sess-1");
+        assert_eq!(env.event_type, "TitleChanged");
+    }
+}
+
+#[test]
+fn test_event_store_append_increments_seq() {
+    let (_dir, store) = make_temp_store();
+    store.append("sess-1", sample_events(2)).unwrap();
+    let second_batch = store.append("sess-1", sample_events(3)).unwrap();
+
+    assert_eq!(second_batch[0].seq, 3);
+    assert_eq!(second_batch[1].seq, 4);
+    assert_eq!(second_batch[2].seq, 5);
+
+    let all = store.load("sess-1").unwrap();
+    assert_eq!(all.len(), 5);
+    for (i, env) in all.iter().enumerate() {
+        assert_eq!(env.seq, (i + 1) as u64);
+    }
+}
+
+#[test]
+fn test_event_store_load_empty() {
+    let (_dir, store) = make_temp_store();
+    let loaded = store.load("nonexistent").unwrap();
+    assert!(loaded.is_empty());
+}
+
+#[test]
+fn test_event_store_load_since() {
+    let (_dir, store) = make_temp_store();
+    store.append("sess-1", sample_events(5)).unwrap();
+
+    let since = store.load_since("sess-1", 2).unwrap();
+    assert_eq!(since.len(), 3);
+    assert_eq!(since[0].seq, 3);
+    assert_eq!(since[1].seq, 4);
+    assert_eq!(since[2].seq, 5);
+}
+
+#[test]
+fn test_event_store_latest_seq() {
+    let (_dir, store) = make_temp_store();
+    assert_eq!(store.latest_seq("sess-1").unwrap(), 0);
+
+    store.append("sess-1", sample_events(3)).unwrap();
+    assert_eq!(store.latest_seq("sess-1").unwrap(), 3);
+
+    store.append("sess-1", sample_events(2)).unwrap();
+    assert_eq!(store.latest_seq("sess-1").unwrap(), 5);
+}
+
+#[test]
+fn test_event_store_has_events() {
+    let (_dir, store) = make_temp_store();
+    assert!(!store.has_events("sess-1"));
+
+    store.append("sess-1", sample_events(1)).unwrap();
+    assert!(store.has_events("sess-1"));
+}
+
+#[test]
+fn test_event_store_concurrent_safety() {
+    let (_dir, store) = make_temp_store();
+
+    // Two sequential appends should not corrupt the file.
+    store.append("sess-1", sample_events(3)).unwrap();
+    store.append("sess-1", sample_events(3)).unwrap();
+
+    let all = store.load("sess-1").unwrap();
+    assert_eq!(all.len(), 6);
+    for (i, env) in all.iter().enumerate() {
+        assert_eq!(env.seq, (i + 1) as u64);
+    }
 }
