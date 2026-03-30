@@ -227,18 +227,11 @@ impl ExplorationSummary {
             ));
         }
 
-        if total < 10 {
-            obs.push_str(
-                "\nYou have made very few tool calls. For a thorough exploration, \
-                 you should investigate more files, directories, and patterns. \
-                 Continue exploring — read key entry points, trace imports, \
-                 search for important types and interfaces.\n",
-            );
-        } else {
-            obs.push_str("\nBased on the original task and your exploration so far, decide:\n");
-            obs.push_str("- If important areas remain unexplored, continue investigating.\n");
-            obs.push_str("- If you have sufficient information, provide your final summary.\n");
-        }
+        obs.push_str(
+            "\nYou have explored very little so far. Review the original task — \
+             if you need more evidence to give a confident answer, continue. \
+             If you already have what you need, provide your final summary.\n",
+        );
 
         obs
     }
@@ -550,13 +543,10 @@ impl SubagentRunner for SimpleReactRunner {
             if tool_calls.is_empty() {
                 let content = Self::parse_content(&body).unwrap_or_else(|| "Done.".to_string());
 
-                // Observation-based continuation: show the model what it has
-                // explored and let it decide whether to continue.
-                // - First observation is always given
-                // - Second observation only if total_tool_calls < 10 (thin exploration)
-                // - After 2 observations, accept the model's decision
-                let should_observe =
-                    observation_count == 0 || (observation_count == 1 && total_tool_calls < 10);
+                // Observation-based continuation: if the model explored very little,
+                // show it what it has done so far and let it decide whether to
+                // continue. Skip entirely if it already made >= 10 tool calls.
+                let should_observe = observation_count == 0 && total_tool_calls < 10;
                 if should_observe {
                     observation_count += 1;
                     let observation = Self::build_exploration_observation(messages, &original_task);
