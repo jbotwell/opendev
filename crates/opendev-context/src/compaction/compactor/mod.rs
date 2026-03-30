@@ -78,6 +78,11 @@ impl ContextCompactor {
         }
     }
 
+    /// Update the maximum context window size (e.g. after switching models).
+    pub fn set_max_context(&mut self, max_context: u64) {
+        self.max_context = max_context;
+    }
+
     /// Context usage as percentage (0-100+).
     pub fn usage_pct(&self) -> f64 {
         if self.max_context == 0 || self.last_token_count == 0 {
@@ -143,12 +148,22 @@ impl ContextCompactor {
         self.last_token_count > (self.max_context as f64 * STAGE_COMPACT) as u64
     }
 
-    /// Calibrate with real API token count.
-    pub fn update_from_api_usage(&mut self, prompt_tokens: u64, message_count: usize) {
-        if prompt_tokens > 0 {
-            self.api_prompt_tokens = prompt_tokens;
+    /// Invalidate calibration so the next token count is re-estimated from messages.
+    ///
+    /// Call this after staged compaction modifies message content (masking, pruning)
+    /// so `update_token_count` recalculates from the actual (reduced) messages
+    /// instead of using the stale pre-modification baseline.
+    pub fn invalidate_calibration(&mut self) {
+        self.api_prompt_tokens = 0;
+        self.msg_count_at_calibration = 0;
+    }
+
+    /// Calibrate with real API token count (input + output tokens combined).
+    pub fn update_from_api_usage(&mut self, total_tokens: u64, message_count: usize) {
+        if total_tokens > 0 {
+            self.api_prompt_tokens = total_tokens;
             self.msg_count_at_calibration = message_count;
-            self.last_token_count = prompt_tokens;
+            self.last_token_count = total_tokens;
         } else {
             debug!(
                 "update_from_api_usage: prompt_tokens=0, skipping calibration \

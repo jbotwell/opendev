@@ -86,12 +86,13 @@ where
         }
     }
 
-    // Calibrate compactor with real API token counts
+    // Calibrate compactor with real API token counts (input + output combined)
+    let total_tokens = input_tokens + output_tokens;
     if let Some(comp) = compactor
-        && input_tokens > 0
+        && total_tokens > 0
         && let Ok(mut c) = comp.lock()
     {
-        c.update_from_api_usage(input_tokens, messages.len());
+        c.update_from_api_usage(total_tokens, messages.len());
         emitter.emit_context_usage(c.usage_pct());
     }
 

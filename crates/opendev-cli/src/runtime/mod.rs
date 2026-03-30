@@ -331,7 +331,7 @@ impl AgentRuntime {
         });
 
         // Check model capabilities via models.dev metadata
-        let (supports_temperature, model_max_tokens) = {
+        let (supports_temperature, model_max_tokens, model_context_length) = {
             let model_info = registry.find_model_by_id(&config.model);
             let supports_temp = model_info
                 .map(|(_, _, m)| m.supports_temperature)
@@ -339,7 +339,11 @@ impl AgentRuntime {
             let max_tok = model_info
                 .and_then(|(_, _, m)| m.max_tokens)
                 .unwrap_or(config.max_tokens as u64);
-            (supports_temp, max_tok)
+            let ctx_len = model_info
+                .map(|(_, _, m)| m.context_length)
+                .filter(|&v| v > 0)
+                .unwrap_or(config.max_context_tokens);
+            (supports_temp, max_tok, ctx_len)
         };
 
         // Create debug logger early so it can be shared with subagent tool
@@ -416,7 +420,7 @@ impl AgentRuntime {
 
         let cost_tracker = Mutex::new(CostTracker::new());
         let artifact_index = Mutex::new(ArtifactIndex::new());
-        let compactor = Mutex::new(ContextCompactor::new(config.max_context_tokens));
+        let compactor = Mutex::new(ContextCompactor::new(model_context_length));
         let topic_detector = TopicDetector::new(&provider);
 
         Ok(Self {
@@ -492,6 +496,12 @@ impl AgentRuntime {
             };
             if let Some(max_tok) = info.max_tokens {
                 self.llm_caller.config.max_tokens = Some(max_tok);
+            }
+            // Update compactor max context for new model's context window
+            if info.context_length > 0
+                && let Ok(mut comp) = self.compactor.lock()
+            {
+                comp.set_max_context(info.context_length);
             }
         }
 

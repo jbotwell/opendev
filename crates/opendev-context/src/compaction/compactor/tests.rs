@@ -540,3 +540,130 @@ fn test_protected_tool_types_includes_web_screenshot() {
     assert!(PROTECTED_TOOL_TYPES.contains(&"web_screenshot"));
     assert!(PROTECTED_TOOL_TYPES.contains(&"vlm"));
 }
+
+#[test]
+fn test_set_max_context() {
+    let mut compactor = ContextCompactor::new(100_000);
+    compactor.update_from_api_usage(50_000, 10);
+    assert!((compactor.usage_pct() - 50.0).abs() < 0.1);
+
+    // Switching to a model with larger context window
+    compactor.set_max_context(400_000);
+    assert!((compactor.usage_pct() - 12.5).abs() < 0.1);
+}
+
+#[test]
+fn test_invalidate_calibration_forces_recount() {
+    let mut compactor = ContextCompactor::new(100_000);
+
+    // Calibrate with API usage
+    compactor.update_from_api_usage(80_000, 5);
+    assert_eq!(compactor.api_prompt_tokens, 80_000);
+    assert_eq!(compactor.msg_count_at_calibration, 5);
+
+    // Invalidate (simulating staged compaction that reduced content)
+    compactor.invalidate_calibration();
+    assert_eq!(compactor.api_prompt_tokens, 0);
+    assert_eq!(compactor.msg_count_at_calibration, 0);
+
+    // Next check_usage should recount from actual messages (fallback path)
+    let messages = vec![make_msg("user", "short"), make_msg("assistant", "reply")];
+    let level = compactor.check_usage(&messages, "sys");
+    // With small messages, usage should be far below any threshold
+    assert_eq!(level, OptimizationLevel::None);
+    assert!(compactor.usage_pct() < 1.0);
+}
+
+/// Simulate a realistic conversation with a small context window (10,000 tokens)
+/// to verify that compaction thresholds fire at the right levels and that
+/// usage_pct is accurate after calibration.
+#[test]
+fn test_simulated_conversation_small_context() {
+    let max_context: u64 = 10_000;
+    let mut compactor = ContextCompactor::new(max_context);
+
+    // Turn 1: API reports 2,000 total tokens (input + output)
+    compactor.update_from_api_usage(2_000, 3);
+    assert!((compactor.usage_pct() - 20.0).abs() < 0.1);
+    assert_eq!(compactor.check_usage(&[make_msg("user", "hi")], ""), OptimizationLevel::None);
+
+    // Turn 2: conversation grows to 5,500 tokens
+    compactor.update_from_api_usage(5_500, 8);
+    assert!((compactor.usage_pct() - 55.0).abs() < 0.1);
+    assert_eq!(compactor.check_usage(&[make_msg("user", "hi")], ""), OptimizationLevel::None);
+
+    // Turn 3: hits 72% — warning threshold
+    compactor.update_from_api_usage(7_200, 12);
+    assert!((compactor.usage_pct() - 72.0).abs() < 0.1);
+    let messages: Vec<_> = (0..12).map(|i| make_msg("user", &format!("msg {i}"))).collect();
+    assert_eq!(compactor.check_usage(&messages, ""), OptimizationLevel::Warning);
+
+    // Turn 4: hits 82% — mask threshold
+    compactor.update_from_api_usage(8_200, 15);
+    let messages: Vec<_> = (0..15).map(|i| make_msg("user", &format!("msg {i}"))).collect();
+    assert_eq!(compactor.check_usage(&messages, ""), OptimizationLevel::Mask);
+
+    // Turn 5: hits 92% — aggressive threshold
+    compactor.update_from_api_usage(9_200, 18);
+    let messages: Vec<_> = (0..18).map(|i| make_msg("user", &format!("msg {i}"))).collect();
+    assert_eq!(compactor.check_usage(&messages, ""), OptimizationLevel::Aggressive);
+
+    // Simulate staged compaction: content is masked, calibration invalidated
+    compactor.invalidate_calibration();
+    // Recount from actual (small) messages — should show much lower usage
+    let small_messages: Vec<_> = (0..18).map(|i| make_msg("user", &format!("m{i}"))).collect();
+    let level = compactor.check_usage(&small_messages, "sys");
+    // Recounted from tiny messages — usage should be well under 70%
+    assert!(compactor.usage_pct() < 70.0, "After invalidation, usage should recount from actual messages");
+    assert!(matches!(level, OptimizationLevel::None | OptimizationLevel::Warning));
+}
+
+/// Verify that with the correct model context_length (e.g. 400k for GPT-5.2),
+/// a conversation at 93k tokens does NOT trigger compaction.
+#[test]
+fn test_no_premature_compaction_with_correct_context_length() {
+    // Before fix: max_context defaulted to 100k, 93k tokens = 93% → Aggressive
+    let mut compactor_wrong = ContextCompactor::new(100_000);
+    compactor_wrong.update_from_api_usage(93_224, 39);
+    let msgs: Vec<_> = (0..39).map(|i| make_msg("user", &format!("msg {i}"))).collect();
+    assert_eq!(compactor_wrong.check_usage(&msgs, ""), OptimizationLevel::Aggressive);
+
+    // After fix: max_context = 400k (GPT-5.2 actual), 93k tokens = 23.3% → None
+    let mut compactor_fixed = ContextCompactor::new(400_000);
+    compactor_fixed.update_from_api_usage(93_224, 39);
+    let msgs: Vec<_> = (0..39).map(|i| make_msg("user", &format!("msg {i}"))).collect();
+    assert_eq!(compactor_fixed.check_usage(&msgs, ""), OptimizationLevel::None);
+    assert!((compactor_fixed.usage_pct() - 23.3).abs() < 0.1);
+}
+
+/// Simulate set_max_context being called mid-conversation (model switch).
+#[test]
+fn test_model_switch_updates_context_percentage() {
+    let mut compactor = ContextCompactor::new(100_000);
+    compactor.update_from_api_usage(80_000, 20);
+    // 80% used with old model
+    assert!((compactor.usage_pct() - 80.0).abs() < 0.1);
+
+    // Switch to model with 200k context
+    compactor.set_max_context(200_000);
+    // Same tokens, bigger window → 40%
+    assert!((compactor.usage_pct() - 40.0).abs() < 0.1);
+
+    // Compaction check should reflect new limit
+    let msgs: Vec<_> = (0..20).map(|i| make_msg("user", &format!("msg {i}"))).collect();
+    assert_eq!(compactor.check_usage(&msgs, ""), OptimizationLevel::None);
+}
+
+/// Verify update_from_api_usage now accepts total tokens (input + output).
+#[test]
+fn test_total_tokens_calibration() {
+    let mut compactor = ContextCompactor::new(200_000);
+
+    // Simulate: input=80k, output=20k → total=100k
+    let input_tokens: u64 = 80_000;
+    let output_tokens: u64 = 20_000;
+    compactor.update_from_api_usage(input_tokens + output_tokens, 15);
+
+    // 100k / 200k = 50%
+    assert!((compactor.usage_pct() - 50.0).abs() < 0.1);
+}

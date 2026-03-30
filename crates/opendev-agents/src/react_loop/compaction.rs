@@ -62,6 +62,11 @@ pub(super) fn apply_staged_compaction(
                     api_idx += 1;
                 }
             }
+            // Invalidate stale calibration after content modification so the next
+            // update_token_count recalculates from the actual reduced messages.
+            if let Ok(mut comp) = compactor.lock() {
+                comp.invalidate_calibration();
+            }
             false
         }
         OptimizationLevel::Prune => {
@@ -77,6 +82,10 @@ pub(super) fn apply_staged_compaction(
                     *msg = Value::Object(api_msgs[api_idx].clone());
                     api_idx += 1;
                 }
+            }
+            // Invalidate stale calibration after content modification.
+            if let Ok(mut comp) = compactor.lock() {
+                comp.invalidate_calibration();
             }
             false
         }
