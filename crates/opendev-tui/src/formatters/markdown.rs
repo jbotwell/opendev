@@ -172,10 +172,7 @@ impl MarkdownRenderer {
 
             // Headers — each level gets a distinct style for visual hierarchy
             if let Some(header) = raw_line.strip_prefix("### ") {
-                // Blank line before header (if not first line)
-                if !lines.is_empty() {
-                    lines.push(Line::from(""));
-                }
+                push_blank_if_needed(&mut lines);
                 let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
                     h,
@@ -183,12 +180,9 @@ impl MarkdownRenderer {
                         .fg(palette.heading_3)
                         .add_modifier(Modifier::BOLD | base_mod),
                 )));
-                // Blank line after header
-                lines.push(Line::from(""));
+                push_blank_if_needed(&mut lines);
             } else if let Some(header) = raw_line.strip_prefix("## ") {
-                if !lines.is_empty() {
-                    lines.push(Line::from(""));
-                }
+                push_blank_if_needed(&mut lines);
                 let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
                     h,
@@ -196,11 +190,9 @@ impl MarkdownRenderer {
                         .fg(palette.heading_2)
                         .add_modifier(Modifier::BOLD | base_mod),
                 )));
-                lines.push(Line::from(""));
+                push_blank_if_needed(&mut lines);
             } else if let Some(header) = raw_line.strip_prefix("# ") {
-                if !lines.is_empty() {
-                    lines.push(Line::from(""));
-                }
+                push_blank_if_needed(&mut lines);
                 let h: Cow<'static, str> = Cow::Owned(header.to_string());
                 lines.push(Line::from(Span::styled(
                     h,
@@ -208,7 +200,7 @@ impl MarkdownRenderer {
                         .fg(palette.heading)
                         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED | base_mod),
                 )));
-                lines.push(Line::from(""));
+                push_blank_if_needed(&mut lines);
             } else if is_bullet_line(raw_line) {
                 // Bullet list (supports nesting)
                 let trimmed = raw_line.trim_start();
@@ -242,6 +234,9 @@ impl MarkdownRenderer {
                 )];
                 spans.extend(parse_inline_spans_with_palette(content, palette));
                 lines.push(Line::from(spans));
+            } else if raw_line.is_empty() {
+                // Empty line — collapse consecutive blanks
+                push_blank_if_needed(&mut lines);
             } else {
                 // Regular text with inline formatting
                 lines.push(render_inline_line_with_palette(raw_line, palette));
@@ -502,6 +497,16 @@ fn find_byte(haystack: &[u8], needle: u8, from: usize) -> Option<usize> {
         .iter()
         .position(|&b| b == needle)
         .map(|p| p + from)
+}
+
+/// Push a blank line only if the last line isn't already blank.
+fn push_blank_if_needed(lines: &mut Vec<Line<'static>>) {
+    let last_blank = lines
+        .last()
+        .is_none_or(|l| l.spans.iter().all(|s| s.content.is_empty()));
+    if !last_blank {
+        lines.push(Line::from(""));
+    }
 }
 
 /// Check if a line is a horizontal rule (---, ***, ___).

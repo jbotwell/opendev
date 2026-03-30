@@ -9,8 +9,24 @@ fn test_plain_text() {
 #[test]
 fn test_headers() {
     let lines = MarkdownRenderer::render("# Title\n## Subtitle\n### Section");
-    // With spacing: title + blank + blank + subtitle + blank + blank + section + blank = 8
-    assert_eq!(lines.len(), 8);
+    // With consecutive blank collapsing: title + blank + subtitle + blank + section + blank = 6
+    assert_eq!(lines.len(), 6);
+}
+
+#[test]
+fn test_no_double_blank_lines_around_headers() {
+    let md = "Some text\n\n## Header\n\nMore text";
+    let lines = MarkdownRenderer::render(md);
+    // Verify no two consecutive blank lines
+    for (i, window) in lines.windows(2).enumerate() {
+        let first_blank = window[0].spans.iter().all(|s| s.content.is_empty());
+        let second_blank = window[1].spans.iter().all(|s| s.content.is_empty());
+        assert!(
+            !(first_blank && second_blank),
+            "consecutive blank lines at index {i} and {}",
+            i + 1
+        );
+    }
 }
 
 #[test]
