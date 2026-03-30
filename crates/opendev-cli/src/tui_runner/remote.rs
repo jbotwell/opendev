@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use opendev_channels::telegram::RemoteSessionBridge;
 use opendev_channels::telegram::remote::{
     ApprovalResponse, RemoteCommand, RemoteCommandReceiver, RemoteEvent, RemoteEventSender,
 };
+use opendev_channels::telegram::RemoteSessionBridge;
 use opendev_runtime::ToolApprovalDecision;
 use opendev_tui::AppEvent;
 

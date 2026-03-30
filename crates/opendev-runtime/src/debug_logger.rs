@@ -100,7 +100,13 @@ impl SessionDebugLogger {
     }
 
     /// Log an outgoing LLM request payload.
-    pub fn log_llm_request(&self, iteration: usize, model: &str, streaming: bool, payload: &Value) {
+    pub fn log_llm_request(
+        &self,
+        iteration: usize,
+        model: &str,
+        streaming: bool,
+        payload: &Value,
+    ) {
         self.log_full(
             "llm_request",
             "react",

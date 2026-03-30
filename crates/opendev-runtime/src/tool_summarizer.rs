@@ -11,11 +11,7 @@
 pub fn summarize_tool_result(tool_name: &str, output: Option<&str>, error: Option<&str>) -> String {
     // Error case
     if let Some(err) = error {
-        let truncated = if err.len() > 200 {
-            &err[..err.floor_char_boundary(200)]
-        } else {
-            err
-        };
+        let truncated = if err.len() > 200 { &err[..err.floor_char_boundary(200)] } else { err };
         return format!("Error: {truncated}");
     }
 

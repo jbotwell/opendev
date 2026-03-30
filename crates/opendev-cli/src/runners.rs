@@ -45,9 +45,8 @@ pub async fn run_non_interactive(
     // and agent runtime — these are independent and can overlap.
     let prompt_config = config.clone();
     let prompt_wd = working_dir.to_path_buf();
-    let system_prompt_handle = tokio::task::spawn_blocking(move || {
-        runtime::build_system_prompt(&prompt_wd, &prompt_config)
-    });
+    let system_prompt_handle =
+        tokio::task::spawn_blocking(move || runtime::build_system_prompt(&prompt_wd, &prompt_config));
 
     let mut session_manager = match SessionManager::new(session_dir.clone()) {
         Ok(sm) => sm,
@@ -281,9 +280,8 @@ pub async fn run_interactive(
     // — these are independent and can overlap.
     let prompt_config = config.clone();
     let prompt_wd = working_dir.to_path_buf();
-    let system_prompt_handle = tokio::task::spawn_blocking(move || {
-        runtime::build_system_prompt(&prompt_wd, &prompt_config)
-    });
+    let system_prompt_handle =
+        tokio::task::spawn_blocking(move || runtime::build_system_prompt(&prompt_wd, &prompt_config));
 
     // Create agent runtime (overlaps with system prompt building)
     let mut agent_runtime =
