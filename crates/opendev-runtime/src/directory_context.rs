@@ -156,7 +156,7 @@ impl DirectoryRegistry {
         let session_dir = self.sessions_base_dir.join(
             working_dir
                 .to_string_lossy()
-                .replace(['/', '\\'], "_")
+                .replace(['/', '\\', ':'], "_")
                 .trim_start_matches('_'),
         );
         let session_manager = SessionManager::new(session_dir)?;
