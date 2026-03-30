@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.5] - 2026-03-30
+## [0.1.6] - 2026-03-30
 
 ### Added
 
@@ -13,14 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `opendev-sandbox` crate with microsandbox integration foundation
 - Microsandbox runtime bundled in release archives and Homebrew formula
 - Telegram remote session takeover support
-- Per-session LLM debug logging with truncated global log file
+- Per-session LLM debug logging enabled by default with truncated global log file
 - Graceful exit message and session ID in TUI status bar
 - Final summary nudge for Explorer subagent
+- External directory approval prompt replacing hard path restrictions
 - Startup/memory/size benchmarks comparing terminal coding agents
 - crates.io badges, cargo install instructions, release badges in README
 
 ### Changed
 
+- Context compaction now uses the model's actual context window instead of hardcoded 100k default
 - Parallelized startup I/O to fix slow init on large codebases
 - Background MCP connections overlapped with system prompt building
 - Explorer max iterations lowered from 200 to 100 to prevent long stalls
@@ -30,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- TOCTOU vulnerability in auth.json creation
+- Interrupted tool calls no longer show misleading "Read N lines" in TUI
+- Spinner freeze no longer blocks git snapshot operations
 - Spinner race condition with orphaned subagent entries in TUI
 - Double blank lines around headers collapsed in TUI rendering
 - Web UI: scoped "New Session" disable guard to per-workspace
@@ -107,7 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release automation with cargo-dist for 5 platform targets
 - Shell installer (macOS/Linux), PowerShell installer (Windows), Homebrew tap
 
-[0.1.5]: https://github.com/opendev-to/opendev/releases/tag/v0.1.5
+[0.1.6]: https://github.com/opendev-to/opendev/releases/tag/v0.1.6
 [0.1.1]: https://github.com/opendev-to/opendev/releases/tag/v0.1.1
 [0.1.2]: https://github.com/opendev-to/opendev/releases/tag/v0.1.2
 [0.1.0]: https://github.com/opendev-to/opendev/releases/tag/v0.1.0
