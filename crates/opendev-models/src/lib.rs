@@ -12,6 +12,7 @@ pub mod frontend_event;
 pub mod message;
 pub mod operation;
 pub mod session;
+pub mod transition;
 pub mod user;
 pub mod validator;
 
@@ -27,4 +28,5 @@ pub use operation::{
     BashResult, EditResult, Operation, OperationStatus, OperationType, WriteResult,
 };
 pub use session::{Session, SessionMetadata};
+pub use transition::{TransitionError, ValidateTransition};
 pub use user::User;

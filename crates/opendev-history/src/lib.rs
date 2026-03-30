@@ -7,6 +7,7 @@
 //! - **FileLock**: Cross-platform exclusive file locking
 //! - **SnapshotManager**: Shadow git snapshots for per-step undo
 
+pub mod event_store;
 pub mod export;
 pub mod fair_rwlock;
 pub mod file_locks;
