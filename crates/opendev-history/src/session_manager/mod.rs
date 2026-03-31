@@ -115,15 +115,18 @@ impl SessionManager {
 
         // Build the event before pushing `msg` (which moves it), but only
         // if the event store is configured to avoid cloning on the hot path.
-        let event = self.event_store.as_ref().map(|_| SessionEvent::MessageAdded {
-            role: msg.role.to_string(),
-            content: msg.content.clone(),
-            timestamp: msg.timestamp,
-            tool_calls: msg.tool_calls.clone(),
-            tokens: msg.tokens,
-            thinking_trace: msg.thinking_trace.clone(),
-            reasoning_content: msg.reasoning_content.clone(),
-        });
+        let event = self
+            .event_store
+            .as_ref()
+            .map(|_| SessionEvent::MessageAdded {
+                role: msg.role.to_string(),
+                content: msg.content.clone(),
+                timestamp: msg.timestamp,
+                tool_calls: msg.tool_calls.clone(),
+                tokens: msg.tokens,
+                thinking_trace: msg.thinking_trace.clone(),
+                reasoning_content: msg.reasoning_content.clone(),
+            });
         let session_id = session.id.clone();
 
         session.messages.push(msg);
@@ -288,9 +291,7 @@ impl SessionManager {
         };
 
         let json_value = serde_json::Value::String(value.to_string());
-        session
-            .metadata
-            .insert(key.to_string(), json_value.clone());
+        session.metadata.insert(key.to_string(), json_value.clone());
         let session_id = session.id.clone();
 
         self.emit_event(

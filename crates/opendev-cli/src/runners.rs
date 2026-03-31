@@ -6,9 +6,7 @@ use crate::helpers::*;
 use crate::runtime;
 
 /// Create an EventStore wired to an EventBus for audit trail.
-fn create_event_store(
-    session_dir: &std::path::Path,
-) -> opendev_history::event_store::EventStore {
+fn create_event_store(session_dir: &std::path::Path) -> opendev_history::event_store::EventStore {
     let event_bus = opendev_runtime::event_bus::EventBus::new();
     let bridge = opendev_runtime::event_bus::create_event_bus_bridge(event_bus);
     opendev_history::event_store::EventStore::new(session_dir.to_path_buf())

@@ -208,12 +208,8 @@ impl EventStore {
                 .map_err(|e| format!("validation failed: {e}"))?;
 
             // Apply the event so subsequent validations see updated state.
-            crate::projector::SessionProjector::apply_session_event(
-                &mut state,
-                event,
-                Utc::now(),
-            )
-            .map_err(|e| format!("apply failed during validation: {e}"))?;
+            crate::projector::SessionProjector::apply_session_event(&mut state, event, Utc::now())
+                .map_err(|e| format!("apply failed during validation: {e}"))?;
         }
 
         // All events validated — persist them.

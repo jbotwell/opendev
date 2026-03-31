@@ -682,7 +682,9 @@ fn test_event_store_failure_doesnt_block_save() {
     let tmp = TempDir::new().unwrap();
     let dir = tmp.path().canonicalize().unwrap();
     let bad_store = EventStore::new(dir.join("nonexistent/deeply/nested"));
-    let mut mgr = SessionManager::new(dir).unwrap().with_event_store(bad_store);
+    let mut mgr = SessionManager::new(dir)
+        .unwrap()
+        .with_event_store(bad_store);
 
     // create_session should succeed even though event store write fails
     let session = mgr.create_session();

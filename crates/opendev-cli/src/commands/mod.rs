@@ -329,9 +329,8 @@ pub async fn handle_run(action: RunAction, working_dir: &std::path::Path) {
             let session_dir = paths.project_sessions_dir(working_dir);
             let event_bus = opendev_runtime::event_bus::EventBus::new();
             let bridge = opendev_runtime::event_bus::create_event_bus_bridge(event_bus);
-            let event_store =
-                opendev_history::event_store::EventStore::new(session_dir.clone())
-                    .with_post_append(bridge);
+            let event_store = opendev_history::event_store::EventStore::new(session_dir.clone())
+                .with_post_append(bridge);
             let session_manager = match opendev_history::SessionManager::new(session_dir) {
                 Ok(sm) => sm.with_event_store(event_store),
                 Err(e) => {
