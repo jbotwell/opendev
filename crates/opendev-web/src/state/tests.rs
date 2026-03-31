@@ -1,4 +1,5 @@
 use super::*;
+use super::RING_BUFFER_CAPACITY;
 use tempfile::TempDir;
 
 fn make_state() -> AppState {
@@ -397,4 +398,73 @@ async fn test_model_registry_access() {
     let registry = state.model_registry().await;
     // Empty registry by default.
     assert!(registry.providers.is_empty());
+}
+
+#[tokio::test]
+async fn test_ring_buffer_stores_broadcasts() {
+    let state = make_state();
+
+    for i in 0..5 {
+        state.broadcast(WsBroadcast::new(format!("evt_{i}"), serde_json::Value::Null));
+    }
+
+    let buf = state.inner.recent_broadcasts.lock().await;
+    assert_eq!(buf.len(), 5);
+    assert_eq!(buf[0].msg_type, "evt_0");
+    assert_eq!(buf[4].msg_type, "evt_4");
+}
+
+#[tokio::test]
+async fn test_ring_buffer_capacity_limit() {
+    let state = make_state();
+
+    for i in 0..(RING_BUFFER_CAPACITY + 50) {
+        state.broadcast(WsBroadcast::new(format!("evt_{i}"), serde_json::Value::Null));
+    }
+
+    let buf = state.inner.recent_broadcasts.lock().await;
+    assert_eq!(buf.len(), RING_BUFFER_CAPACITY);
+    // Oldest should be evt_50 (first 50 were evicted).
+    assert_eq!(buf.front().unwrap().msg_type, "evt_50");
+}
+
+#[tokio::test]
+async fn test_catch_up_since() {
+    let state = make_state();
+
+    for _ in 0..10 {
+        state.broadcast(WsBroadcast::new("evt", serde_json::Value::Null));
+    }
+
+    // Seq numbers are 1..=10. Catch up since seq 5 should return 6..=10.
+    let msgs = state.catch_up_since(5).await.unwrap();
+    assert_eq!(msgs.len(), 5);
+    assert_eq!(msgs[0].seq, 6);
+    assert_eq!(msgs[4].seq, 10);
+}
+
+#[tokio::test]
+async fn test_catch_up_since_too_old() {
+    let state = make_state();
+
+    // Broadcast enough to fill the buffer, then some more to evict.
+    for i in 0..(RING_BUFFER_CAPACITY + 100) {
+        state.broadcast(WsBroadcast::new(format!("evt_{i}"), serde_json::Value::Null));
+    }
+
+    // The oldest seq in buffer is 101 (seqs 1..=100 were evicted).
+    // Requesting catch_up_since(0) is far too old.
+    assert!(state.catch_up_since(0).await.is_none());
+    // Requesting catch_up_since(99) is also too old (oldest is 101, 99 < 101-1=100).
+    assert!(state.catch_up_since(99).await.is_none());
+    // Requesting catch_up_since(100) should work (100 >= 101-1).
+    assert!(state.catch_up_since(100).await.is_some());
+}
+
+#[tokio::test]
+async fn test_catch_up_since_empty_buffer() {
+    let state = make_state();
+    // No broadcasts yet -- should return empty vec, not None.
+    let msgs = state.catch_up_since(0).await.unwrap();
+    assert!(msgs.is_empty());
 }

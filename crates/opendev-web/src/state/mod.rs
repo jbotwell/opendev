@@ -8,7 +8,7 @@
 mod approvals;
 mod bridge;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc, oneshot};
@@ -84,6 +84,8 @@ pub(super) struct AppStateInner {
     pub(super) bridge: RwLock<BridgeState>,
     /// Monotonically increasing broadcast sequence counter.
     pub(super) broadcast_seq: AtomicU64,
+    /// Ring buffer of recent broadcasts for client catch-up on reconnect.
+    pub(super) recent_broadcasts: Mutex<VecDeque<WsBroadcast>>,
 }
 
 /// Bridge mode state: when the TUI owns agent execution and
@@ -189,6 +191,9 @@ pub trait AgentExecutor: Send + Sync + 'static {
 /// Injection queue capacity per session.
 const INJECTION_QUEUE_CAPACITY: usize = 10;
 
+/// Maximum number of recent broadcasts kept for client catch-up on reconnect.
+const RING_BUFFER_CAPACITY: usize = 1000;
+
 impl AppState {
     /// Create a new AppState.
     pub fn new(
@@ -218,6 +223,7 @@ impl AppState {
                 model_registry: RwLock::new(model_registry),
                 bridge: RwLock::new(BridgeState::default()),
                 broadcast_seq: AtomicU64::new(1),
+                recent_broadcasts: Mutex::new(VecDeque::with_capacity(RING_BUFFER_CAPACITY)),
             }),
         }
     }
@@ -295,6 +301,13 @@ impl AppState {
     /// Assigns a monotonically increasing sequence number before sending.
     pub fn broadcast(&self, mut msg: WsBroadcast) {
         msg.seq = self.inner.broadcast_seq.fetch_add(1, Ordering::Relaxed);
+        // Store in ring buffer for catch-up on reconnect.
+        if let Ok(mut buf) = self.inner.recent_broadcasts.try_lock() {
+            if buf.len() >= RING_BUFFER_CAPACITY {
+                buf.pop_front();
+            }
+            buf.push_back(msg.clone());
+        }
         // Ignore send errors (no subscribers is fine).
         let _ = self.inner.ws_tx.send(msg);
     }
@@ -302,6 +315,23 @@ impl AppState {
     /// Get the current broadcast sequence number (next to be assigned).
     pub fn current_broadcast_seq(&self) -> u64 {
         self.inner.broadcast_seq.load(Ordering::Relaxed)
+    }
+
+    /// Get all broadcasts with seq > `last_seq` from the ring buffer.
+    /// Returns `None` if the requested seq is too old (no longer in buffer).
+    pub async fn catch_up_since(&self, last_seq: u64) -> Option<Vec<WsBroadcast>> {
+        let buf = self.inner.recent_broadcasts.lock().await;
+        // If buffer is empty, there is nothing to catch up on.
+        if buf.is_empty() {
+            return Some(vec![]);
+        }
+        // Check if the requested seq is still in the buffer.
+        if let Some(oldest) = buf.front() {
+            if last_seq < oldest.seq.saturating_sub(1) {
+                return None; // Gap too large, client needs full sync
+            }
+        }
+        Some(buf.iter().filter(|m| m.seq > last_seq).cloned().collect())
     }
 
     // --- Mode / settings ---

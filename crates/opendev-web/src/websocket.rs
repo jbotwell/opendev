@@ -22,9 +22,26 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // Subscribe to broadcast channel.
     let mut broadcast_rx = state.ws_subscribe();
 
-    // Spawn task to forward broadcasts to this client.
+    // Channel for sending messages directly to this client (e.g. sync catch-up).
+    let (direct_tx, mut direct_rx) = tokio::sync::mpsc::channel::<WsBroadcast>(256);
+
+    // Spawn task to forward both broadcasts and direct messages to this client.
     let send_task = tokio::spawn(async move {
-        while let Ok(msg) = broadcast_rx.recv().await {
+        loop {
+            let msg = tokio::select! {
+                result = broadcast_rx.recv() => {
+                    match result {
+                        Ok(msg) => msg,
+                        Err(_) => break,
+                    }
+                }
+                result = direct_rx.recv() => {
+                    match result {
+                        Some(msg) => msg,
+                        None => break,
+                    }
+                }
+            };
             match serde_json::to_string(&msg) {
                 Ok(text) => {
                     if sender.send(Message::Text(text.into())).await.is_err() {
@@ -42,7 +59,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     while let Some(Ok(msg)) = receiver.next().await {
         match msg {
             Message::Text(text) => {
-                handle_client_message(&state, &text).await;
+                handle_client_message(&state, &text, &direct_tx).await;
             }
             Message::Close(_) => {
                 info!("WebSocket client disconnected");
@@ -58,7 +75,11 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 }
 
 /// Handle a text message from a WebSocket client.
-async fn handle_client_message(state: &AppState, text: &str) {
+async fn handle_client_message(
+    state: &AppState,
+    text: &str,
+    direct_tx: &tokio::sync::mpsc::Sender<WsBroadcast>,
+) {
     let parsed: serde_json::Value = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
@@ -92,6 +113,9 @@ async fn handle_client_message(state: &AppState, text: &str) {
         }
         Some(WsMessageType::Interrupt) => {
             handle_interrupt(state).await;
+        }
+        Some(WsMessageType::Sync) => {
+            handle_sync(state, &parsed, direct_tx).await;
         }
         _ => {
             if !msg_type_str.is_empty() {
@@ -371,4 +395,39 @@ async fn handle_interrupt(state: &AppState) {
         "interrupted": true,
         }),
     ));
+}
+
+/// Handle a sync (catch-up) request from a reconnecting WebSocket client.
+async fn handle_sync(
+    state: &AppState,
+    data: &serde_json::Value,
+    direct_tx: &tokio::sync::mpsc::Sender<WsBroadcast>,
+) {
+    let last_seq = data
+        .get("data")
+        .and_then(|d| d.get("last_seq"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    debug!("Sync requested with last_seq={}", last_seq);
+
+    match state.catch_up_since(last_seq).await {
+        Some(messages) => {
+            for msg in messages {
+                if direct_tx.send(msg).await.is_err() {
+                    warn!("Failed to send catch-up message to client");
+                    return;
+                }
+            }
+        }
+        None => {
+            // Gap too large -- tell client to reload via REST.
+            let _ = direct_tx
+                .send(WsBroadcast::new(
+                    WsMessageType::FullSync.as_str().to_string(),
+                    serde_json::Value::Null,
+                ))
+                .await;
+        }
+    }
 }

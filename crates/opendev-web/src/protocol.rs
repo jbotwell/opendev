@@ -97,6 +97,9 @@ pub enum WsMessageType {
     /// Pong response to a ping.
     #[serde(rename = "pong")]
     Pong,
+    /// Tells client to perform a full sync (gap too large for catch-up).
+    #[serde(rename = "full_sync")]
+    FullSync,
 
     // ── Client -> Server ────────────────────────────────────────────
     /// Query / user message from the client.
@@ -117,6 +120,9 @@ pub enum WsMessageType {
     /// Interrupt request.
     #[serde(rename = "interrupt")]
     Interrupt,
+    /// Sync request from client after reconnect (sends last_seq).
+    #[serde(rename = "sync")]
+    Sync,
 }
 
 impl WsMessageType {
@@ -152,6 +158,7 @@ impl WsMessageType {
             Self::McpServersUpdated => "mcp:servers_updated",
             Self::Error => "error",
             Self::Pong => "pong",
+            Self::FullSync => "full_sync",
             // Client -> Server
             Self::Query => "query",
             Self::Approve => "approve",
@@ -159,6 +166,7 @@ impl WsMessageType {
             Self::PlanApprovalResponse => "plan_approval_response",
             Self::Ping => "ping",
             Self::Interrupt => "interrupt",
+            Self::Sync => "sync",
         }
     }
 
@@ -193,12 +201,14 @@ impl WsMessageType {
             "mcp:servers_updated" => Some(Self::McpServersUpdated),
             "error" => Some(Self::Error),
             "pong" => Some(Self::Pong),
+            "full_sync" => Some(Self::FullSync),
             "query" => Some(Self::Query),
             "approve" => Some(Self::Approve),
             "ask_user_response" => Some(Self::AskUserResponse),
             "plan_approval_response" => Some(Self::PlanApprovalResponse),
             "ping" => Some(Self::Ping),
             "interrupt" => Some(Self::Interrupt),
+            "sync" => Some(Self::Sync),
             _ => None,
         }
     }
