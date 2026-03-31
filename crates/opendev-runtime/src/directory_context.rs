@@ -162,9 +162,11 @@ impl DirectoryRegistry {
             return Ok(Arc::clone(ctx));
         }
 
+        let dir_str = working_dir.to_string_lossy();
+        // Strip Windows extended-length path prefix (\\?\) before sanitizing
+        let dir_str = dir_str.strip_prefix(r"\\?\").unwrap_or(&dir_str);
         let session_dir = self.sessions_base_dir.join(
-            working_dir
-                .to_string_lossy()
+            dir_str
                 .replace(['/', '\\', ':'], "_")
                 .trim_start_matches('_'),
         );
