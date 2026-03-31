@@ -32,7 +32,7 @@ struct ScheduleEntry {
 #[async_trait::async_trait]
 impl BaseTool for ScheduleTool {
     fn name(&self) -> &str {
-        "schedule"
+        "CronCreate"
     }
 
     fn description(&self) -> &str {

@@ -12,7 +12,7 @@ fn test_runtime_creation() {
     assert!(runtime.is_ok());
     let rt = runtime.unwrap();
     // Should have tools registered
-    assert!(rt.tool_registry.tool_names().len() > 20);
+    assert!(rt.tool_registry.tool_names().len() > 10);
     assert!(
         !rt.tool_registry
             .tool_names()

@@ -733,8 +733,9 @@ impl TuiRunner {
                                     .iter()
                                     .filter(|m| {
                                         m.get("role").and_then(|r| r.as_str()) == Some("tool")
-                                            && m.get("name").and_then(|n| n.as_str())
-                                                == Some("spawn_subagent")
+                                            && m.get("name").and_then(|n| n.as_str()).is_some_and(
+                                                |n| matches!(n, "Agent" | "spawn_subagent"),
+                                            )
                                     })
                                     .filter_map(|m| {
                                         m.get("content").and_then(|c| c.as_str()).map(String::from)

@@ -97,7 +97,7 @@ pub fn summarize_tool_result(tool_name: &str, output: Option<&str>, error: Optio
         }
 
         // Todo tools
-        "write_todos" => {
+        "TodoWrite" | "write_todos" => {
             let count = result_str
                 .lines()
                 .filter(|l| {
@@ -113,9 +113,9 @@ pub fn summarize_tool_result(tool_name: &str, output: Option<&str>, error: Optio
                 "Todos updated".to_string()
             }
         }
-        "update_todo" => "Todo updated".to_string(),
+        "TaskUpdate" | "update_todo" => "Todo updated".to_string(),
         "complete_todo" => "Todo completed".to_string(),
-        "list_todos" => {
+        "TaskList" | "list_todos" => {
             let count = result_str
                 .lines()
                 .filter(|l| {
@@ -181,7 +181,8 @@ pub fn build_background_result(
                 let role = m.get("role")?.as_str()?;
                 let name = m.get("name")?.as_str()?;
                 let text = m.get("content")?.as_str()?;
-                if role == "tool" && name == "spawn_subagent" && !text.is_empty() {
+                if role == "tool" && matches!(name, "Agent" | "spawn_subagent") && !text.is_empty()
+                {
                     Some(text)
                 } else {
                     None

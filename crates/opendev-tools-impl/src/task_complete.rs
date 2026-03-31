@@ -21,7 +21,7 @@ pub struct TaskCompleteTool;
 #[async_trait::async_trait]
 impl BaseTool for TaskCompleteTool {
     fn name(&self) -> &str {
-        "task_complete"
+        "TaskStop"
     }
 
     fn description(&self) -> &str {

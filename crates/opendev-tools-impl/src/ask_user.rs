@@ -38,7 +38,7 @@ impl Default for AskUserTool {
 #[async_trait::async_trait]
 impl BaseTool for AskUserTool {
     fn name(&self) -> &str {
-        "ask_user"
+        "AskUserQuestion"
     }
 
     fn description(&self) -> &str {

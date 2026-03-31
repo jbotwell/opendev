@@ -312,7 +312,7 @@ impl SkillLoader {
         let mut lines = vec![
             "## Available Skills".to_string(),
             String::new(),
-            "Use `invoke_skill` to load skill content into conversation context.".to_string(),
+            "Use `Skill` to load skill content into conversation context.".to_string(),
             String::new(),
         ];
 

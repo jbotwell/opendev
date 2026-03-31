@@ -5,18 +5,18 @@ fn test_code_explorer_builtin() {
     let spec = code_explorer("You explore code.");
     assert_eq!(spec.name, "Explore");
     assert!(spec.has_tool_restriction());
-    assert!(spec.tools.contains(&"read_file".to_string()));
-    assert!(spec.tools.contains(&"grep".to_string()));
+    assert!(spec.tools.contains(&"Read".to_string()));
+    assert!(spec.tools.contains(&"Grep".to_string()));
     assert!(spec.tools.contains(&"ast_grep".to_string()));
-    assert!(!spec.tools.contains(&"write_file".to_string()));
+    assert!(!spec.tools.contains(&"Write".to_string()));
 }
 
 #[test]
 fn test_planner_builtin() {
     let spec = planner("You plan tasks.");
     assert_eq!(spec.name, "Planner");
-    assert!(spec.tools.contains(&"write_file".to_string()));
-    assert!(spec.tools.contains(&"edit_file".to_string()));
+    assert!(spec.tools.contains(&"Write".to_string()));
+    assert!(spec.tools.contains(&"Edit".to_string()));
 }
 
 #[test]
@@ -32,11 +32,11 @@ fn test_general_builtin() {
     assert_eq!(spec.name, "General");
     assert!(spec.has_tool_restriction());
     // General has broad tool access
-    assert!(spec.tools.contains(&"read_file".to_string()));
-    assert!(spec.tools.contains(&"write_file".to_string()));
-    assert!(spec.tools.contains(&"edit_file".to_string()));
-    assert!(spec.tools.contains(&"run_command".to_string()));
-    assert!(spec.tools.contains(&"web_fetch".to_string()));
+    assert!(spec.tools.contains(&"Read".to_string()));
+    assert!(spec.tools.contains(&"Write".to_string()));
+    assert!(spec.tools.contains(&"Edit".to_string()));
+    assert!(spec.tools.contains(&"Bash".to_string()));
+    assert!(spec.tools.contains(&"WebFetch".to_string()));
     assert!(spec.tools.contains(&"git".to_string()));
     assert_eq!(spec.tools.len(), GENERAL_TOOLS.len());
 }
@@ -46,9 +46,9 @@ fn test_build_builtin() {
     let spec = build("You build code.");
     assert_eq!(spec.name, "Build");
     assert!(spec.has_tool_restriction());
-    assert!(spec.tools.contains(&"run_command".to_string()));
-    assert!(spec.tools.contains(&"edit_file".to_string()));
-    assert!(spec.tools.contains(&"read_file".to_string()));
+    assert!(spec.tools.contains(&"Bash".to_string()));
+    assert!(spec.tools.contains(&"Edit".to_string()));
+    assert!(spec.tools.contains(&"Read".to_string()));
     assert_eq!(spec.tools.len(), BUILD_TOOLS.len());
 }
 
@@ -62,9 +62,9 @@ fn test_project_init_builtin() {
     );
     assert!(spec.has_tool_restriction());
     assert_eq!(spec.tools.len(), 4);
-    assert!(spec.tools.contains(&"read_file".to_string()));
-    assert!(spec.tools.contains(&"list_files".to_string()));
-    assert!(spec.tools.contains(&"grep".to_string()));
-    assert!(spec.tools.contains(&"run_command".to_string()));
+    assert!(spec.tools.contains(&"Read".to_string()));
+    assert!(spec.tools.contains(&"Glob".to_string()));
+    assert!(spec.tools.contains(&"Grep".to_string()));
+    assert!(spec.tools.contains(&"Bash".to_string()));
     assert!(spec.model.is_none());
 }

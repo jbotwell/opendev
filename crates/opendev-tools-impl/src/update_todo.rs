@@ -21,7 +21,7 @@ impl UpdateTodoTool {
 #[async_trait::async_trait]
 impl BaseTool for UpdateTodoTool {
     fn name(&self) -> &str {
-        "update_todo"
+        "TaskUpdate"
     }
 
     fn description(&self) -> &str {

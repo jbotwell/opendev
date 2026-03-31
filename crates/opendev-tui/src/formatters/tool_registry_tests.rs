@@ -47,8 +47,8 @@ fn test_format_tool_call_display() {
 #[test]
 fn test_format_tool_call_no_args() {
     let args = std::collections::HashMap::new();
-    let display = format_tool_call_display("list_todos", &args);
-    assert_eq!(display, "List Todos todos");
+    let display = format_tool_call_display("TaskList", &args);
+    assert_eq!(display, "List tasks");
 }
 
 #[test]

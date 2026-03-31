@@ -27,7 +27,7 @@ pub struct WebFetchTool;
 #[async_trait::async_trait]
 impl BaseTool for WebFetchTool {
     fn name(&self) -> &str {
-        "web_fetch"
+        "WebFetch"
     }
 
     fn description(&self) -> &str {

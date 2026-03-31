@@ -87,8 +87,8 @@ fn test_all_parallelizable_single_tool() {
 fn test_all_parallelizable_multiple_read_only() {
     let rl = make_loop();
     let tcs = vec![
-        serde_json::json!({"function": {"name": "read_file"}}),
-        serde_json::json!({"function": {"name": "search"}}),
+        serde_json::json!({"function": {"name": "Read"}}),
+        serde_json::json!({"function": {"name": "Grep"}}),
     ];
     assert!(rl.all_parallelizable(&tcs));
 }

@@ -17,7 +17,7 @@ impl ReactLoop {
                 .and_then(|f| f.get("name"))
                 .and_then(|n| n.as_str())
                 .unwrap_or("");
-            self.parallelizable.contains(name) && name != "task_complete"
+            self.parallelizable.contains(name) && !matches!(name, "TaskStop" | "task_complete")
         })
     }
 
@@ -27,7 +27,7 @@ impl ReactLoop {
             .get("function")
             .and_then(|f| f.get("name"))
             .and_then(|n| n.as_str())
-            == Some("task_complete")
+            .is_some_and(|n| matches!(n, "TaskStop" | "task_complete"))
     }
 
     /// Extract the summary and status from a task_complete tool call.

@@ -52,6 +52,18 @@ impl ToolRegistry {
             return Some((Arc::clone(t), name.to_string()));
         }
 
+        // Alias resolution (old name -> canonical name)
+        if let Some(canonical) = self.resolve_alias(name)
+            && let Some(t) = tools.get(&canonical)
+        {
+            info!(
+                requested = %name,
+                resolved = %canonical,
+                "Tool name resolved via alias"
+            );
+            return Some((Arc::clone(t), canonical));
+        }
+
         // Case-insensitive match
         let lower = name.to_lowercase();
         for (registered_name, tool) in tools.iter() {
@@ -123,7 +135,7 @@ impl ToolRegistry {
         debug!(tool = %tool_name, params = ?normalized, "Normalized tool params");
 
         // Deduplication: check cache (skip for tools that must always run)
-        const NO_DEDUP: &[&str] = &["spawn_subagent"];
+        const NO_DEDUP: &[&str] = &["Agent", "spawn_subagent"];
         let skip_dedup = NO_DEDUP.contains(&tool_name.as_str());
         let dedup_key = make_dedup_key(tool_name, &normalized);
         if !skip_dedup

@@ -253,7 +253,7 @@ pub(super) fn summarize_tool_output(tool_name: &str, content: &str) -> String {
     let mut buf = String::with_capacity(400);
 
     match tool_name {
-        "run_command" | "bash" => {
+        "Bash" | "run_command" | "bash" => {
             // For command outputs: keep exit code hint + last few lines
             let _ = write!(
                 buf,
@@ -273,7 +273,7 @@ pub(super) fn summarize_tool_output(tool_name: &str, content: &str) -> String {
                 let _ = write!(buf, "\n{snippet}");
             }
         }
-        "search" | "list_files" | "glob" | "grep" | "file_search" => {
+        "Grep" | "Glob" | "search" | "list_files" | "glob" | "grep" | "file_search" => {
             // For search results: keep count + first few results
             let result_count = lines.len();
             let _ = write!(

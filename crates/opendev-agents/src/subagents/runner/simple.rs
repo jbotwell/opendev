@@ -61,27 +61,27 @@ impl ExplorationSummary {
                     serde_json::from_str(args_str).unwrap_or_default();
 
                 match name {
-                    "read_file" => {
+                    "Read" | "read_file" => {
                         if let Some(path) = args.get("file_path").and_then(|v| v.as_str())
                             && !files_read.contains(&path.to_string())
                         {
                             files_read.push(path.to_string());
                         }
                     }
-                    "grep" | "ast_grep" | "search" => {
+                    "Grep" | "grep" | "ast_grep" | "search" => {
                         if let Some(pattern) = args.get("pattern").and_then(|v| v.as_str()) {
                             let prefix = if name == "ast_grep" { "ast:" } else { "" };
                             searches.push(format!("{prefix}{pattern}"));
                         }
                     }
-                    "list_files" => {
+                    "Glob" | "list_files" => {
                         if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
                             dirs_listed.push(path.to_string());
                         } else {
                             dirs_listed.push(".".to_string());
                         }
                     }
-                    "run_command" => {
+                    "Bash" | "run_command" => {
                         if let Some(cmd) = args.get("command").and_then(|v| v.as_str()) {
                             commands_run.push(cmd.to_string());
                         }
@@ -675,7 +675,7 @@ impl SubagentRunner for SimpleReactRunner {
                     }
 
                     // Tool approval gate for run_command (mirrors ReactLoop behavior)
-                    let auto_approved = if name == "run_command" {
+                    let auto_approved = if matches!(name.as_str(), "Bash" | "run_command") {
                         let cmd = args
                             .get("command")
                             .and_then(|v| v.as_str())
@@ -690,7 +690,8 @@ impl SubagentRunner for SimpleReactRunner {
                     } else {
                         auto_approved_patterns.contains(&name)
                     };
-                    let needs_approval = name == "run_command" && !auto_approved;
+                    let needs_approval =
+                        matches!(name.as_str(), "Bash" | "run_command") && !auto_approved;
                     if needs_approval && let Some(approval_tx) = ctx.tool_approval_tx {
                         let command = args
                             .get("command")
@@ -733,7 +734,7 @@ impl SubagentRunner for SimpleReactRunner {
                                 }
                                 Ok(d) => {
                                     if d.choice == "yes_remember" {
-                                        if name == "run_command" {
+                                        if matches!(name.as_str(), "Bash" | "run_command") {
                                             let prefix = opendev_runtime::extract_command_prefix(
                                                 d.command.trim(),
                                             );

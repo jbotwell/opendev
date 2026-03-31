@@ -3,32 +3,32 @@ use super::*;
 #[test]
 fn test_resolve_full_profile() {
     let allowed = ToolPolicy::resolve("full", None, None).unwrap();
-    assert!(allowed.contains("read_file"));
-    assert!(allowed.contains("write_file"));
-    assert!(allowed.contains("run_command"));
-    assert!(allowed.contains("task_complete"));
-    assert!(allowed.contains("ask_user"));
-    assert!(allowed.contains("send_message"));
+    assert!(allowed.contains("Read"));
+    assert!(allowed.contains("Write"));
+    assert!(allowed.contains("Bash"));
+    assert!(allowed.contains("TaskStop"));
+    assert!(allowed.contains("AskUserQuestion"));
+    assert!(allowed.contains("SendMessage"));
     assert!(allowed.contains("schedule"));
 }
 
 #[test]
 fn test_resolve_minimal_profile() {
     let allowed = ToolPolicy::resolve("minimal", None, None).unwrap();
-    assert!(allowed.contains("read_file"));
-    assert!(allowed.contains("search"));
-    assert!(allowed.contains("task_complete")); // always allowed
-    assert!(!allowed.contains("write_file"));
-    assert!(!allowed.contains("run_command"));
+    assert!(allowed.contains("Read"));
+    assert!(allowed.contains("Grep"));
+    assert!(allowed.contains("TaskStop")); // always allowed
+    assert!(!allowed.contains("Write"));
+    assert!(!allowed.contains("Bash"));
 }
 
 #[test]
 fn test_resolve_coding_profile() {
     let allowed = ToolPolicy::resolve("coding", None, None).unwrap();
-    assert!(allowed.contains("read_file"));
-    assert!(allowed.contains("write_file"));
-    assert!(allowed.contains("run_command"));
-    assert!(!allowed.contains("send_message")); // not in coding
+    assert!(allowed.contains("Read"));
+    assert!(allowed.contains("Write"));
+    assert!(allowed.contains("Bash"));
+    assert!(!allowed.contains("SendMessage")); // not in coding
 }
 
 #[test]
@@ -42,20 +42,20 @@ fn test_resolve_unknown_profile() {
 fn test_resolve_with_additions() {
     let allowed = ToolPolicy::resolve("minimal", Some(&["custom_tool"]), None).unwrap();
     assert!(allowed.contains("custom_tool"));
-    assert!(allowed.contains("read_file"));
+    assert!(allowed.contains("Read"));
 }
 
 #[test]
 fn test_resolve_with_exclusions() {
-    let allowed = ToolPolicy::resolve("full", None, Some(&["run_command"])).unwrap();
-    assert!(!allowed.contains("run_command"));
-    assert!(allowed.contains("read_file"));
+    let allowed = ToolPolicy::resolve("full", None, Some(&["Bash"])).unwrap();
+    assert!(!allowed.contains("Bash"));
+    assert!(allowed.contains("Read"));
 }
 
 #[test]
 fn test_resolve_exclusion_overrides_always_allowed() {
-    let allowed = ToolPolicy::resolve("minimal", None, Some(&["task_complete"])).unwrap();
-    assert!(!allowed.contains("task_complete"));
+    let allowed = ToolPolicy::resolve("minimal", None, Some(&["TaskStop"])).unwrap();
+    assert!(!allowed.contains("TaskStop"));
 }
 
 #[test]
@@ -78,9 +78,9 @@ fn test_get_group_names() {
 #[test]
 fn test_get_tools_in_group() {
     let tools = ToolPolicy::get_tools_in_group("group:read");
-    assert!(tools.contains("read_file"));
-    assert!(tools.contains("search"));
-    assert!(!tools.contains("write_file"));
+    assert!(tools.contains("Read"));
+    assert!(tools.contains("Grep"));
+    assert!(!tools.contains("Write"));
 }
 
 #[test]
@@ -110,12 +110,12 @@ fn test_always_allowed_in_all_profiles() {
     for profile in &["minimal", "review", "coding", "full"] {
         let allowed = ToolPolicy::resolve(profile, None, None).unwrap();
         assert!(
-            allowed.contains("task_complete"),
-            "task_complete missing from {profile}"
+            allowed.contains("TaskStop"),
+            "TaskStop missing from {profile}"
         );
         assert!(
-            allowed.contains("ask_user"),
-            "ask_user missing from {profile}"
+            allowed.contains("AskUserQuestion"),
+            "AskUserQuestion missing from {profile}"
         );
     }
 }

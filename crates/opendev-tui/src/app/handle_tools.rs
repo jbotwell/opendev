@@ -119,51 +119,59 @@ impl App {
         // Check if this is a todo tool for special handling
         let is_todo_tool = matches!(
             tool_name.as_str(),
-            "write_todos" | "update_todo" | "complete_todo" | "list_todos" | "clear_todos"
+            "TodoWrite"
+                | "write_todos"
+                | "TaskUpdate"
+                | "update_todo"
+                | "complete_todo"
+                | "TaskList"
+                | "list_todos"
+                | "clear_todos"
         );
 
-        let (display_lines, collapsed) = if tool_name == "ask_user" {
-            // Format as "· question → answer"
-            let question = arguments
-                .get("question")
-                .and_then(|v| v.as_str())
-                .unwrap_or("question");
-            let answer = output.strip_prefix("User answered: ").unwrap_or(&output);
-            (vec![format!("· {question} → {answer}")], false)
-        } else if is_todo_tool {
-            let summary =
-                crate::formatters::todo_formatter::summarize_todo_result(&tool_name, &output);
-            (vec![summary], false)
-        } else if tool_name == "present_plan" {
-            // Plan content is already displayed via PlanApprovalRequested → DisplayRole::Plan.
-            // Show brief approval confirmation instead of full plan content.
-            let step_count = output
-                .split_once(" steps)")
-                .and_then(|(before, _)| before.rsplit(", ").next())
-                .and_then(|s| s.parse::<usize>().ok())
-                .unwrap_or(0);
-            if step_count > 0 {
-                (
-                    vec![format!("Plan approved · {step_count} todos created")],
-                    false,
-                )
+        let (display_lines, collapsed) =
+            if matches!(tool_name.as_str(), "AskUserQuestion" | "ask_user") {
+                // Format as "· question → answer"
+                let question = arguments
+                    .get("question")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("question");
+                let answer = output.strip_prefix("User answered: ").unwrap_or(&output);
+                (vec![format!("· {question} → {answer}")], false)
+            } else if is_todo_tool {
+                let summary =
+                    crate::formatters::todo_formatter::summarize_todo_result(&tool_name, &output);
+                (vec![summary], false)
+            } else if matches!(tool_name.as_str(), "EnterPlanMode" | "present_plan") {
+                // Plan content is already displayed via PlanApprovalRequested → DisplayRole::Plan.
+                // Show brief approval confirmation instead of full plan content.
+                let step_count = output
+                    .split_once(" steps)")
+                    .and_then(|(before, _)| before.rsplit(", ").next())
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(0);
+                if step_count > 0 {
+                    (
+                        vec![format!("Plan approved · {step_count} todos created")],
+                        false,
+                    )
+                } else {
+                    (vec!["Plan approved".to_string()], false)
+                }
             } else {
-                (vec!["Plan approved".to_string()], false)
-            }
-        } else {
-            use crate::widgets::conversation::is_diff_tool;
-            let result_lines: Vec<String> =
-                output.lines().take(50).map(|l| l.to_string()).collect();
-            let lines = if result_lines.is_empty() && !output.is_empty() {
-                vec![output.clone()]
-            } else {
-                result_lines
+                use crate::widgets::conversation::is_diff_tool;
+                let result_lines: Vec<String> =
+                    output.lines().take(50).map(|l| l.to_string()).collect();
+                let lines = if result_lines.is_empty() && !output.is_empty() {
+                    vec![output.clone()]
+                } else {
+                    result_lines
+                };
+                use crate::formatters::tool_registry::{ToolCategory, categorize_tool};
+                let is_file_read = categorize_tool(&tool_name) == ToolCategory::FileRead;
+                let collapse = is_file_read || (lines.len() > 5 && !is_diff_tool(&tool_name));
+                (lines, collapse)
             };
-            use crate::formatters::tool_registry::{ToolCategory, categorize_tool};
-            let is_file_read = categorize_tool(&tool_name) == ToolCategory::FileRead;
-            let collapse = is_file_read || (lines.len() > 5 && !is_diff_tool(&tool_name));
-            (lines, collapse)
-        };
 
         // For spawn_subagent, extract stats from tracked subagent state
         // Each subagent is treated independently — no grouping
@@ -240,13 +248,15 @@ impl App {
         }
 
         // Refresh todo panel from shared manager after any todo tool or present_plan
-        if (is_todo_tool || tool_name == "present_plan")
+        if (is_todo_tool || matches!(tool_name.as_str(), "EnterPlanMode" | "present_plan"))
             && let Some(ref mgr) = self.state.todo_manager
             && let Ok(mgr) = mgr.lock()
         {
             self.state.todo_items = map_todo_items(&mgr);
-            if (tool_name == "write_todos" || tool_name == "present_plan")
-                && !self.state.todo_items.is_empty()
+            if (matches!(
+                tool_name.as_str(),
+                "TodoWrite" | "write_todos" | "EnterPlanMode" | "present_plan"
+            )) && !self.state.todo_items.is_empty()
             {
                 self.state.todo_expanded = true;
             }

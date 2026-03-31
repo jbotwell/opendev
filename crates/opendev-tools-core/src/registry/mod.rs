@@ -31,6 +31,8 @@ pub struct ToolRegistry {
     pub(super) tool_timeouts: RwLock<HashMap<String, ToolTimeoutConfig>>,
     /// Dedup cache for same-turn identical calls.
     pub(super) dedup_cache: Mutex<HashMap<String, ToolResult>>,
+    /// Aliases mapping old tool names to canonical new names (for backward compat).
+    aliases: RwLock<HashMap<String, String>>,
     /// Sanitizer for truncating oversized tool outputs.
     pub(super) sanitizer: ToolResultSanitizer,
     /// Optional directory for overflow file storage.
@@ -62,6 +64,7 @@ impl ToolRegistry {
             middleware: RwLock::new(Vec::new()),
             tool_timeouts: RwLock::new(HashMap::new()),
             dedup_cache: Mutex::new(HashMap::new()),
+            aliases: RwLock::new(HashMap::new()),
             sanitizer: ToolResultSanitizer::new(),
             overflow_dir: None,
         }
@@ -75,9 +78,29 @@ impl ToolRegistry {
             middleware: RwLock::new(Vec::new()),
             tool_timeouts: RwLock::new(HashMap::new()),
             dedup_cache: Mutex::new(HashMap::new()),
+            aliases: RwLock::new(HashMap::new()),
             sanitizer: ToolResultSanitizer::new().with_overflow_dir(overflow_dir.clone()),
             overflow_dir: Some(overflow_dir),
         }
+    }
+
+    /// Register an alias mapping an old tool name to a canonical new name.
+    pub fn register_alias(&self, old_name: impl Into<String>, new_name: impl Into<String>) {
+        let mut aliases = self.aliases.write().expect("ToolRegistry lock poisoned");
+        aliases.insert(old_name.into(), new_name.into());
+    }
+
+    /// Register all legacy aliases from the tool_names module.
+    pub fn register_legacy_aliases(&self) {
+        for (old, new) in crate::tool_names::legacy_aliases() {
+            self.register_alias(old, new);
+        }
+    }
+
+    /// Resolve a name through the alias table. Returns the canonical name.
+    pub fn resolve_alias(&self, name: &str) -> Option<String> {
+        let aliases = self.aliases.read().expect("ToolRegistry lock poisoned");
+        aliases.get(name).cloned()
     }
 
     /// Register a tool. If a tool with the same name exists, it's replaced.
@@ -96,14 +119,26 @@ impl ToolRegistry {
     /// Get a tool by exact name.
     pub fn get(&self, name: &str) -> Option<Arc<dyn BaseTool>> {
         let tools = self.tools.read().expect("ToolRegistry lock poisoned");
-        tools.get(name).cloned()
+        if let Some(t) = tools.get(name) {
+            return Some(t.clone());
+        }
+        if let Some(canonical) = self.resolve_alias(name) {
+            return tools.get(&canonical).cloned();
+        }
+        None
     }
 
     /// Check if a tool is registered.
     pub fn contains(&self, name: &str) -> bool {
         let tools = self.tools.read().expect("ToolRegistry lock poisoned");
         let name = name.strip_prefix("functions.").unwrap_or(name);
-        tools.contains_key(name)
+        if tools.contains_key(name) {
+            return true;
+        }
+        if let Some(canonical) = self.resolve_alias(name) {
+            return tools.contains_key(&canonical);
+        }
+        false
     }
 
     /// Get sorted list of all registered tool names.

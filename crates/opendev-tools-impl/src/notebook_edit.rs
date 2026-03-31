@@ -21,7 +21,7 @@ pub struct NotebookEditTool;
 #[async_trait::async_trait]
 impl BaseTool for NotebookEditTool {
     fn name(&self) -> &str {
-        "notebook_edit"
+        "NotebookEdit"
     }
 
     fn description(&self) -> &str {

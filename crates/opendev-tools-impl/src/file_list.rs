@@ -45,7 +45,7 @@ impl FileListTool {
 #[async_trait::async_trait]
 impl BaseTool for FileListTool {
     fn name(&self) -> &str {
-        "list_files"
+        "Glob"
     }
 
     fn description(&self) -> &str {

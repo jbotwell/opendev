@@ -16,7 +16,7 @@ pub struct FileWriteTool;
 #[async_trait::async_trait]
 impl BaseTool for FileWriteTool {
     fn name(&self) -> &str {
-        "write_file"
+        "Write"
     }
 
     fn description(&self) -> &str {

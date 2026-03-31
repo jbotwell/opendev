@@ -177,7 +177,7 @@ fn test_build_skills_index() {
     assert!(index.contains("## Available Skills"));
     assert!(index.contains("**commit**"));
     assert!(index.contains("**review-pr**"));
-    assert!(index.contains("invoke_skill"));
+    assert!(index.contains("Skill"));
 }
 
 #[test]

@@ -40,7 +40,7 @@ impl CreateTeamTool {
 #[async_trait::async_trait]
 impl BaseTool for CreateTeamTool {
     fn name(&self) -> &str {
-        "create_team"
+        "TeamCreate"
     }
 
     fn description(&self) -> &str {
@@ -206,7 +206,7 @@ impl SendMessageTool {
 #[async_trait::async_trait]
 impl BaseTool for SendMessageTool {
     fn name(&self) -> &str {
-        "send_message"
+        "SendMessage"
     }
 
     fn description(&self) -> &str {
@@ -363,7 +363,7 @@ impl DeleteTeamTool {
 #[async_trait::async_trait]
 impl BaseTool for DeleteTeamTool {
     fn name(&self) -> &str {
-        "delete_team"
+        "TeamDelete"
     }
 
     fn description(&self) -> &str {

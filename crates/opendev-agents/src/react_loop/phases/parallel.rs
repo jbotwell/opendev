@@ -43,7 +43,7 @@ where
             tc.get("function")
                 .and_then(|f| f.get("name"))
                 .and_then(|n| n.as_str())
-                == Some("spawn_subagent")
+                .is_some_and(|n| matches!(n, "Agent" | "spawn_subagent"))
         });
 
     if !all_subagents {

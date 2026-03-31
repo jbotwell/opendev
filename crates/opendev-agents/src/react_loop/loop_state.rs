@@ -4,7 +4,9 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::doom_loop::DoomLoopDetector;
-use crate::prompts::reminders::{MessageClass, ProactiveReminderConfig, ProactiveReminderScheduler};
+use crate::prompts::reminders::{
+    MessageClass, ProactiveReminderConfig, ProactiveReminderScheduler,
+};
 
 /// Mutable state that persists across iterations of the ReAct loop.
 ///

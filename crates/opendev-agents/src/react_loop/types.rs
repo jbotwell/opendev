@@ -34,14 +34,14 @@ pub struct IterationMetrics {
 
 /// Tools that are safe for parallel execution (read-only, no side effects).
 pub static PARALLELIZABLE_TOOLS: &[&str] = &[
-    "read_file",
-    "list_files",
-    "search",
-    "fetch_url",
-    "web_search",
+    "Read",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch",
     "capture_web_screenshot",
     "analyze_image",
-    "list_todos",
+    "TaskList",
     "search_tools",
     "find_symbol",
     "find_referencing_symbols",
@@ -51,13 +51,13 @@ pub static PARALLELIZABLE_TOOLS: &[&str] = &[
 /// When all tool calls in an iteration are from this set, the consecutive reads
 /// counter increments. After 5 consecutive read-only iterations, a nudge is injected.
 pub(super) static READ_OPS: &[&str] = &[
-    "read_file",
-    "list_files",
-    "search",
-    "fetch_url",
-    "web_search",
+    "Read",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch",
     "find_symbol",
-    "list_todos",
+    "TaskList",
     "read_pdf",
     "analyze_image",
 ];

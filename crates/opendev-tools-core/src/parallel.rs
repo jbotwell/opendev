@@ -9,15 +9,15 @@ use std::collections::HashSet;
 fn read_only_tools() -> HashSet<&'static str> {
     HashSet::from([
         // File reading
-        "read_file",
-        "list_files",
-        "search",
+        "Read",
+        "Glob",
+        "Grep",
         "find_symbol",
         "find_referencing_symbols",
         "analyze_image",
         // Web (read-only)
-        "fetch_url",
-        "web_search",
+        "WebFetch",
+        "WebSearch",
         "capture_web_screenshot",
         "capture_screenshot",
         // Session/memory (read-only)
@@ -26,9 +26,9 @@ fn read_only_tools() -> HashSet<&'static str> {
         "list_subagents",
         "memory_search",
         // Meta (read-only)
-        "list_todos",
+        "TaskList",
         "search_tools",
-        "task_complete",
+        "TaskStop",
         // Agents listing
         "list_agents",
     ])
@@ -37,22 +37,22 @@ fn read_only_tools() -> HashSet<&'static str> {
 /// Tools that modify state and should generally run sequentially.
 fn write_tools() -> HashSet<&'static str> {
     HashSet::from([
-        "write_file",
-        "edit_file",
+        "Write",
+        "Edit",
         "multi_edit",
-        "run_command",
+        "Bash",
         "insert_before_symbol",
         "insert_after_symbol",
         "replace_symbol_body",
         "rename_symbol",
-        "notebook_edit",
+        "NotebookEdit",
         "apply_patch",
         "memory_write",
-        "write_todos",
-        "update_todo",
+        "TodoWrite",
+        "TaskUpdate",
         "complete_todo",
         "clear_todos",
-        "send_message",
+        "SendMessage",
         "schedule",
     ])
 }
@@ -149,7 +149,7 @@ impl ParallelPolicy {
         for &idx in write_indices {
             let tc = &tool_calls[idx];
             match tc.name.as_str() {
-                "write_file" | "edit_file" | "notebook_edit" => {
+                "Write" | "Edit" | "NotebookEdit" => {
                     let target = tc
                         .arguments
                         .get("file_path")

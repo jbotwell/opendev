@@ -15,7 +15,7 @@ fn make_args(pairs: &[(&str, serde_json::Value)]) -> HashMap<String, serde_json:
 #[test]
 fn test_lsp_query_tool_metadata() {
     let tool = make_tool();
-    assert_eq!(tool.name(), "lsp_query");
+    assert_eq!(tool.name(), "LSP");
     assert!(tool.description().contains("definition"));
     assert!(tool.description().contains("references"));
     assert!(tool.description().contains("hover"));

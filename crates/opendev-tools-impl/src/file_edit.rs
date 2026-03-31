@@ -37,7 +37,7 @@ pub struct FileEditTool;
 #[async_trait::async_trait]
 impl BaseTool for FileEditTool {
     fn name(&self) -> &str {
-        "edit_file"
+        "Edit"
     }
 
     fn description(&self) -> &str {

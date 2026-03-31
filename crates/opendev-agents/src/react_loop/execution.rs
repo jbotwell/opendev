@@ -335,7 +335,15 @@ impl ReactLoop {
             Some(s) => s,
             None => return,
         };
-        const EXPLORATION_TOOLS: &[&str] = &["list_files", "read_file", "search", "grep"];
+        const EXPLORATION_TOOLS: &[&str] = &[
+            "Glob",
+            "list_files",
+            "Read",
+            "read_file",
+            "Grep",
+            "search",
+            "grep",
+        ];
         let has_exploration = tool_names
             .iter()
             .any(|name| EXPLORATION_TOOLS.contains(&name.as_str()));

@@ -12,7 +12,7 @@ fn test_empty_partition() {
 
 #[test]
 fn test_single_tool() {
-    let calls = vec![tc("read_file", serde_json::json!({}))];
+    let calls = vec![tc("Read", serde_json::json!({}))];
     let groups = ParallelPolicy::partition(&calls);
     assert_eq!(groups, vec![vec![0]]);
 }
@@ -20,9 +20,9 @@ fn test_single_tool() {
 #[test]
 fn test_all_read_only_parallel() {
     let calls = vec![
-        tc("read_file", serde_json::json!({"file_path": "a.rs"})),
-        tc("search", serde_json::json!({"query": "foo"})),
-        tc("list_files", serde_json::json!({})),
+        tc("Read", serde_json::json!({"file_path": "a.rs"})),
+        tc("Grep", serde_json::json!({"query": "foo"})),
+        tc("Glob", serde_json::json!({})),
     ];
     let groups = ParallelPolicy::partition(&calls);
     // All reads in one group
@@ -33,9 +33,9 @@ fn test_all_read_only_parallel() {
 #[test]
 fn test_mixed_read_write() {
     let calls = vec![
-        tc("read_file", serde_json::json!({"file_path": "a.rs"})),
-        tc("write_file", serde_json::json!({"file_path": "b.rs"})),
-        tc("read_file", serde_json::json!({"file_path": "c.rs"})),
+        tc("Read", serde_json::json!({"file_path": "a.rs"})),
+        tc("Write", serde_json::json!({"file_path": "b.rs"})),
+        tc("Read", serde_json::json!({"file_path": "c.rs"})),
     ];
     let groups = ParallelPolicy::partition(&calls);
     // Group 1: reads [0, 2], Group 2: write [1]
@@ -48,8 +48,8 @@ fn test_mixed_read_write() {
 #[test]
 fn test_writes_different_files_parallel() {
     let calls = vec![
-        tc("write_file", serde_json::json!({"file_path": "a.rs"})),
-        tc("write_file", serde_json::json!({"file_path": "b.rs"})),
+        tc("Write", serde_json::json!({"file_path": "a.rs"})),
+        tc("Write", serde_json::json!({"file_path": "b.rs"})),
     ];
     let groups = ParallelPolicy::partition(&calls);
     // Different files -> one parallel group
@@ -60,8 +60,8 @@ fn test_writes_different_files_parallel() {
 #[test]
 fn test_writes_same_file_sequential() {
     let calls = vec![
-        tc("write_file", serde_json::json!({"file_path": "a.rs"})),
-        tc("write_file", serde_json::json!({"file_path": "a.rs"})),
+        tc("Write", serde_json::json!({"file_path": "a.rs"})),
+        tc("Write", serde_json::json!({"file_path": "a.rs"})),
     ];
     let groups = ParallelPolicy::partition(&calls);
     // Same file -> sequential (separate groups)
@@ -71,11 +71,11 @@ fn test_writes_same_file_sequential() {
 #[test]
 fn test_run_command_sequential() {
     let calls = vec![
-        tc("run_command", serde_json::json!({"command": "ls"})),
-        tc("run_command", serde_json::json!({"command": "pwd"})),
+        tc("Bash", serde_json::json!({"command": "ls"})),
+        tc("Bash", serde_json::json!({"command": "pwd"})),
     ];
     let groups = ParallelPolicy::partition(&calls);
-    // run_command is a write tool, no file_path -> sequential
+    // Bash is a write tool, no file_path -> sequential
     assert_eq!(groups.len(), 2);
 }
 
@@ -83,7 +83,7 @@ fn test_run_command_sequential() {
 fn test_mcp_tools_are_other() {
     let calls = vec![
         tc("mcp__github__create_issue", serde_json::json!({})),
-        tc("read_file", serde_json::json!({})),
+        tc("Read", serde_json::json!({})),
     ];
     let groups = ParallelPolicy::partition(&calls);
     // read in group 1, mcp in group 2

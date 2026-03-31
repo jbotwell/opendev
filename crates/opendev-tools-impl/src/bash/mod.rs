@@ -60,7 +60,7 @@ impl Default for BashTool {
 #[async_trait::async_trait]
 impl BaseTool for BashTool {
     fn name(&self) -> &str {
-        "run_command"
+        "Bash"
     }
 
     fn description(&self) -> &str {

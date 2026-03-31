@@ -1,11 +1,10 @@
 use super::types::SubAgentSpec;
 
 /// Tools available to the Explore subagent.
-pub const CODE_EXPLORER_TOOLS: &[&str] =
-    &["read_file", "grep", "list_files", "run_command", "ast_grep"];
+pub const CODE_EXPLORER_TOOLS: &[&str] = &["Read", "Grep", "Glob", "Bash", "ast_grep"];
 
 /// Tools available to the Planner subagent.
-pub const PLANNER_TOOLS: &[&str] = &["read_file", "grep", "list_files", "write_file", "edit_file"];
+pub const PLANNER_TOOLS: &[&str] = &["Read", "Grep", "Glob", "Write", "Edit"];
 
 /// Create the Explore subagent spec.
 pub fn code_explorer(system_prompt: &str) -> SubAgentSpec {
@@ -47,15 +46,15 @@ pub fn ask_user(system_prompt: &str) -> SubAgentSpec {
 
 /// Tools available to the General subagent (broad access for multi-step tasks).
 pub const GENERAL_TOOLS: &[&str] = &[
-    "read_file",
-    "grep",
-    "list_files",
-    "write_file",
-    "edit_file",
+    "Read",
+    "Grep",
+    "Glob",
+    "Write",
+    "Edit",
     "multi_edit",
-    "run_command",
-    "web_fetch",
-    "web_search",
+    "Bash",
+    "WebFetch",
+    "WebSearch",
     "patch",
     "git",
 ];
@@ -78,14 +77,7 @@ pub fn general(system_prompt: &str) -> SubAgentSpec {
 }
 
 /// Tools available to the Build/Test subagent.
-pub const BUILD_TOOLS: &[&str] = &[
-    "read_file",
-    "grep",
-    "list_files",
-    "run_command",
-    "edit_file",
-    "write_file",
-];
+pub const BUILD_TOOLS: &[&str] = &["Read", "Grep", "Glob", "Bash", "Edit", "Write"];
 
 /// Create the Build subagent spec.
 ///
@@ -102,7 +94,7 @@ pub fn build(system_prompt: &str) -> SubAgentSpec {
 }
 
 /// Tools available to the Project Init subagent.
-pub const PROJECT_INIT_TOOLS: &[&str] = &["read_file", "list_files", "grep", "run_command"];
+pub const PROJECT_INIT_TOOLS: &[&str] = &["Read", "Glob", "Grep", "Bash"];
 
 /// Create the Project Init subagent spec.
 pub fn project_init(system_prompt: &str) -> SubAgentSpec {

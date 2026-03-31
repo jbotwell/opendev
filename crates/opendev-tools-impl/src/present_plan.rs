@@ -75,7 +75,7 @@ impl Default for PresentPlanTool {
 #[async_trait::async_trait]
 impl BaseTool for PresentPlanTool {
     fn name(&self) -> &str {
-        "present_plan"
+        "EnterPlanMode"
     }
 
     fn description(&self) -> &str {

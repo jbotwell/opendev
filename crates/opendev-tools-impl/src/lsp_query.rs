@@ -33,7 +33,7 @@ impl LspQueryTool {
 #[async_trait]
 impl BaseTool for LspQueryTool {
     fn name(&self) -> &str {
-        "lsp_query"
+        "LSP"
     }
 
     fn description(&self) -> &str {

@@ -68,7 +68,7 @@ impl InvokeSkillTool {
 #[async_trait::async_trait]
 impl BaseTool for InvokeSkillTool {
     fn name(&self) -> &str {
-        "invoke_skill"
+        "Skill"
     }
 
     fn description(&self) -> &str {

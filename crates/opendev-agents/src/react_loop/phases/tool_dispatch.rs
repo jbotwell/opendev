@@ -166,7 +166,7 @@ where
                         permission_allows = true;
                     }
                     PermissionAction::Ask => {
-                        if tool_name != "run_command"
+                        if !matches!(tool_name, "Bash" | "run_command")
                             && let Some(approval_tx) = tool_approval_tx
                         {
                             let desc = format!("{} {}", tool_name, arg_pattern);
@@ -212,8 +212,9 @@ where
         }
 
         // Tool approval gate for bash/run_command and MCP tools
-        let needs_approval_gate = tool_name == "run_command" || tool_name.starts_with("mcp__");
-        let auto_approved = if tool_name == "run_command" {
+        let needs_approval_gate =
+            matches!(tool_name, "Bash" | "run_command") || tool_name.starts_with("mcp__");
+        let auto_approved = if matches!(tool_name, "Bash" | "run_command") {
             let cmd = args_map
                 .get("command")
                 .and_then(|v| v.as_str())
@@ -232,7 +233,7 @@ where
             && !auto_approved
             && let Some(approval_tx) = tool_approval_tx
         {
-            let command = if tool_name == "run_command" {
+            let command = if matches!(tool_name, "Bash" | "run_command") {
                 args_map
                     .get("command")
                     .and_then(|v| v.as_str())
@@ -278,7 +279,7 @@ where
                     }
                     Ok(d) => {
                         if d.choice == "yes_remember" {
-                            if tool_name == "run_command" {
+                            if matches!(tool_name, "Bash" | "run_command") {
                                 let prefix = extract_command_prefix(d.command.trim());
                                 debug!(
                                     prefix = %prefix,
@@ -467,7 +468,7 @@ where
         }));
 
         // Capture skill model override from invoke_skill
-        if tool_name == "invoke_skill"
+        if matches!(tool_name, "Skill" | "invoke_skill")
             && tool_result.success
             && let Some(model) = tool_result
                 .metadata
@@ -485,7 +486,13 @@ where
             // Todo tools specifically reset the todo reminder
             if matches!(
                 tool_name,
-                "write_todos" | "update_todo" | "complete_todo" | "list_todos"
+                "TodoWrite"
+                    | "write_todos"
+                    | "TaskUpdate"
+                    | "update_todo"
+                    | "complete_todo"
+                    | "TaskList"
+                    | "list_todos"
             ) {
                 state.proactive_reminders.reset("todo_proactive_reminder");
             }
@@ -493,7 +500,17 @@ where
 
         // Lazy per-subdirectory instruction injection
         if tool_result.success
-            && matches!(tool_name, "read_file" | "edit_file" | "write_file" | "grep")
+            && matches!(
+                tool_name,
+                "Read"
+                    | "read_file"
+                    | "Edit"
+                    | "edit_file"
+                    | "Write"
+                    | "write_file"
+                    | "Grep"
+                    | "grep"
+            )
         {
             let file_path_str = args_value
                 .get("file_path")
@@ -534,7 +551,7 @@ where
         }
 
         // Inject plan_approved_signal after successful present_plan
-        if tool_name == "present_plan" && tool_result.success {
+        if matches!(tool_name, "EnterPlanMode" | "present_plan") && tool_result.success {
             let plan_content = tool_result
                 .metadata
                 .get("plan_content")
@@ -667,11 +684,12 @@ fn extract_file_tool_path(
     args: &std::collections::HashMap<String, Value>,
 ) -> Option<String> {
     match tool_name {
-        "read_file" | "edit_file" | "write_file" | "multi_edit" | "insert_symbol" => args
+        "Read" | "read_file" | "Edit" | "edit_file" | "Write" | "write_file" | "multi_edit"
+        | "insert_symbol" => args
             .get("file_path")
             .and_then(|v| v.as_str())
             .map(String::from),
-        "notebook_edit" => args
+        "NotebookEdit" | "notebook_edit" => args
             .get("notebook_path")
             .and_then(|v| v.as_str())
             .map(String::from),
@@ -683,7 +701,7 @@ fn extract_file_tool_path(
             .get("output_path")
             .and_then(|v| v.as_str())
             .map(String::from),
-        "grep" | "ast_grep" | "list_files" => {
+        "Grep" | "grep" | "ast_grep" | "Glob" | "list_files" => {
             args.get("path").and_then(|v| v.as_str()).map(String::from)
         }
         _ => None,

@@ -24,7 +24,7 @@ pub struct WebSearchTool;
 #[async_trait::async_trait]
 impl BaseTool for WebSearchTool {
     fn name(&self) -> &str {
-        "web_search"
+        "WebSearch"
     }
 
     fn description(&self) -> &str {

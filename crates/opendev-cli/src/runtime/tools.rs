@@ -18,6 +18,8 @@ pub(super) fn register_default_tools(
     ToolChannelReceivers,
     opendev_runtime::ToolApprovalSender,
 ) {
+    registry.register_legacy_aliases();
+
     // Process execution
     registry.register(Arc::new(BashTool::new()));
 
@@ -25,36 +27,21 @@ pub(super) fn register_default_tools(
     registry.register(Arc::new(FileReadTool));
     registry.register(Arc::new(FileWriteTool));
     registry.register(Arc::new(FileEditTool));
-    registry.register(Arc::new(MultiEditTool));
     registry.register(Arc::new(FileListTool));
     registry.register(Arc::new(GrepTool));
-    registry.register(Arc::new(AstGrepTool));
-
-    // Patch
-    registry.register(Arc::new(PatchTool));
 
     // Web tools
     registry.register(Arc::new(WebFetchTool));
     registry.register(Arc::new(WebSearchTool));
-    registry.register(Arc::new(WebScreenshotTool));
-    registry.register(Arc::new(BrowserTool));
-    registry.register(Arc::new(OpenBrowserTool));
 
     // User interaction — with channel for TUI mode
     let (ask_user_tx, ask_user_rx) = opendev_runtime::ask_user_channel();
     registry.register(Arc::new(AskUserTool::new().with_ask_tx(ask_user_tx)));
 
-    // Memory & session
-    registry.register(Arc::new(MemoryTool));
-    registry.register(Arc::new(PastSessionsTool));
-    registry.register(Arc::new(MessageTool));
-
     // Scheduling & misc
     registry.register(Arc::new(ScheduleTool));
     registry.register(Arc::new(NotebookEditTool));
     registry.register(Arc::new(TaskCompleteTool));
-    registry.register(Arc::new(VlmTool));
-    registry.register(Arc::new(DiffPreviewTool));
     // Todo manager — created before plan tool so it can be shared
     let todo_manager = Arc::new(Mutex::new(opendev_runtime::TodoManager::new()));
 
@@ -66,14 +53,7 @@ pub(super) fn register_default_tools(
     ));
     registry.register(Arc::new(WriteTodosTool::new(Arc::clone(&todo_manager))));
     registry.register(Arc::new(UpdateTodoTool::new(Arc::clone(&todo_manager))));
-    registry.register(Arc::new(CompleteTodoTool::new(Arc::clone(&todo_manager))));
     registry.register(Arc::new(ListTodosTool::new(Arc::clone(&todo_manager))));
-    registry.register(Arc::new(ClearTodosTool::new(Arc::clone(&todo_manager))));
-    // Keep legacy single-action tool for backward compatibility
-    registry.register(Arc::new(TodoTool::new(Arc::clone(&todo_manager))));
-
-    // Agent tools
-    registry.register(Arc::new(AgentsTool));
     // Note: SpawnSubagentTool requires shared Arc<ToolRegistry> and Arc<HttpClient>,
     // which are created after registration. Deferred for now.
 
@@ -116,10 +96,7 @@ pub fn build_system_prompt(working_dir: &Path, config: &opendev_models::AppConfi
         "in_git_repo".to_string(),
         serde_json::Value::Bool(working_dir.join(".git").exists()),
     );
-    context.insert(
-        "has_subagents".to_string(),
-        serde_json::Value::Bool(true),
-    );
+    context.insert("has_subagents".to_string(), serde_json::Value::Bool(true));
     context.insert(
         "todo_tracking_enabled".to_string(),
         serde_json::Value::Bool(true),

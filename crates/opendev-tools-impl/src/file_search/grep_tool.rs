@@ -98,7 +98,7 @@ impl GrepTool {
 #[async_trait::async_trait]
 impl BaseTool for GrepTool {
     fn name(&self) -> &str {
-        "grep"
+        "Grep"
     }
 
     fn description(&self) -> &str {

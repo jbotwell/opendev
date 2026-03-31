@@ -86,7 +86,7 @@ impl FileReadTool {
 #[async_trait::async_trait]
 impl BaseTool for FileReadTool {
     fn name(&self) -> &str {
-        "read_file"
+        "Read"
     }
 
     fn description(&self) -> &str {

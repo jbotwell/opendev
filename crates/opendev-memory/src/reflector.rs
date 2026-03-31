@@ -68,7 +68,7 @@ impl ExecutionReflector {
         // Skip single trivial operations
         if tool_calls.len() == 1 {
             let name = &tool_calls[0].name;
-            if name == "read_file" || name == "list_files" {
+            if matches!(name.as_str(), "Read" | "read_file" | "Glob" | "list_files") {
                 return false;
             }
         }
@@ -89,8 +89,12 @@ impl ExecutionReflector {
 
         // Pattern: list_files -> read_file
         if let (Some(list_idx), Some(read_idx)) = (
-            names.iter().position(|&n| n == "list_files"),
-            names.iter().position(|&n| n == "read_file"),
+            names
+                .iter()
+                .position(|&n| matches!(n, "Glob" | "list_files")),
+            names
+                .iter()
+                .position(|&n| matches!(n, "Read" | "read_file")),
         ) && list_idx < read_idx
         {
             return Some(ReflectionResult {
@@ -107,8 +111,12 @@ impl ExecutionReflector {
 
         // Pattern: read_file -> write_file
         if let (Some(read_idx), Some(write_idx)) = (
-            names.iter().position(|&n| n == "read_file"),
-            names.iter().position(|&n| n == "write_file"),
+            names
+                .iter()
+                .position(|&n| matches!(n, "Read" | "read_file")),
+            names
+                .iter()
+                .position(|&n| matches!(n, "Write" | "write_file")),
         ) && read_idx < write_idx
         {
             return Some(ReflectionResult {
@@ -124,7 +132,10 @@ impl ExecutionReflector {
         }
 
         // Pattern: multiple read_file calls
-        let read_count = names.iter().filter(|&&n| n == "read_file").count();
+        let read_count = names
+            .iter()
+            .filter(|&&n| matches!(n, "Read" | "read_file"))
+            .count();
         if read_count >= 3 {
             return Some(ReflectionResult {
                 category: "code_navigation".to_string(),
@@ -149,8 +160,10 @@ impl ExecutionReflector {
 
         // Pattern: search -> read_file
         if let (Some(search_idx), Some(read_idx)) = (
-            names.iter().position(|&n| n == "search"),
-            names.iter().position(|&n| n == "read_file"),
+            names.iter().position(|&n| matches!(n, "Grep" | "search")),
+            names
+                .iter()
+                .position(|&n| matches!(n, "Read" | "read_file")),
         ) && search_idx < read_idx
         {
             return Some(ReflectionResult {
@@ -164,7 +177,10 @@ impl ExecutionReflector {
         }
 
         // Pattern: multiple searches
-        let search_count = names.iter().filter(|&&n| n == "search").count();
+        let search_count = names
+            .iter()
+            .filter(|&&n| matches!(n, "Grep" | "search"))
+            .count();
         if search_count >= 2 {
             return Some(ReflectionResult {
                 category: "code_navigation".to_string(),
@@ -186,7 +202,7 @@ impl ExecutionReflector {
 
         let test_keywords = ["test", "pytest", "jest", "npm test"];
         let has_test_command = tool_calls.iter().any(|tc| {
-            tc.name == "run_command"
+            matches!(tc.name.as_str(), "Bash" | "run_command")
                 && tc.parameters.get("command").is_some_and(|cmd| {
                     let lower = cmd.to_lowercase();
                     test_keywords.iter().any(|kw| lower.contains(kw))
@@ -197,7 +213,9 @@ impl ExecutionReflector {
             return None;
         }
 
-        if names.contains(&"write_file") || names.contains(&"edit_file") {
+        if names.iter().any(|&n| matches!(n, "Write" | "write_file"))
+            || names.iter().any(|&n| matches!(n, "Edit" | "edit_file"))
+        {
             return Some(ReflectionResult {
                 category: "testing".to_string(),
                 content: "Run tests after making code changes to verify correctness and \
@@ -219,7 +237,7 @@ impl ExecutionReflector {
     ) -> Option<ReflectionResult> {
         let commands: Vec<&str> = tool_calls
             .iter()
-            .filter(|tc| tc.name == "run_command")
+            .filter(|tc| matches!(tc.name.as_str(), "Bash" | "run_command"))
             .filter_map(|tc| tc.parameters.get("command").map(String::as_str))
             .collect();
 
@@ -284,7 +302,7 @@ impl ExecutionReflector {
 
         let names: Vec<&str> = tool_calls.iter().map(|tc| tc.name.as_str()).collect();
 
-        if names.contains(&"read_file") {
+        if names.iter().any(|&n| matches!(n, "Read" | "read_file")) {
             return Some(ReflectionResult {
                 category: "error_handling".to_string(),
                 content: "When file access fails, list directory first to verify file exists \
@@ -295,7 +313,7 @@ impl ExecutionReflector {
             });
         }
 
-        if names.contains(&"run_command") {
+        if names.iter().any(|&n| matches!(n, "Bash" | "run_command")) {
             return Some(ReflectionResult {
                 category: "error_handling".to_string(),
                 content: "When commands fail, verify environment setup, dependencies, and \

@@ -34,16 +34,12 @@ impl App {
             return false;
         }
         // Only allow backgrounding when a bash tool or subagent is actively running
-        let has_backgroundable = self
-            .state
-            .active_tools
-            .iter()
-            .any(|t| {
-                matches!(
-                    t.name.as_str(),
-                    "Bash" | "bash" | "run_command" | "Agent" | "spawn_subagent"
-                )
-            });
+        let has_backgroundable = self.state.active_tools.iter().any(|t| {
+            matches!(
+                t.name.as_str(),
+                "Bash" | "bash" | "run_command" | "Agent" | "spawn_subagent"
+            )
+        });
         if !has_backgroundable {
             use crate::widgets::toast::{Toast, ToastLevel};
             self.state.toasts.push(Toast::new(

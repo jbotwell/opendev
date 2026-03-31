@@ -21,7 +21,7 @@ impl ListTodosTool {
 #[async_trait::async_trait]
 impl BaseTool for ListTodosTool {
     fn name(&self) -> &str {
-        "list_todos"
+        "TaskList"
     }
 
     fn description(&self) -> &str {

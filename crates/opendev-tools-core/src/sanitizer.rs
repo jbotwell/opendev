@@ -63,11 +63,17 @@ fn mcp_default_rule() -> TruncationRule {
 /// Built-in default rules by tool name.
 fn default_rules() -> HashMap<String, TruncationRule> {
     let mut rules = HashMap::new();
+    rules.insert("Bash".into(), TruncationRule::tail(8000));
     rules.insert("run_command".into(), TruncationRule::tail(8000));
+    rules.insert("Read".into(), TruncationRule::head(15000));
     rules.insert("read_file".into(), TruncationRule::head(15000));
+    rules.insert("Grep".into(), TruncationRule::head(10000));
     rules.insert("search".into(), TruncationRule::head(10000));
+    rules.insert("Glob".into(), TruncationRule::head(10000));
     rules.insert("list_files".into(), TruncationRule::head(10000));
+    rules.insert("WebFetch".into(), TruncationRule::head(12000));
     rules.insert("fetch_url".into(), TruncationRule::head(12000));
+    rules.insert("WebSearch".into(), TruncationRule::head(10000));
     rules.insert("web_search".into(), TruncationRule::head(10000));
     rules.insert("browser".into(), TruncationRule::head(5000));
     rules.insert("get_session_history".into(), TruncationRule::tail(15000));

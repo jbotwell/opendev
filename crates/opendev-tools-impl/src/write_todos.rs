@@ -21,7 +21,7 @@ impl WriteTodosTool {
 #[async_trait::async_trait]
 impl BaseTool for WriteTodosTool {
     fn name(&self) -> &str {
-        "write_todos"
+        "TodoWrite"
     }
 
     fn description(&self) -> &str {

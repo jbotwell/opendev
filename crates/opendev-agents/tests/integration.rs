@@ -112,9 +112,9 @@ fn bounded_iterations_trigger_at_limit() {
 fn multiple_read_only_tools_are_parallel() {
     let rl = make_loop();
     let tool_calls = vec![
-        serde_json::json!({"function": {"name": "read_file"}}),
-        serde_json::json!({"function": {"name": "search"}}),
-        serde_json::json!({"function": {"name": "list_files"}}),
+        serde_json::json!({"function": {"name": "Read"}}),
+        serde_json::json!({"function": {"name": "Grep"}}),
+        serde_json::json!({"function": {"name": "Glob"}}),
     ];
     assert!(rl.all_parallelizable(&tool_calls));
 }
@@ -903,7 +903,7 @@ fn skills_index_format() {
     assert!(index.contains("**commit**"));
     assert!(index.contains("**review-pr**"));
     assert!(index.contains("**create-pr**"));
-    assert!(index.contains("invoke_skill"));
+    assert!(index.contains("Skill"));
 }
 
 /// Nonexistent skill returns None.
@@ -1081,9 +1081,9 @@ fn mock_llm_parallel_tool_calls() {
         "role": "assistant",
         "content": null,
         "tool_calls": [
-            {"id": "tc-1", "function": {"name": "read_file", "arguments": "{\"file_path\": \"a.rs\"}"}},
-            {"id": "tc-2", "function": {"name": "search", "arguments": "{\"pattern\": \"TODO\"}"}},
-            {"id": "tc-3", "function": {"name": "list_files", "arguments": "{\"path\": \"src/\"}"}}
+            {"id": "tc-1", "function": {"name": "Read", "arguments": "{\"file_path\": \"a.rs\"}"}},
+            {"id": "tc-2", "function": {"name": "Grep", "arguments": "{\"pattern\": \"TODO\"}"}},
+            {"id": "tc-3", "function": {"name": "Glob", "arguments": "{\"path\": \"src/\"}"}}
         ]
     });
 
