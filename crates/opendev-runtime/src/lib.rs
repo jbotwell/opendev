@@ -43,6 +43,7 @@ pub mod team_manager;
 pub mod todo;
 pub mod tool_approval_channel;
 pub mod tool_summarizer;
+pub mod worktree;
 
 // Re-export key types at crate root for convenience.
 pub use approval::{ApprovalRule, ApprovalRulesManager, RuleAction, RuleScope, RuleType};
@@ -102,3 +103,4 @@ pub use tool_approval_channel::{
     tool_approval_channel,
 };
 pub use tool_summarizer::{build_background_result, safe_truncate, summarize_tool_result};
+pub use worktree::{MergeResult, WorktreeInfo, WorktreeManager};
