@@ -23,7 +23,7 @@ Tool schemas are provided separately. Key categories:
 **Search**: Glob (glob patterns), Grep (regex content search via ripgrep, results sorted by mtime)
 **Symbols**: find_symbol, find_referencing_symbols, rename_symbol, replace_symbol_body
 **Commands**: Bash (with optional `description` and `workdir` params)
-**User Interaction**: AskUserQuestion (ask clarifying questions for unclear technical requirements — NOT for greetings or simple conversation)
+**User Interaction**: AskUserQuestion (ask clarifying questions, gather user preferences, get decisions on implementation choices)
 **Web**: WebFetch (use `deep_crawl=true` for crawling), capture_web_screenshot, capture_screenshot, analyze_image, open_browser
 **MCP**: search_tools (keyword query) → discover MCP tools, then call them with data queries
 **Todos**: TodoWrite, TaskUpdate, complete_todo, TaskList, clear_todos

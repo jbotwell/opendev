@@ -56,14 +56,7 @@ pub fn create_default_composer(templates_dir: impl AsRef<Path>) -> PromptCompose
         true,
     );
 
-    // Interaction patterns - Priority 40-50
-    composer.register_section(
-        "interaction_pattern",
-        "system/main/main-interaction-pattern.md",
-        None,
-        40,
-        true,
-    );
+    // Tool guidance - Priority 45
     composer.register_section(
         "tool_selection",
         "system/main/main-tool-selection.md",

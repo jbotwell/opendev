@@ -47,8 +47,6 @@ pub const SYSTEM_MAIN_MAIN_ERROR_RECOVERY: &str =
     include_str!("../../templates/system/main/main-error-recovery.md");
 pub const SYSTEM_MAIN_MAIN_GIT_WORKFLOW: &str =
     include_str!("../../templates/system/main/main-git-workflow.md");
-pub const SYSTEM_MAIN_MAIN_INTERACTION_PATTERN: &str =
-    include_str!("../../templates/system/main/main-interaction-pattern.md");
 pub const SYSTEM_MAIN_MAIN_MODE_AWARENESS: &str =
     include_str!("../../templates/system/main/main-mode-awareness.md");
 pub const SYSTEM_MAIN_MAIN_NO_TIME_ESTIMATES: &str =
@@ -153,7 +151,7 @@ pub const TOOLS_TOOL_WRITE_TODOS: &str = include_str!("../../templates/tools/too
 // ---------------------------------------------------------------------------
 
 /// Total number of embedded templates.
-pub const TEMPLATE_COUNT: usize = 76;
+pub const TEMPLATE_COUNT: usize = 75;
 
 /// All embedded templates indexed by their relative path.
 ///
@@ -213,10 +211,6 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
     m.insert(
         "system/main/main-git-workflow.md",
         SYSTEM_MAIN_MAIN_GIT_WORKFLOW,
-    );
-    m.insert(
-        "system/main/main-interaction-pattern.md",
-        SYSTEM_MAIN_MAIN_INTERACTION_PATTERN,
     );
     m.insert(
         "system/main/main-mode-awareness.md",
