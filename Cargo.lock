@@ -4247,6 +4247,7 @@ version = "0.1.6"
 dependencies = [
  "chrono",
  "dirs-next",
+ "fd-lock",
  "notify",
  "notify-debouncer-mini",
  "opendev-config",
@@ -4261,6 +4262,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: PresentPlan'
+name: 'Tool Description: EnterPlanMode'
 description: Present a plan file for user approval
 version: 1.0.0
 -->
@@ -21,13 +21,13 @@ After a Planner subagent completes and returns a plan file path, call this tool 
 
 1. Spawn a Planner subagent with a plan file path
 2. Planner explores the codebase and writes the plan
-3. Call present_plan(plan_file_path="...") to show the plan
+3. Call EnterPlanMode(plan_file_path="...") to show the plan
 4. Handle the result:
    - **approved**: Proceed with implementation
-   - **modify**: Re-spawn the Planner with the feedback and the same file path, then call present_plan again
+   - **modify**: Re-spawn the Planner with the feedback and the same file path, then call EnterPlanMode again
    - **rejected**: Ask the user how to proceed
 
 ## Important
 
-- Do NOT use ask_user to ask "Is this plan okay?" — that's what this tool does
+- Do NOT use AskUserQuestion to ask "Is this plan okay?" — that's what this tool does
 - The plan file must exist and be non-empty before calling this tool

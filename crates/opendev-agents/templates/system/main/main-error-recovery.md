@@ -8,7 +8,7 @@ version: 2.0.0
 
 When a tool fails, read the error message carefully and apply the matching resolution:
 
-- **"File not found"** — Path is incorrect. Use `list_files` or `search` to locate the correct path before retrying.
+- **"File not found"** — Path is incorrect. Use `Glob` or `search` to locate the correct path before retrying.
 - **"Permission denied"** — Insufficient permissions. Check file permissions or try a different approach.
 - **"old_content not found"** — The file has changed since you last read it, or your memory of the content is wrong. Re-read the file and retry with the correct content.
 - **Rate limit errors** — Too many requests. The system retries automatically; if it persists, reduce concurrency.

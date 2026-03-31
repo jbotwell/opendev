@@ -353,9 +353,8 @@ pub async fn run_interactive(
                     if msg.metadata.contains_key("_msg_class") {
                         continue;
                     }
-                    // Also skip messages with [SYSTEM] prefix from older sessions
-                    // that were persisted before _msg_class was preserved
-                    if msg.content.starts_with("[SYSTEM] ") {
+                    // Also skip system-injected messages from older sessions
+                    if opendev_models::message::is_system_injected_content(&msg.content) {
                         continue;
                     }
                     app_state

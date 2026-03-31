@@ -38,7 +38,12 @@ impl App {
             .state
             .active_tools
             .iter()
-            .any(|t| t.name == "bash" || t.name == "run_command" || t.name == "spawn_subagent");
+            .any(|t| {
+                matches!(
+                    t.name.as_str(),
+                    "Bash" | "bash" | "run_command" | "Agent" | "spawn_subagent"
+                )
+            });
         if !has_backgroundable {
             use crate::widgets::toast::{Toast, ToastLevel};
             self.state.toasts.push(Toast::new(

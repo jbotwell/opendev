@@ -32,15 +32,15 @@ fn test_clean_messages_preserves_non_object() {
 fn test_clean_messages_strips_internal() {
     let messages = vec![
         serde_json::json!({"role": "user", "content": "hello"}),
-        serde_json::json!({"role": "user", "content": "[SYSTEM] debug", "_msg_class": "internal"}),
-        serde_json::json!({"role": "user", "content": "[SYSTEM] error", "_msg_class": "directive"}),
-        serde_json::json!({"role": "user", "content": "[SYSTEM] nudge", "_msg_class": "nudge"}),
+        serde_json::json!({"role": "user", "content": "<system-reminder>\ndebug\n</system-reminder>", "_msg_class": "internal"}),
+        serde_json::json!({"role": "user", "content": "<system-reminder>\nerror\n</system-reminder>", "_msg_class": "directive"}),
+        serde_json::json!({"role": "user", "content": "<system-reminder>\nnudge\n</system-reminder>", "_msg_class": "nudge"}),
     ];
     let cleaned = LlmCaller::clean_messages(&messages);
     assert_eq!(cleaned.len(), 3);
     assert_eq!(cleaned[0]["content"], "hello");
-    assert_eq!(cleaned[1]["content"], "[SYSTEM] error");
-    assert_eq!(cleaned[2]["content"], "[SYSTEM] nudge");
+    assert!(cleaned[1]["content"].as_str().unwrap().contains("error"));
+    assert!(cleaned[2]["content"].as_str().unwrap().contains("nudge"));
     assert!(cleaned[1].get("_msg_class").is_none());
     assert!(cleaned[2].get("_msg_class").is_none());
 }

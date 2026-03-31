@@ -120,7 +120,7 @@ impl App {
                 active_tools.iter().any(|t| t.id == *ptid)
             } else {
                 active_tools.iter().any(|t| {
-                    t.name == "spawn_subagent"
+                    matches!(t.name.as_str(), "Agent" | "spawn_subagent")
                         && t.args.get("task").and_then(|v| v.as_str()) == Some(&s.task)
                 })
             };

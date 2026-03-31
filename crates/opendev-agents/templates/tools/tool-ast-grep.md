@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: ast_grep'
+name: 'Tool Description: Grep'
 description: Structural code search using AST patterns via ast-grep
 version: 2.0.0
 -->
@@ -24,4 +24,4 @@ Search code structurally using AST patterns (ast-grep).
 - `fn $NAME($$$ARGS)` may not match Rust functions that have `pub`/`pub(crate)` visibility. Include the modifier: `pub fn $NAME($$$ARGS)`.
 - For class methods, search the entire class (`class $NAME { $$$BODY }`) or use call patterns (`$OBJ.$METHOD($$$ARGS)`).
 
-When to use vs grep: use ast_grep when you care about **code structure**, use grep for **text/regex** (strings, comments, config values).
+When to use vs Grep: use AST mode when you care about **code structure**, use Grep for **text/regex** (strings, comments, config values).

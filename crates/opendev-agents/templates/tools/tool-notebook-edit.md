@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: notebook_edit'
+name: 'Tool Description: NotebookEdit'
 description: Edit cells in a Jupyter notebook
 version: 2.0.0
 -->

@@ -20,7 +20,7 @@ impl App {
         // For spawn_subagent, eagerly create SubagentDisplayState now.
         // This avoids the race where SubagentStarted (forwarded by the bridge task)
         // arrives after ToolResult (sent directly), causing stats to be lost.
-        if tool_name == "spawn_subagent" {
+        if matches!(tool_name.as_str(), "Agent" | "spawn_subagent") {
             // Skip eager display creation for run_in_background agents —
             // they go directly to the task watcher via SetBackgroundAgentToken.
             let is_background = args
@@ -169,7 +169,7 @@ impl App {
         // Each subagent is treated independently — no grouping
         // Skip if the subagent was backgrounded — "Sent to background" message
         // was already created by AgentBackgrounded handler.
-        if tool_name == "spawn_subagent"
+        if matches!(tool_name.as_str(), "Agent" | "spawn_subagent")
             && self
                 .state
                 .active_subagents
@@ -181,7 +181,7 @@ impl App {
             self.state.dirty = true;
             return;
         }
-        if tool_name == "spawn_subagent" {
+        if matches!(tool_name.as_str(), "Agent" | "spawn_subagent") {
             // Remove matching subagent from active list, creating a persistent summary
             let subagent_idx = self
                 .state

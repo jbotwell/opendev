@@ -10,9 +10,9 @@ Use todos for multi-file changes, feature implementation, or build/test/fix cycl
 
 ## Workflow
 
-1. Create todos ONCE at start with `write_todos` (all start as `pending`). **Group sub-steps as children — never create more than 10 parent items.**
+1. Create todos ONCE at start with `TodoWrite` (all start as `pending`). **Group sub-steps as children — never create more than 10 parent items.**
 2. Work through todos IN ORDER:
-   - `update_todo(id, status="in_progress")` when starting
+   - `TaskUpdate(id, status="in_progress")` when starting
    - Do the work (including all children sub-steps)
    - `complete_todo(id)` when finished (all children done)
 3. Keep only ONE todo `in_progress` at a time

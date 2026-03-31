@@ -245,7 +245,7 @@ fn test_system_message_roundtrip() {
 fn test_msg_class_preserved_roundtrip() {
     // System-injected nudge message should preserve _msg_class through roundtrip
     let api_values = vec![
-        json!({"role": "user", "content": "[SYSTEM] Before finishing, verify...", "_msg_class": "nudge"}),
+        json!({"role": "user", "content": "<system-reminder>\nBefore finishing, verify...\n</system-reminder>", "_msg_class": "nudge"}),
         json!({"role": "assistant", "content": "Done."}),
     ];
 

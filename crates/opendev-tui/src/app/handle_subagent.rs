@@ -23,7 +23,7 @@ impl App {
                 && (s.parent_tool_id.as_ref().is_some_and(|ptid| {
                     self.state.active_tools.iter().any(|t| {
                         t.id == *ptid
-                            && t.name == "spawn_subagent"
+                            && matches!(t.name.as_str(), "Agent" | "spawn_subagent")
                             && t.args.get("task").and_then(|v| v.as_str()) == Some(&task)
                     })
                 }) || s.task == task)
@@ -41,7 +41,7 @@ impl App {
                 .active_tools
                 .iter()
                 .find(|t| {
-                    t.name == "spawn_subagent"
+                    matches!(t.name.as_str(), "Agent" | "spawn_subagent")
                         && t.args.get("task").and_then(|v| v.as_str()) == Some(&task)
                 })
                 .map(|t| t.id.clone());

@@ -143,7 +143,10 @@ impl ContextCompactor {
             }
 
             match role {
-                "user" if goal.is_empty() && !content.starts_with("[SYSTEM]") => {
+                "user"
+                    if goal.is_empty()
+                        && !opendev_models::message::is_system_injected_content(&content) =>
+                {
                     goal = content.chars().take(300).collect();
                     total_chars += goal.len();
                 }

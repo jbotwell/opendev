@@ -10,4 +10,4 @@ Mark a todo item as done and optionally append a final log entry summarizing wha
 
 - ONLY mark a task as completed when you have FULLY accomplished it — tests pass, implementation is complete, no unresolved errors
 - If you encounter blockers or partial completion, keep the task as in_progress and address the issues first
-- After completing a task, check list_todos to find and begin the next available task
+- After completing a task, check TaskList to find and begin the next available task

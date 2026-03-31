@@ -102,7 +102,7 @@ pub fn inject_system_message(
 ) {
     messages.push(serde_json::json!({
         "role": "user",
-        "content": format!("[SYSTEM] {content}"),
+        "content": format!("<system-reminder>\n{content}\n</system-reminder>"),
         "_msg_class": class.as_str(),
     }));
 }
@@ -120,6 +120,68 @@ pub fn append_nudge(messages: &mut Vec<serde_json::Value>, content: &str) {
 /// model needs to plan differently.
 pub fn append_directive(messages: &mut Vec<serde_json::Value>, content: &str) {
     inject_system_message(messages, content, MessageClass::Directive);
+}
+
+// ---------------------------------------------------------------------------
+// Proactive (turn-count-based) reminder scheduler
+// ---------------------------------------------------------------------------
+
+/// Configuration for a proactive reminder that fires based on turn counts.
+#[derive(Debug, Clone)]
+pub struct ProactiveReminderConfig {
+    pub name: &'static str,
+    pub turns_since_reset: usize,
+    pub turns_between: usize,
+    pub class: MessageClass,
+}
+
+/// Tracks turn counts and fires proactive reminders on schedule.
+#[derive(Debug)]
+pub struct ProactiveReminderScheduler {
+    configs: Vec<ProactiveReminderConfig>,
+    turns_since_reset: Vec<usize>,
+    turns_since_fired: Vec<usize>,
+}
+
+impl ProactiveReminderScheduler {
+    pub fn new(configs: Vec<ProactiveReminderConfig>) -> Self {
+        let len = configs.len();
+        Self {
+            configs,
+            turns_since_reset: vec![0; len],
+            turns_since_fired: vec![0; len],
+        }
+    }
+
+    pub fn tick(&mut self) {
+        for counter in &mut self.turns_since_reset {
+            *counter += 1;
+        }
+        for counter in &mut self.turns_since_fired {
+            *counter += 1;
+        }
+    }
+
+    pub fn reset(&mut self, name: &str) {
+        for (i, config) in self.configs.iter().enumerate() {
+            if config.name == name {
+                self.turns_since_reset[i] = 0;
+            }
+        }
+    }
+
+    pub fn check_and_fire(&mut self) -> Vec<(&'static str, MessageClass)> {
+        let mut fired = Vec::new();
+        for (i, config) in self.configs.iter().enumerate() {
+            if self.turns_since_reset[i] >= config.turns_since_reset
+                && self.turns_since_fired[i] >= config.turns_between
+            {
+                fired.push((config.name, config.class));
+                self.turns_since_fired[i] = 0;
+            }
+        }
+        fired
+    }
 }
 
 #[cfg(test)]

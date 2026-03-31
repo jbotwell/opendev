@@ -10,5 +10,5 @@ Analyze an image using the configured Vision Language Model (VLM). Use this when
 
 - Supports both local image files (provide file path) and online URLs (provide URL)
 - Only available if the user has configured a VLM model via the /models command. If not configured, inform the user they need to set one up
-- When to use vs read_file for images: use analyze_image when you need intelligent analysis, descriptions, or information extraction from images; use read_file when you simply need to view/display an image
+- When to use vs Read for images: use analyze_image when you need intelligent analysis, descriptions, or information extraction from images; use Read when you simply need to view/display an image
 - Provide a clear, specific prompt describing what information you want to extract from the image

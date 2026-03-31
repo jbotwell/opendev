@@ -23,7 +23,7 @@ Subagents are specialized agents with focused capabilities. Each has a specific 
 ## Planner
 **Purpose**: Explore the codebase and create detailed implementation plans.
 **When to use**: New feature implementation, multi-file changes, architectural decisions, unclear requirements. Prefer planning for any non-trivial task.
-**Flow**: spawn_subagent(Planner) with a plan file path -> receive plan -> present_plan -> approval
+**Flow**: Agent(Planner) with a plan file path -> receive plan -> EnterPlanMode -> approval
 
 ## Background Agents
 
@@ -38,38 +38,36 @@ Use `run_in_background: true` when spawning an agent for a long-running task. Th
 **Example**: Spawn 3 background Explore agents to analyze different parts of a large codebase simultaneously, then process their results as they arrive.
 
 **How it works:**
-1. Call `spawn_subagent` with `run_in_background: true`
+1. Call `Agent` with `run_in_background: true`
 2. You get back a task_id immediately
 3. The agent runs in the background
 4. When it completes, you receive a notification with the result
 5. You can then use the result in your response
 
-## General Guidance
-
 ## Parallel Subagent Spawning
 
-**IMPORTANT**: When spawning multiple subagents for independent work, make ALL spawn_subagent calls in the SAME response. This is the ONLY way to get parallel execution. If you make them in separate responses, they run sequentially.
+**IMPORTANT**: When spawning multiple subagents for independent work, make ALL Agent calls in the SAME response. This is the ONLY way to get parallel execution. If you make them in separate responses, they run sequentially.
 
-Make multiple `spawn_subagent` calls directly in the same response when you need parallel subagents.
+Make multiple `Agent` calls directly in the same response when you need parallel subagents.
 
-**When to spawn in parallel** (multiple spawn_subagent calls in one response):
+**When to spawn in parallel** (multiple Agent calls in one response):
 **CRITICAL**: Each parallel subagent MUST have a distinct, non-overlapping task. Split by directory, module, or question — never give the same task description to multiple agents.
 - User explicitly asks for multiple agents (e.g., "spawn 2 explorers", "use 3 agents")
-- The codebase is large (many directories/files from list_files results) — split exploration across multiple agents to cover more ground efficiently
+- The codebase is large (many directories/files from Glob results) — split exploration across multiple agents to cover more ground efficiently
 - Independent research tasks exploring different parts of the codebase
 - Tasks that can be divided into non-overlapping areas of investigation
 
 **When NOT to use subagents** (use direct tools instead — spawning has LLM overhead):
-- Analyzing or reading a file whose path you already know — use `read_file` directly
+- Analyzing or reading a file whose path you already know — use `Read` directly
 - Simple grep/search for a specific pattern — use `search` directly
-- Reading output you just produced (logs, test results, command output) — use `read_file` directly
+- Reading output you just produced (logs, test results, command output) — use `Read` directly
 - Single file edits or quick checks
 - Running a single command
 - Any task achievable in 1-2 tool calls — subagent overhead is never justified for these
 - Creative or greenfield tasks with no existing codebase (game design, brainstorming, writing specs from scratch) — handle directly
 - When the task doesn't match any subagent's purpose — don't force-fit
 
-**Anti-pattern**: Do NOT spawn Explore to read/analyze a file whose path you already know. That wastes an entire LLM call on subagent setup when a direct `read_file` gives the same result instantly.
+**Anti-pattern**: Do NOT spawn Explore to read/analyze a file whose path you already know. That wastes an entire LLM call on subagent setup when a direct `Read` gives the same result instantly.
 
 **IMPORTANT**: Subagent results aren't visible to the user — you must always present their findings in your response.
 

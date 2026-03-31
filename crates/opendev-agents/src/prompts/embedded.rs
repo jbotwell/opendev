@@ -45,8 +45,6 @@ pub const SYSTEM_MAIN: &str = include_str!("../../templates/system/main.md");
 // system/main/
 pub const SYSTEM_MAIN_MAIN_ACTION_SAFETY: &str =
     include_str!("../../templates/system/main/main-action-safety.md");
-pub const SYSTEM_MAIN_MAIN_AVAILABLE_TOOLS: &str =
-    include_str!("../../templates/system/main/main-available-tools.md");
 pub const SYSTEM_MAIN_MAIN_CODE_QUALITY: &str =
     include_str!("../../templates/system/main/main-code-quality.md");
 pub const SYSTEM_MAIN_MAIN_CODE_REFERENCES: &str =
@@ -63,14 +61,14 @@ pub const SYSTEM_MAIN_MAIN_NO_TIME_ESTIMATES: &str =
     include_str!("../../templates/system/main/main-no-time-estimates.md");
 pub const SYSTEM_MAIN_MAIN_OUTPUT_AWARENESS: &str =
     include_str!("../../templates/system/main/main-output-awareness.md");
+pub const SYSTEM_MAIN_MAIN_OUTPUT_EFFICIENCY: &str =
+    include_str!("../../templates/system/main/main-output-efficiency.md");
 pub const SYSTEM_MAIN_MAIN_PROVIDER_ANTHROPIC: &str =
     include_str!("../../templates/system/main/main-provider-anthropic.md");
 pub const SYSTEM_MAIN_MAIN_PROVIDER_FIREWORKS: &str =
     include_str!("../../templates/system/main/main-provider-fireworks.md");
 pub const SYSTEM_MAIN_MAIN_PROVIDER_OPENAI: &str =
     include_str!("../../templates/system/main/main-provider-openai.md");
-pub const SYSTEM_MAIN_MAIN_READ_BEFORE_EDIT: &str =
-    include_str!("../../templates/system/main/main-read-before-edit.md");
 pub const SYSTEM_MAIN_MAIN_REMINDERS_NOTE: &str =
     include_str!("../../templates/system/main/main-reminders-note.md");
 pub const SYSTEM_MAIN_MAIN_SCRATCHPAD: &str =
@@ -161,7 +159,7 @@ pub const TOOLS_TOOL_WRITE_TODOS: &str = include_str!("../../templates/tools/too
 // ---------------------------------------------------------------------------
 
 /// Total number of embedded templates.
-pub const TEMPLATE_COUNT: usize = 79;
+pub const TEMPLATE_COUNT: usize = 78;
 
 /// All embedded templates indexed by their relative path.
 ///
@@ -217,10 +215,6 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
         SYSTEM_MAIN_MAIN_ACTION_SAFETY,
     );
     m.insert(
-        "system/main/main-available-tools.md",
-        SYSTEM_MAIN_MAIN_AVAILABLE_TOOLS,
-    );
-    m.insert(
         "system/main/main-code-quality.md",
         SYSTEM_MAIN_MAIN_CODE_QUALITY,
     );
@@ -253,6 +247,10 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
         SYSTEM_MAIN_MAIN_OUTPUT_AWARENESS,
     );
     m.insert(
+        "system/main/main-output-efficiency.md",
+        SYSTEM_MAIN_MAIN_OUTPUT_EFFICIENCY,
+    );
+    m.insert(
         "system/main/main-provider-anthropic.md",
         SYSTEM_MAIN_MAIN_PROVIDER_ANTHROPIC,
     );
@@ -263,10 +261,6 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
     m.insert(
         "system/main/main-provider-openai.md",
         SYSTEM_MAIN_MAIN_PROVIDER_OPENAI,
-    );
-    m.insert(
-        "system/main/main-read-before-edit.md",
-        SYSTEM_MAIN_MAIN_READ_BEFORE_EDIT,
     );
     m.insert(
         "system/main/main-reminders-note.md",

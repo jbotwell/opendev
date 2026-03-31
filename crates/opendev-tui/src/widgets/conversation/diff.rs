@@ -9,7 +9,7 @@ use crate::formatters::style_tokens;
 
 /// Check if a tool name is an edit/write tool that produces diffs.
 pub fn is_diff_tool(name: &str) -> bool {
-    matches!(name, "edit_file" | "write_file")
+    matches!(name, "Edit" | "edit_file" | "Write" | "write_file")
 }
 
 /// Type of a parsed diff entry.

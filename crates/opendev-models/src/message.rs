@@ -94,6 +94,13 @@ pub struct ChatMessage {
     pub provenance: Option<InputProvenance>,
 }
 
+/// Check whether content was injected by the system (nudge, directive, etc.).
+///
+/// Handles both the legacy `[SYSTEM]` prefix and the current `<system-reminder>` tag.
+pub fn is_system_injected_content(content: &str) -> bool {
+    content.starts_with("[SYSTEM] ") || content.starts_with("<system-reminder>")
+}
+
 impl ChatMessage {
     /// Estimate token count (rough approximation).
     pub fn token_estimate(&self) -> u64 {

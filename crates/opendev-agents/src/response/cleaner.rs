@@ -36,6 +36,11 @@ static CLEANUP_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(||
             "",
         ),
         (
+            Regex::new(r"(?s)<system-reminder>.*?</system-reminder>\n?")
+                .expect("valid regex: system-reminder tags"),
+            "",
+        ),
+        (
             Regex::new(r"(?m)^\[INTERNAL\].*$\n?").expect("valid regex: internal markers"),
             "",
         ),

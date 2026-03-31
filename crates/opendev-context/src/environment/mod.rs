@@ -51,6 +51,8 @@ pub struct EnvironmentContext {
     pub directory_tree: Option<String>,
     /// Project instruction files (AGENTS.md, CLAUDE.md, .opendev/instructions.md).
     pub instruction_files: Vec<InstructionFile>,
+    /// Model name (set by CLI after collection).
+    pub model_name: Option<String>,
 }
 
 impl EnvironmentContext {
@@ -129,6 +131,7 @@ impl EnvironmentContext {
             tech_stack,
             directory_tree,
             instruction_files,
+            model_name: None,
         }
     }
 
@@ -145,6 +148,9 @@ impl EnvironmentContext {
         env_lines.push(format!("- Date: {}", self.current_date));
         if let Some(ref shell) = self.shell {
             env_lines.push(format!("- Shell: {shell}"));
+        }
+        if let Some(ref model) = self.model_name {
+            env_lines.push(format!("- Model: {model}"));
         }
         if !self.tech_stack.is_empty() {
             env_lines.push(format!("- Tech stack: {}", self.tech_stack.join(", ")));

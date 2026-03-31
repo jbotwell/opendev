@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::doom_loop::DoomLoopDetector;
+use crate::prompts::reminders::{MessageClass, ProactiveReminderConfig, ProactiveReminderScheduler};
 
 /// Mutable state that persists across iterations of the ReAct loop.
 ///
@@ -31,6 +32,7 @@ pub(super) struct LoopState {
     pub all_todos_complete_nudged: bool,
     pub completion_nudge_sent: bool,
     pub consecutive_reads: usize,
+    pub proactive_reminders: ProactiveReminderScheduler,
 }
 
 impl LoopState {
@@ -58,6 +60,20 @@ impl LoopState {
             all_todos_complete_nudged: false,
             completion_nudge_sent: false,
             consecutive_reads: 0,
+            proactive_reminders: ProactiveReminderScheduler::new(vec![
+                ProactiveReminderConfig {
+                    name: "todo_proactive_reminder",
+                    turns_since_reset: 10,
+                    turns_between: 10,
+                    class: MessageClass::Nudge,
+                },
+                ProactiveReminderConfig {
+                    name: "task_proactive_reminder",
+                    turns_since_reset: 10,
+                    turns_between: 10,
+                    class: MessageClass::Nudge,
+                },
+            ]),
         }
     }
 }

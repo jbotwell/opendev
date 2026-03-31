@@ -79,7 +79,10 @@ fn test_append_nudge() {
     append_nudge(&mut messages, "test nudge");
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["role"], "user");
-    assert_eq!(messages[0]["content"], "[SYSTEM] test nudge");
+    assert!(messages[0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("test nudge"));
     assert_eq!(messages[0]["_msg_class"], "nudge");
 }
 
@@ -89,7 +92,10 @@ fn test_inject_system_message_directive() {
     inject_system_message(&mut messages, "error context", MessageClass::Directive);
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["role"], "user");
-    assert_eq!(messages[0]["content"], "[SYSTEM] error context");
+    assert!(messages[0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("error context"));
     assert_eq!(messages[0]["_msg_class"], "directive");
 }
 
@@ -99,7 +105,10 @@ fn test_inject_system_message_internal() {
     inject_system_message(&mut messages, "debug info", MessageClass::Internal);
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["role"], "user");
-    assert_eq!(messages[0]["content"], "[SYSTEM] debug info");
+    assert!(messages[0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("debug info"));
     assert_eq!(messages[0]["_msg_class"], "internal");
 }
 

@@ -55,9 +55,9 @@ async fn get_messages(State(state): State<AppState>) -> Result<Json<serde_json::
             if msg.metadata.contains_key("_msg_class") {
                 return false;
             }
-            // Skip [SYSTEM] prefixed messages from older sessions
+            // Skip system-injected messages from older sessions
             if msg.role == opendev_models::message::Role::User
-                && msg.content.starts_with("[SYSTEM] ")
+                && opendev_models::message::is_system_injected_content(&msg.content)
             {
                 return false;
             }

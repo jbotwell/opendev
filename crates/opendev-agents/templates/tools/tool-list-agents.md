@@ -10,4 +10,4 @@ List available subagent types with their descriptions and tool access levels.
 
 - Shows all registered subagent types (e.g., explore, planner)
 - Includes description and list of allowed tools for each type
-- Useful for choosing the right subagent type when using spawn_subagent
+- Useful for choosing the right subagent type when using Agent

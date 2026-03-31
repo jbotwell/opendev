@@ -113,14 +113,27 @@ pub fn build_system_prompt(working_dir: &Path, config: &opendev_models::AppConfi
         serde_json::Value::String(working_dir.display().to_string()),
     );
     context.insert(
-        "is_git_repo".to_string(),
+        "in_git_repo".to_string(),
         serde_json::Value::Bool(working_dir.join(".git").exists()),
+    );
+    context.insert(
+        "has_subagents".to_string(),
+        serde_json::Value::Bool(true),
+    );
+    context.insert(
+        "todo_tracking_enabled".to_string(),
+        serde_json::Value::Bool(true),
+    );
+    context.insert(
+        "model_provider".to_string(),
+        serde_json::Value::String(config.model_provider.clone()),
     );
 
     let base_prompt = composer.compose(&context);
 
     // Collect and append dynamic environment context
     let mut env_ctx = opendev_context::EnvironmentContext::collect(working_dir);
+    env_ctx.model_name = Some(config.model.clone());
 
     // Resolve config-level instruction paths (file paths, globs, ~/paths)
     if !config.instructions.is_empty() {

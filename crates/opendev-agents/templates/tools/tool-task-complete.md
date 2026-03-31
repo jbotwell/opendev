@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: task_complete'
+name: 'Tool Description: TaskStop'
 description: Signal task completion
 version: 2.0.0
 -->

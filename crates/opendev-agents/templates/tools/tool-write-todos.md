@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: write_todos'
+name: 'Tool Description: TodoWrite'
 description: Create a todo list for complex tasks
 version: 3.0.0
 -->
@@ -30,10 +30,10 @@ Create a structured task list at the START of a complex task. This helps track p
 
 - Write 4-8 parent todo items maximum. Hard limit: 10 parent items. Excess parent items beyond 10 will be silently truncated.
 - **Group related sub-steps as `children`** instead of creating separate top-level items. When you receive a detailed plan, consolidate plan steps into logical groups. Each group becomes a parent todo, and its individual steps become children.
-- REPLACES the entire todo list — call EXACTLY ONCE, never call it twice. Then use update_todo to change status as you work
+- REPLACES the entire todo list — call EXACTLY ONCE, never call it twice. Then use TaskUpdate to change status as you work
 - Exactly ONE task should be in_progress at any time. Mark it in_progress BEFORE beginning work on it
 - ONLY mark a task as completed when you have FULLY accomplished it — including all its children sub-steps. Never mark completed if tests are failing, implementation is partial, or errors are unresolved
-- After completing a task, check list_todos for the next available task
+- After completing a task, check TaskList for the next available task
 
 ## Example
 

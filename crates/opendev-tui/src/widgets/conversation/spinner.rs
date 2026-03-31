@@ -56,7 +56,7 @@ impl<'a> ConversationWidget<'a> {
                 ),
             ]));
         } else if self.backgrounding_pending
-            && !active_unfinished.iter().any(|t| t.name == "spawn_subagent")
+            && !active_unfinished.iter().any(|t| matches!(t.name.as_str(), "Agent" | "spawn_subagent"))
         {
             // Backgrounding feedback for non-subagent tools (e.g. bash, run_command).
             // When subagents are active, we fall through to the normal rendering loop
@@ -78,7 +78,7 @@ impl<'a> ConversationWidget<'a> {
                 let frame_idx = tool.tick_count % SPINNER_FRAMES.len();
                 let spinner = SPINNER_FRAMES[frame_idx];
 
-                if tool.name == "spawn_subagent" {
+                if matches!(tool.name.as_str(), "Agent" | "spawn_subagent") {
                     let subagent = self
                         .active_subagents
                         .iter()

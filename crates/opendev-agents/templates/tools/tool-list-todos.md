@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: list_todos'
+name: 'Tool Description: TaskList'
 description: Render the current todo panel
 version: 2.0.0
 -->

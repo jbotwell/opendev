@@ -3,7 +3,7 @@ The user's original request: {original_task}
 
 Analyze the full context and provide your reasoning for the next step. Keep the user's complete original request in mind — if it has multiple parts, ensure you are working toward ALL parts, not just the first.
 
-IMPORTANT: If your next step involves reading or searching multiple files to understand code structure, architecture, or patterns, you MUST delegate to Explore rather than doing it yourself. Only use direct read_file/search for known, specific targets (1-2 files).
+IMPORTANT: If your next step involves reading or searching multiple files to understand code structure, architecture, or patterns, you MUST delegate to Explore rather than doing it yourself. Only use direct Read/search for known, specific targets (1-2 files).
 
 --- thinking_analysis_prompt_with_todos ---
 The user's original request: {original_task}
@@ -13,7 +13,7 @@ Current todos ({done_count}/{total_count} done):
 
 Analyze the context and provide your reasoning for the next step. You MUST continue working on the next incomplete todo. Do not summarize or finish until all todos are done.
 
-IMPORTANT: If your next step involves reading or searching multiple files to understand code structure, architecture, or patterns, you MUST delegate to Explore rather than doing it yourself. Only use direct read_file/search for known, specific targets (1-2 files).
+IMPORTANT: If your next step involves reading or searching multiple files to understand code structure, architecture, or patterns, you MUST delegate to Explore rather than doing it yourself. Only use direct Read/search for known, specific targets (1-2 files).
 
 --- thinking_trace_reminder ---
 <thinking_trace>
@@ -22,7 +22,7 @@ IMPORTANT: If your next step involves reading or searching multiple files to und
 
 The thinking trace above is your INTERNAL reasoning — treat it as your private thought process, not as a task report. Use it to guide your next action:
 - If the trace identifies a tool call or code change, perform that step.
-- If the trace concludes a conversational response is appropriate, respond naturally to the user with text — no need to call task_complete.
+- If the trace concludes a conversational response is appropriate, respond naturally to the user with text — no need to call TaskStop.
 Stay aligned with the trace's conclusions but express yourself naturally.
 
 --- subagent_complete_signal ---
@@ -35,7 +35,7 @@ All subagents have completed. Evaluate ALL results together and continue:
 
 --- planner_complete_signal ---
 <planner_complete>
-The Planner has finished writing the plan. You MUST now call present_plan(plan_file_path="{plan_file_path}") to show it to the user for approval. Do NOT start implementing or reading files — the user must approve the plan first.
+The Planner has finished writing the plan. You MUST now call EnterPlanMode(plan_file_path="{plan_file_path}") to show it to the user for approval. Do NOT start implementing or reading files — the user must approve the plan first.
 </planner_complete>
 
 --- failed_tool_nudge ---
@@ -45,7 +45,7 @@ The previous tool call failed. Read the error carefully, identify the root cause
 Permission denied. Do NOT retry the same command. Check if the file is read-only or try a different path you have write access to.
 
 --- nudge_file_not_found ---
-File not found. Do NOT guess the path. Use list_files or search to find the correct path first, then retry with the exact path found.
+File not found. Do NOT guess the path. Use Glob or search to find the correct path first, then retry with the exact path found.
 
 --- nudge_syntax_error ---
 The edit introduced a syntax error. Read the file to see the current state, identify the syntax issue, and retry with corrected content. Do NOT repeat the same edit.
@@ -91,7 +91,7 @@ Write a structured, detailed report:
 Be thorough and specific — file paths, line numbers, code. Do NOT be brief.
 
 --- thinking_on_instruction ---
-**CRITICAL REQUIREMENT - THINKING MODE IS ON:** You MUST call the `think` tool FIRST before calling ANY other tool. This is mandatory - do NOT skip this step. Do NOT call write_file, read_file, bash, or any other tool before calling `think`. In your thinking, explain step-by-step: what you understand about the task, your approach, and your planned actions. Aim for 100-300 words. Only after calling `think` may you proceed with other tools.
+**CRITICAL REQUIREMENT - THINKING MODE IS ON:** You MUST call the `think` tool FIRST before calling ANY other tool. This is mandatory - do NOT skip this step. Do NOT call Write, Read, Bash, or any other tool before calling `think`. In your thinking, explain step-by-step: what you understand about the task, your approach, and your planned actions. Aim for 100-300 words. Only after calling `think` may you proceed with other tools.
 
 --- thinking_off_instruction ---
 For complex tasks, briefly explain your reasoning in 1-2 sentences. For simple tasks, act directly.
@@ -101,12 +101,12 @@ You have {count} incomplete todo(s):
 {todo_list}
 
 Work through your remaining todos using this workflow:
-1. Call update_todo(id, status="in_progress") to mark the next item as in-progress
+1. Call TaskUpdate(id, status="in_progress") to mark the next item as in-progress
 2. Implement that item (write code, edit files, run commands)
 3. Call complete_todo(id) when the item is done
 4. Repeat for each remaining todo
 
-Do NOT call task_complete until ALL todos are done.
+Do NOT call TaskStop until ALL todos are done.
 
 --- file_read_nudge ---
 You have made {consecutive_reads} consecutive read-only operations without taking action.
@@ -119,7 +119,7 @@ Consider:
 Avoid excessive exploration - focus on taking action based on what you've learned.
 
 --- file_exists_warning ---
-This file content was injected from a user @ reference. The file exists on disk — do not re-read it with read_file unless you need a refreshed copy.
+This file content was injected from a user @ reference. The file exists on disk — do not re-read it with Read unless you need a refreshed copy.
 
 --- json_retry_simple ---
 Your response was not valid JSON. Please respond with ONLY a valid JSON object, no markdown, no explanation.
@@ -138,11 +138,11 @@ Your plan has been approved.
 {plan_content}
 </approved_plan>
 
-Now call write_todos to create your task list from the plan's implementation steps. Group related steps into 4-8 parent todos with sub-steps as children. Then work through them in order:
-- Mark todo as "doing" (update_todo)
+Now call TodoWrite to create your task list from the plan's implementation steps. Group related steps into 4-8 parent todos with sub-steps as children. Then work through them in order:
+- Mark todo as "doing" (TaskUpdate)
 - Implement the step fully — write code, edit files, run commands as needed
 - Mark as "done" (complete_todo) only after the implementation is complete
-- After ALL todos are done, call task_complete with a brief summary.
+- After ALL todos are done, call TaskStop with a brief summary.
 
 Do NOT mark a todo as done without implementing it. Each todo requires actual code changes.
 </plan_approved>
@@ -153,7 +153,7 @@ The user's original request: {original_task}
 You are executing an approved plan. Analyze the context and provide your reasoning for the next step. Focus on WHAT to implement, not on exploring. Work through the plan steps in order.
 
 --- all_todos_complete_nudge ---
-All implementation todos are now complete. Call task_complete with a summary of what was accomplished.
+All implementation todos are now complete. Call TaskStop with a summary of what was accomplished.
 
 --- docker_command_failed_nudge ---
 COMMAND FAILED with exit code {exit_code}. Review the error output above and fix the issue before proceeding. Do not repeat the same command without addressing the root cause.
@@ -165,10 +165,10 @@ User requested planning. Before creating a plan, first understand the codebase:
 2. Read relevant files to understand patterns and conventions
 3. Then spawn a Planner subagent with your findings and this plan file path: {plan_file_path}
 
-After the Planner returns, call present_plan(plan_file_path="{plan_file_path}").
+After the Planner returns, call EnterPlanMode(plan_file_path="{plan_file_path}").
 
 --- tool_denied_nudge ---
-The tool call was denied. Do NOT re-attempt the exact same call. Consider why it was denied and adjust your approach. If unclear, use ask_user to ask the user why the tool call was denied.
+The tool call was denied. Do NOT re-attempt the exact same call. Consider why it was denied and adjust your approach. If unclear, use AskUserQuestion to ask the user why the tool call was denied.
 
 --- explore_phase_complete ---
 <explore_complete>
@@ -184,12 +184,12 @@ You have an existing todo list from before:
 
 Based on the user's message, decide how to proceed:
 - Continue working on incomplete todos if the user wants to resume
-- Call write_todos to replace the list if the user changed direction
+- Call TodoWrite to replace the list if the user changed direction
 - Call clear_todos if the todos are no longer relevant
 
 --- plan_file_reference ---
 A plan file exists from a previous session at {plan_file_path}. You may read
-it with read_file and call present_plan to show it for approval, or spawn a
+it with Read and call EnterPlanMode to show it for approval, or spawn a
 Planner subagent to revise it.
 
 --- explore_first_nudge ---
@@ -220,4 +220,10 @@ Before finishing, verify you have fully addressed the user's complete request:
 
 {original_task}
 
-If there are remaining parts you haven't addressed yet, continue working — use tools to make progress. If everything is truly done, call task_complete with a brief summary of what was accomplished.
+If there are remaining parts you haven't addressed yet, continue working — use tools to make progress. If everything is truly done, call TaskStop with a brief summary of what was accomplished.
+
+--- todo_proactive_reminder ---
+The todo tools haven't been used recently. If you're working on tasks that would benefit from tracking progress, consider using TodoWrite to create a task list and TaskUpdate/complete_todo to track progress. Also consider cleaning up the todo list if it has become stale. Only use these if relevant to the current work. This is just a gentle reminder — ignore if not applicable.
+
+--- task_proactive_reminder ---
+You have been working for several turns. If this is a multi-step task, consider whether you should pause to verify progress, run tests, or update the user on status.

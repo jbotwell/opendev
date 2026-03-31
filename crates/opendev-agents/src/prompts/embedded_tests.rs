@@ -20,7 +20,7 @@ fn test_get_embedded_unknown() {
 #[test]
 fn test_system_main_templates() {
     let templates = system_main_templates();
-    assert!(templates.len() >= 20);
+    assert!(templates.len() >= 19);
     assert!(templates.iter().all(|(k, _)| k.starts_with("system/main/")));
 }
 

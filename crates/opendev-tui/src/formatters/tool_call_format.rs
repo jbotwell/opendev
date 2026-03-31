@@ -95,7 +95,7 @@ fn format_parts_inner(
     let entry = lookup_tool(tool_name);
 
     // Special case: spawn_subagent shows "AgentType(task_summary)" instead of "Spawn(subagent)"
-    if tool_name == "spawn_subagent" {
+    if matches!(tool_name, "Agent" | "spawn_subagent") {
         let verb = args
             .get("agent_type")
             .and_then(|v| v.as_str())

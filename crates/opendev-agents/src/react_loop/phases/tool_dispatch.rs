@@ -478,6 +478,19 @@ where
             state.skill_model_override = Some(model.to_string());
         }
 
+        // Reset proactive reminder counters on relevant tool use
+        if tool_result.success {
+            // Any successful tool resets the general task reminder
+            state.proactive_reminders.reset("task_proactive_reminder");
+            // Todo tools specifically reset the todo reminder
+            if matches!(
+                tool_name,
+                "write_todos" | "update_todo" | "complete_todo" | "list_todos"
+            ) {
+                state.proactive_reminders.reset("todo_proactive_reminder");
+            }
+        }
+
         // Lazy per-subdirectory instruction injection
         if tool_result.success
             && matches!(tool_name, "read_file" | "edit_file" | "write_file" | "grep")
@@ -491,7 +504,7 @@ where
                 let instructions = state.subdir_tracker.check_file_read(path);
                 for instr in &instructions {
                     let note = format!(
-                        "<system-reminder>\nThe following project instructions apply to files in this directory ({}):\n\n{}\n</system-reminder>",
+                        "The following project instructions apply to files in this directory ({}):\n\n{}",
                         instr.relative_path, instr.content,
                     );
                     append_directive(messages, &note);

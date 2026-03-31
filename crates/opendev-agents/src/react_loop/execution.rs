@@ -113,6 +113,15 @@ impl ReactLoop {
             let iter_start = Instant::now();
             let emitter = IterationEmitter::new(event_callback, state.completion_nudge_sent);
 
+            // Tick proactive reminders and fire any that are due
+            state.proactive_reminders.tick();
+            for (name, class) in state.proactive_reminders.check_and_fire() {
+                let content = get_reminder(name, &[]);
+                if !content.is_empty() {
+                    inject_system_message(messages, &content, class);
+                }
+            }
+
             if let Some(result) = super::phases::check_safety(
                 self,
                 caller,

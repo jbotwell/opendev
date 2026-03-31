@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: invoke_skill'
+name: 'Tool Description: Skill'
 description: Load a skill explicitly referenced by the user into the conversation
 version: 2.1.0
 -->
@@ -8,16 +8,16 @@ Load a skill's instructions into the current conversation context. Skills are pr
 
 ## When to use this tool
 
-ONLY use `invoke_skill` when the user explicitly mentions a skill by name in their prompt — either as a slash command (e.g., "/commit") or by name (e.g., "run the commit skill"). This tool loads predefined workflow instructions — it does NOT perform general tasks.
+ONLY use `Skill` when the user explicitly mentions a skill by name in their prompt — either as a slash command (e.g., "/commit") or by name (e.g., "run the commit skill"). This tool loads predefined workflow instructions — it does NOT perform general tasks.
 
 ## CRITICAL: Do NOT use this tool for general tasks
 
 This tool ONLY loads predefined markdown skill files. It cannot explore code, summarize, plan, or perform any general work. If the user did not explicitly mention a skill name, do NOT use this tool.
 
-- "summarize the codebase" → use `spawn_subagent` with `agent_type: "explore"`, NOT `invoke_skill`
-- "how does auth work?" → use `spawn_subagent` with `agent_type: "explore"`, NOT `invoke_skill`
-- "design a caching layer" → use `spawn_subagent` with `agent_type: "planner"`, NOT `invoke_skill`
-- Any general task → use the appropriate tool or subagent, NEVER `invoke_skill`
+- "summarize the codebase" → use `Agent` with `agent_type: "explore"`, NOT `Skill`
+- "how does auth work?" → use `Agent` with `agent_type: "explore"`, NOT `Skill`
+- "design a caching layer" → use `Agent` with `agent_type: "planner"`, NOT `Skill`
+- Any general task → use the appropriate tool or subagent, NEVER `Skill`
 
 ## Usage notes
 

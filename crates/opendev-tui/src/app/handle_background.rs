@@ -169,7 +169,7 @@ impl App {
         tool_name: String,
         tool_count: usize,
     ) {
-        if tool_name == "spawn_subagent" {
+        if matches!(tool_name.as_str(), "Agent" | "spawn_subagent") {
             self.state
                 .bg_agent_manager
                 .increment_pending_spawn(&task_id);

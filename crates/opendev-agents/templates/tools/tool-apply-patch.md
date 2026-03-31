@@ -37,4 +37,4 @@ Operations:
 
 - Multi-file patches are supported in both formats
 - For structured patches, context lines (starting with space) are used to locate the position for changes
-- Prefer edit_file or multi_edit for simple changes; use patch for complex multi-file diffs
+- Prefer Edit for simple changes; use patch for complex multi-file diffs

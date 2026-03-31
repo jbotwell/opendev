@@ -42,6 +42,13 @@ pub fn create_default_composer(templates_dir: impl AsRef<Path>) -> PromptCompose
         true,
     );
     composer.register_section(
+        "output_efficiency",
+        "system/main/main-output-efficiency.md",
+        None,
+        22,
+        true,
+    );
+    composer.register_section(
         "no_time_estimates",
         "system/main/main-no-time-estimates.md",
         None,
@@ -58,17 +65,10 @@ pub fn create_default_composer(templates_dir: impl AsRef<Path>) -> PromptCompose
         true,
     );
     composer.register_section(
-        "available_tools",
-        "system/main/main-available-tools.md",
-        None,
-        45,
-        true,
-    );
-    composer.register_section(
         "tool_selection",
         "system/main/main-tool-selection.md",
         None,
-        50,
+        45,
         true,
     );
 
@@ -85,13 +85,6 @@ pub fn create_default_composer(templates_dir: impl AsRef<Path>) -> PromptCompose
         "system/main/main-action-safety.md",
         None,
         56,
-        true,
-    );
-    composer.register_section(
-        "read_before_edit",
-        "system/main/main-read-before-edit.md",
-        None,
-        58,
         true,
     );
     composer.register_section(
