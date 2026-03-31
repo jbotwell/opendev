@@ -134,11 +134,21 @@ impl App {
         }
         let visible_from_bottom = self.state.scroll_offset as usize + viewport_h + buffer_lines;
 
-        let msg_line_estimates: Vec<usize> = self
+        // Use actual rendered line counts from previous frames when available.
+        // Only fall back to rough estimates for messages that have never been rendered.
+        // This prevents scroll jumps when messages transition between culled/visible
+        // states, since the placeholder line count matches the real rendered count.
+        let msg_line_counts: Vec<usize> = self
             .state
             .messages
             .iter()
-            .map(|msg| {
+            .enumerate()
+            .map(|(idx, msg)| {
+                // Prefer actual line count from a previous render
+                if idx < self.state.per_message_line_counts.len() {
+                    return self.state.per_message_line_counts[idx];
+                }
+                // Fallback estimate for never-rendered messages
                 let content = strip_system_reminders(&msg.content);
                 let text_lines = if content.is_empty() {
                     0
@@ -170,13 +180,13 @@ impl App {
             })
             .collect();
 
-        let total_estimated: usize = msg_line_estimates.iter().sum();
+        let total_estimated: usize = msg_line_counts.iter().sum();
         let cull_start = total_estimated.saturating_sub(visible_from_bottom);
         let mut cumulative = 0usize;
-        let msg_visible: Vec<bool> = msg_line_estimates
+        let msg_visible: Vec<bool> = msg_line_counts
             .iter()
-            .map(|&est| {
-                let msg_end = cumulative + est;
+            .map(|&count| {
+                let msg_end = cumulative + count;
                 cumulative = msg_end;
                 msg_end > cull_start
             })
@@ -222,6 +232,10 @@ impl App {
             first_dirty
         };
 
+        // Save old line counts before truncation so culled messages can use
+        // their actual rendered size instead of a rough estimate.
+        let old_line_counts: Vec<usize> = self.state.per_message_line_counts.clone();
+
         // Truncate to the point before first_dirty
         let lines_to_keep: usize = self
             .state
@@ -239,8 +253,14 @@ impl App {
             let lines_before = self.state.cached_lines.len();
 
             if !msg_visible[msg_idx] {
-                let est = msg_line_estimates[msg_idx];
-                for _ in 0..est {
+                // Use actual line count from previous render if available,
+                // otherwise fall back to estimate for never-rendered messages
+                let placeholder = if msg_idx < old_line_counts.len() {
+                    old_line_counts[msg_idx]
+                } else {
+                    msg_line_counts[msg_idx]
+                };
+                for _ in 0..placeholder {
                     self.state.cached_lines.push(ratatui::text::Line::from(""));
                 }
             } else {
