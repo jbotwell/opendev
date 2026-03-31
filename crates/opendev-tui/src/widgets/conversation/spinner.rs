@@ -184,7 +184,7 @@ impl<'a> ConversationWidget<'a> {
                         },
                     ),
                     Span::styled(
-                        format!("{}s \u{00b7} esc to interrupt", elapsed),
+                        format!("{}s (Esc to interrupt)", elapsed),
                         Style::default().fg(style_tokens::SUBTLE),
                     ),
                 ]));
@@ -305,7 +305,7 @@ impl<'a> ConversationWidget<'a> {
         let hidden = total_completed.saturating_sub(1);
         if hidden > 0 {
             lines.push(Line::from(Span::styled(
-                format!("      +{hidden} more tool uses · ctrl+b to run in background"),
+                format!("      +{hidden} more tool uses (Ctrl+B to run in background)"),
                 Style::default()
                     .fg(style_tokens::GREY)
                     .add_modifier(Modifier::ITALIC),

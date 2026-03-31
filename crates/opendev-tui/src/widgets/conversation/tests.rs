@@ -142,7 +142,7 @@ fn test_spinner_thinking() {
         .map(|s| s.content.to_string())
         .collect();
     assert!(text.contains("Thinking..."));
-    assert!(text.contains("esc to interrupt"));
+    assert!(text.contains("(Esc to interrupt)"));
 }
 
 #[test]

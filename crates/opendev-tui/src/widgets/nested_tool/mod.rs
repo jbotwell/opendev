@@ -211,7 +211,7 @@ impl Widget for NestedToolWidget<'_> {
             let hidden_count = total_completed.saturating_sub(visible_count);
             if hidden_count > 0 {
                 lines.push(Line::from(Span::styled(
-                    format!("  {vertical}   +{hidden_count} more tool uses (ctrl+b to run in background)"),
+                    format!("  {vertical}   +{hidden_count} more tool uses (Ctrl+B to run in background)"),
                     Style::default()
                         .fg(style_tokens::SUBTLE)
                         .add_modifier(Modifier::ITALIC),
