@@ -14,6 +14,7 @@ use opendev_models::Session;
 use opendev_models::message::ChatMessage;
 use opendev_models::validator::{filter_and_repair_messages, validate_message};
 
+use crate::event_store::{EventStore, SessionEvent};
 use crate::index::SessionIndex;
 
 pub use titles::{generate_title_from_messages, get_forked_title};
@@ -23,6 +24,9 @@ pub struct SessionManager {
     pub(super) session_dir: PathBuf,
     pub(super) index: SessionIndex,
     pub(super) current_session: Option<Session>,
+    /// Optional event store for audit trail. When set, mutations also
+    /// append SessionEvents to the JSONL event log.
+    event_store: Option<EventStore>,
 }
 
 impl SessionManager {
@@ -37,7 +41,19 @@ impl SessionManager {
             session_dir,
             index,
             current_session: None,
+            event_store: None,
         })
+    }
+
+    /// Builder method: attach an event store for audit logging.
+    pub fn with_event_store(mut self, store: EventStore) -> Self {
+        self.event_store = Some(store);
+        self
+    }
+
+    /// Return a reference to the event store, if configured.
+    pub fn event_store(&self) -> Option<&EventStore> {
+        self.event_store.as_ref()
     }
 
     /// Get the session directory.
@@ -64,6 +80,19 @@ impl SessionManager {
     pub fn create_session(&mut self) -> &Session {
         let session = Session::new();
         info!("Created new session: {}", session.id);
+
+        self.emit_event(
+            &session.id,
+            SessionEvent::SessionCreated {
+                id: session.id.clone(),
+                working_directory: session.working_directory.clone(),
+                channel: session.channel.clone(),
+                title: None,
+                parent_id: None,
+                metadata: session.metadata.clone(),
+            },
+        );
+
         self.current_session = Some(session);
         // SAFETY: we just set current_session to Some on the line above
         self.current_session
@@ -80,12 +109,30 @@ impl SessionManager {
             warn!("Rejected message: {}", verdict.reason);
             return false;
         }
-        if let Some(session) = &mut self.current_session {
-            session.messages.push(msg);
-            session.updated_at = chrono::Utc::now();
-            return true;
+        let Some(session) = &mut self.current_session else {
+            return false;
+        };
+
+        // Build the event before pushing `msg` (which moves it), but only
+        // if the event store is configured to avoid cloning on the hot path.
+        let event = self.event_store.as_ref().map(|_| SessionEvent::MessageAdded {
+            role: msg.role.to_string(),
+            content: msg.content.clone(),
+            timestamp: msg.timestamp,
+            tool_calls: msg.tool_calls.clone(),
+            tokens: msg.tokens,
+            thinking_trace: msg.thinking_trace.clone(),
+            reasoning_content: msg.reasoning_content.clone(),
+        });
+        let session_id = session.id.clone();
+
+        session.messages.push(msg);
+        session.updated_at = chrono::Utc::now();
+
+        if let Some(event) = event {
+            self.emit_event(&session_id, event);
         }
-        false
+        true
     }
 
     /// Save a session to disk.
@@ -236,12 +283,23 @@ impl SessionManager {
     ///
     /// Useful for persisting mode, thinking level, autonomy level, etc.
     pub fn set_metadata(&mut self, key: &str, value: &str) {
-        if let Some(session) = &mut self.current_session {
-            session.metadata.insert(
-                key.to_string(),
-                serde_json::Value::String(value.to_string()),
-            );
-        }
+        let Some(session) = &mut self.current_session else {
+            return;
+        };
+
+        let json_value = serde_json::Value::String(value.to_string());
+        session
+            .metadata
+            .insert(key.to_string(), json_value.clone());
+        let session_id = session.id.clone();
+
+        self.emit_event(
+            &session_id,
+            SessionEvent::MetadataUpdated {
+                key: key.to_string(),
+                value: json_value,
+            },
+        );
     }
 
     /// Read a string value from the current session's metadata.
@@ -251,6 +309,18 @@ impl SessionManager {
             .and_then(|s| s.metadata.get(key))
             .and_then(|v| v.as_str())
             .map(String::from)
+    }
+
+    /// Emit a session event to the event store if configured.
+    ///
+    /// Failures are logged as warnings but never propagated -- the JSON
+    /// persistence is the source of truth, events are a sidecar.
+    pub(crate) fn emit_event(&self, aggregate_id: &str, event: SessionEvent) {
+        if let Some(store) = &self.event_store
+            && let Err(e) = store.append(aggregate_id, vec![event])
+        {
+            warn!("Failed to emit event to event store: {}", e);
+        }
     }
 }
 

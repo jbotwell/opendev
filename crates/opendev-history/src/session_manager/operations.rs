@@ -4,6 +4,8 @@ use tracing::info;
 
 use opendev_models::Session;
 
+use crate::event_store::SessionEvent;
+
 use super::SessionManager;
 use super::titles::{generate_title_from_messages, get_forked_title};
 
@@ -31,18 +33,24 @@ impl SessionManager {
             let session_clone = session.clone();
             self.save_session(&session_clone)?;
             info!(session_id, title, "Updated session title (in-memory)");
-            return Ok(());
+        } else {
+            // Otherwise load, update, save on disk
+            let mut session = self.load_session(session_id)?;
+            session.metadata.insert(
+                "title".to_string(),
+                serde_json::Value::String(title.to_string()),
+            );
+            session.slug = Some(session.generate_slug(Some(title)));
+            self.save_session(&session)?;
+            info!(session_id, title, "Updated session title (on-disk)");
         }
 
-        // Otherwise load, update, save on disk
-        let mut session = self.load_session(session_id)?;
-        session.metadata.insert(
-            "title".to_string(),
-            serde_json::Value::String(title.to_string()),
+        self.emit_event(
+            session_id,
+            SessionEvent::TitleChanged {
+                title: title.to_string(),
+            },
         );
-        session.slug = Some(session.generate_slug(Some(title)));
-        self.save_session(&session)?;
-        info!(session_id, title, "Updated session title (on-disk)");
         Ok(())
     }
 
@@ -94,6 +102,15 @@ impl SessionManager {
             .insert("title".to_string(), serde_json::Value::String(title));
 
         self.save_session(&forked)?;
+
+        self.emit_event(
+            &forked.id,
+            SessionEvent::SessionForked {
+                source_session_id: session_id.to_string(),
+                fork_point: Some(at_message_index),
+            },
+        );
+
         info!(
             "Forked session {} from {} at message {}",
             forked.id, session_id, at_message_index
@@ -106,6 +123,14 @@ impl SessionManager {
         let mut session = self.load_session(session_id)?;
         session.archive();
         self.save_session(&session)?;
+
+        self.emit_event(
+            session_id,
+            SessionEvent::SessionArchived {
+                time_archived: chrono::Utc::now(),
+            },
+        );
+
         info!("Archived session {}", session_id);
         Ok(())
     }

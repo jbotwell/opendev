@@ -4,6 +4,8 @@ use opendev_models::{ChatMessage, Role};
 use std::collections::HashMap;
 use tempfile::TempDir;
 
+use crate::event_store::EventStore;
+
 fn make_msg(role: Role, content: &str) -> ChatMessage {
     ChatMessage {
         role,
@@ -617,4 +619,83 @@ fn test_fork_double_fork_increments() {
         .and_then(|v| v.as_str())
         .unwrap();
     assert_eq!(title, "My task (fork #3)");
+}
+
+// --- EventStore integration tests ---
+
+#[test]
+fn test_event_store_records_session_created() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path().canonicalize().unwrap();
+    let store = EventStore::new(dir.clone());
+    let mut mgr = SessionManager::new(dir).unwrap().with_event_store(store);
+
+    let session = mgr.create_session();
+    let session_id = session.id.clone();
+
+    let store = mgr.event_store().unwrap();
+    let events = store.load(&session_id).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, "SessionCreated");
+}
+
+#[test]
+fn test_event_store_records_message_added() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path().canonicalize().unwrap();
+    let store = EventStore::new(dir.clone());
+    let mut mgr = SessionManager::new(dir).unwrap().with_event_store(store);
+
+    mgr.create_session();
+    let accepted = mgr.add_message(make_msg(Role::User, "hello event store"));
+    assert!(accepted);
+
+    let session_id = mgr.current_session().unwrap().id.clone();
+    let store = mgr.event_store().unwrap();
+    let events = store.load(&session_id).unwrap();
+    // SessionCreated + MessageAdded
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].event_type, "SessionCreated");
+    assert_eq!(events[1].event_type, "MessageAdded");
+}
+
+#[test]
+fn test_event_store_optional() {
+    // Without event store, everything works as before.
+    let tmp = TempDir::new().unwrap();
+    let mut mgr = SessionManager::new(tmp.path().to_path_buf()).unwrap();
+
+    assert!(mgr.event_store().is_none());
+
+    let session = mgr.create_session();
+    let session_id = session.id.clone();
+    mgr.add_message(make_msg(Role::User, "no event store"));
+    mgr.save_current().unwrap();
+
+    let loaded = mgr.load_session(&session_id).unwrap();
+    assert_eq!(loaded.messages.len(), 1);
+}
+
+#[test]
+fn test_event_store_failure_doesnt_block_save() {
+    // Point the event store at an invalid directory; JSON saves should still work.
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path().canonicalize().unwrap();
+    let bad_store = EventStore::new(dir.join("nonexistent/deeply/nested"));
+    let mut mgr = SessionManager::new(dir).unwrap().with_event_store(bad_store);
+
+    // create_session should succeed even though event store write fails
+    let session = mgr.create_session();
+    let session_id = session.id.clone();
+
+    // add_message should succeed
+    let accepted = mgr.add_message(make_msg(Role::User, "still works"));
+    assert!(accepted);
+
+    // save should succeed
+    mgr.save_current().unwrap();
+
+    let loaded = mgr.load_session(&session_id).unwrap();
+    assert_eq!(loaded.messages.len(), 1);
+    assert_eq!(loaded.messages[0].content, "still works");
 }
