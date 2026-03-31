@@ -54,6 +54,10 @@ fn test_session_event_serialization_roundtrip() {
             source_session_id: "src-session".into(),
             fork_point: Some(3),
         },
+        SessionEvent::Tombstone {
+            undo_to_seq: 5,
+            reason: "Undo last 2 events".into(),
+        },
     ];
 
     for event in &events {
@@ -154,6 +158,13 @@ fn test_event_type_names() {
                 fork_point: None,
             },
             "SessionForked",
+        ),
+        (
+            SessionEvent::Tombstone {
+                undo_to_seq: 0,
+                reason: String::new(),
+            },
+            "Tombstone",
         ),
     ];
 
@@ -473,6 +484,118 @@ fn test_append_validated_sequential_validation() {
         .append_validated(&session2, "sess-v4", events)
         .unwrap_err();
     assert!(err.contains("already archived"));
+}
+
+// ---------------------------------------------------------------------------
+// Tombstone / undo tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_tombstone_event_serialization() {
+    let event = SessionEvent::Tombstone {
+        undo_to_seq: 5,
+        reason: "Undo last 2 events".into(),
+    };
+    assert_eq!(event.event_type(), "Tombstone");
+
+    let json = serde_json::to_string(&event).expect("serialize");
+    let roundtripped: SessionEvent = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(roundtripped.event_type(), "Tombstone");
+    if let SessionEvent::Tombstone {
+        undo_to_seq,
+        reason,
+    } = roundtripped
+    {
+        assert_eq!(undo_to_seq, 5);
+        assert_eq!(reason, "Undo last 2 events");
+    } else {
+        panic!("Expected Tombstone variant");
+    }
+}
+
+#[test]
+fn test_undo_last_event() {
+    let (_dir, store) = make_temp_store();
+    // Append 3 events (seqs 1, 2, 3).
+    store.append("sess-u1", sample_events(3)).unwrap();
+
+    // Undo the last 1 event. With 3 events, undoable = 2 (keep first).
+    // Undoing 1: keep_up_to_idx = 3 - 1 - 1 = 1 => undo_to_seq = seq of effective[1] = 2.
+    let (envelope, undo_to_seq) = store.undo("sess-u1", 1).unwrap();
+    assert_eq!(envelope.event_type, "Tombstone");
+    assert_eq!(undo_to_seq, 2); // keep events with seq <= 2
+
+    // Effective events should be 2 (seqs 1 and 2).
+    let all = store.load("sess-u1").unwrap();
+    let effective = EventStore::effective_events(&all);
+    assert_eq!(effective.len(), 2);
+    assert_eq!(effective[0].seq, 1);
+    assert_eq!(effective[1].seq, 2);
+}
+
+#[test]
+fn test_undo_multiple_events() {
+    let (_dir, store) = make_temp_store();
+    store.append("sess-u2", sample_events(5)).unwrap();
+
+    // Undo last 3 events from [1,2,3,4,5]. undoable=4, undo_count=3.
+    // keep_up_to_idx = 5-3-1 = 1, undo_to_seq = effective[1].seq = 2.
+    let (_envelope, undo_to_seq) = store.undo("sess-u2", 3).unwrap();
+    assert_eq!(undo_to_seq, 2);
+
+    let all = store.load("sess-u2").unwrap();
+    let effective = EventStore::effective_events(&all);
+    assert_eq!(effective.len(), 2);
+    assert_eq!(effective[0].seq, 1);
+    assert_eq!(effective[1].seq, 2);
+}
+
+#[test]
+fn test_undo_nothing_to_undo() {
+    let (_dir, store) = make_temp_store();
+
+    // Empty log.
+    let err = store.undo("nonexistent", 1).unwrap_err();
+    assert!(err.contains("No events to undo"));
+}
+
+#[test]
+fn test_undo_capped_to_keep_first_event() {
+    let (_dir, store) = make_temp_store();
+    // Append just 1 event (only a title change, no SessionCreated in this case).
+    store.append("sess-u3", sample_events(1)).unwrap();
+
+    // Trying to undo more than available effective events minus the first.
+    // With 1 event total, undoable = 0, so nothing to undo.
+    let err = store.undo("sess-u3", 5).unwrap_err();
+    assert!(err.contains("Nothing to undo"));
+}
+
+#[test]
+fn test_effective_events_with_tombstone() {
+    let (_dir, store) = make_temp_store();
+    store.append("sess-e1", sample_events(5)).unwrap();
+
+    // Manually append a tombstone with undo_to_seq=3 (keep seqs <= 3).
+    // Events with seq 4 and 5 (between undo_to_seq and tombstone) are undone.
+    store
+        .append(
+            "sess-e1",
+            vec![SessionEvent::Tombstone {
+                undo_to_seq: 3,
+                reason: "test".into(),
+            }],
+        )
+        .unwrap();
+
+    let all = store.load("sess-e1").unwrap();
+    assert_eq!(all.len(), 6); // 5 originals + 1 tombstone
+
+    let effective = EventStore::effective_events(&all);
+    assert_eq!(effective.len(), 3); // seqs 1, 2, 3 are kept
+    assert_eq!(effective[0].seq, 1);
+    assert_eq!(effective[1].seq, 2);
+    assert_eq!(effective[2].seq, 3);
 }
 
 #[test]

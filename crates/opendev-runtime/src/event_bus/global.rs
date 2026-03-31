@@ -4,9 +4,9 @@ use std::collections::HashSet;
 
 use tokio::sync::broadcast;
 
+use super::EventBus;
 use super::events::{EventTopic, RuntimeEvent};
 use super::subscribers::TopicSubscriber;
-use super::EventBus;
 
 /// Aggregates events from multiple directory-scoped [`EventBus`] instances.
 ///

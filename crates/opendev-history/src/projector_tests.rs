@@ -258,3 +258,91 @@ fn test_project_full_sequence() {
         Some("high")
     );
 }
+
+// ---------------------------------------------------------------------------
+// replay_to tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_replay_to_specific_seq() {
+    let events = vec![
+        make_envelope(1, &session_created_event()),
+        make_envelope(
+            2,
+            &SessionEvent::MessageAdded {
+                role: "user".to_string(),
+                content: "First".to_string(),
+                timestamp: Utc::now(),
+                tool_calls: vec![],
+                tokens: None,
+                thinking_trace: None,
+                reasoning_content: None,
+            },
+        ),
+        make_envelope(
+            3,
+            &SessionEvent::MessageAdded {
+                role: "assistant".to_string(),
+                content: "Second".to_string(),
+                timestamp: Utc::now(),
+                tool_calls: vec![],
+                tokens: None,
+                thinking_trace: None,
+                reasoning_content: None,
+            },
+        ),
+        make_envelope(
+            4,
+            &SessionEvent::TitleChanged {
+                title: "Changed".to_string(),
+            },
+        ),
+        make_envelope(
+            5,
+            &SessionEvent::MessageAdded {
+                role: "user".to_string(),
+                content: "Third".to_string(),
+                timestamp: Utc::now(),
+                tool_calls: vec![],
+                tokens: None,
+                thinking_trace: None,
+                reasoning_content: None,
+            },
+        ),
+    ];
+
+    // Replay to seq 3: should have SessionCreated + 2 messages, no title change.
+    let session = SessionProjector::replay_to(&events, 3).unwrap();
+    assert_eq!(session.messages.len(), 2);
+    assert_eq!(session.messages[0].content, "First");
+    assert_eq!(session.messages[1].content, "Second");
+    // Title should still be from SessionCreated, not the TitleChanged at seq 4.
+    assert_eq!(
+        session.metadata.get("title").and_then(|v| v.as_str()),
+        Some("Test Session")
+    );
+}
+
+#[test]
+fn test_replay_to_beyond_max() {
+    let events = vec![
+        make_envelope(1, &session_created_event()),
+        make_envelope(
+            2,
+            &SessionEvent::MessageAdded {
+                role: "user".to_string(),
+                content: "Hello".to_string(),
+                timestamp: Utc::now(),
+                tool_calls: vec![],
+                tokens: None,
+                thinking_trace: None,
+                reasoning_content: None,
+            },
+        ),
+    ];
+
+    // Replay to seq 100 — should be same as full replay.
+    let session = SessionProjector::replay_to(&events, 100).unwrap();
+    assert_eq!(session.messages.len(), 1);
+    assert_eq!(session.messages[0].content, "Hello");
+}

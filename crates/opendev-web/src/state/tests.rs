@@ -1,5 +1,5 @@
-use super::*;
 use super::RING_BUFFER_CAPACITY;
+use super::*;
 use tempfile::TempDir;
 
 fn make_state() -> AppState {
@@ -405,7 +405,10 @@ async fn test_ring_buffer_stores_broadcasts() {
     let state = make_state();
 
     for i in 0..5 {
-        state.broadcast(WsBroadcast::new(format!("evt_{i}"), serde_json::Value::Null));
+        state.broadcast(WsBroadcast::new(
+            format!("evt_{i}"),
+            serde_json::Value::Null,
+        ));
     }
 
     let buf = state.inner.recent_broadcasts.lock().await;
@@ -419,7 +422,10 @@ async fn test_ring_buffer_capacity_limit() {
     let state = make_state();
 
     for i in 0..(RING_BUFFER_CAPACITY + 50) {
-        state.broadcast(WsBroadcast::new(format!("evt_{i}"), serde_json::Value::Null));
+        state.broadcast(WsBroadcast::new(
+            format!("evt_{i}"),
+            serde_json::Value::Null,
+        ));
     }
 
     let buf = state.inner.recent_broadcasts.lock().await;
@@ -449,7 +455,10 @@ async fn test_catch_up_since_too_old() {
 
     // Broadcast enough to fill the buffer, then some more to evict.
     for i in 0..(RING_BUFFER_CAPACITY + 100) {
-        state.broadcast(WsBroadcast::new(format!("evt_{i}"), serde_json::Value::Null));
+        state.broadcast(WsBroadcast::new(
+            format!("evt_{i}"),
+            serde_json::Value::Null,
+        ));
     }
 
     // The oldest seq in buffer is 101 (seqs 1..=100 were evicted).

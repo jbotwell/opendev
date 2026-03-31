@@ -71,6 +71,17 @@ pub enum SessionEvent {
         source_session_id: String,
         fork_point: Option<usize>,
     },
+    /// Marks events as logically deleted (for undo).
+    /// During replay, only events with `seq <= undo_to_seq` are kept from
+    /// events preceding this tombstone. Events appended after the tombstone
+    /// are also kept.
+    Tombstone {
+        /// The last sequence number to keep. Events with seq > this value
+        /// (and before the tombstone) are considered undone.
+        undo_to_seq: u64,
+        /// Human-readable reason for the undo.
+        reason: String,
+    },
 }
 
 impl SessionEvent {
@@ -86,6 +97,7 @@ impl SessionEvent {
             SessionEvent::FileChangeRecorded { .. } => "FileChangeRecorded",
             SessionEvent::MetadataUpdated { .. } => "MetadataUpdated",
             SessionEvent::SessionForked { .. } => "SessionForked",
+            SessionEvent::Tombstone { .. } => "Tombstone",
         }
     }
 }
@@ -311,6 +323,79 @@ impl EventStore {
         }
     }
 
+    /// Undo the last `count` effective events by appending a Tombstone.
+    ///
+    /// Returns the persisted tombstone envelope and the `undo_to_seq` value.
+    /// The SessionCreated event is never undone.
+    pub fn undo(&self, aggregate_id: &str, count: usize) -> Result<(EventEnvelope, u64), String> {
+        let events = self.load(aggregate_id)?;
+        if events.is_empty() {
+            return Err("No events to undo".to_string());
+        }
+
+        let effective = Self::effective_events(&events);
+        // Never undo the SessionCreated event (first effective event).
+        let undoable = effective.len().saturating_sub(1);
+        let undo_count = count.min(undoable);
+        if undo_count == 0 {
+            return Err("Nothing to undo".to_string());
+        }
+
+        // Keep events up to (and including) the cut point.
+        // effective[effective.len() - undo_count] is the first event to undo,
+        // so undo_to_seq = seq of the event just before it.
+        let keep_up_to_idx = effective.len() - undo_count - 1;
+        let undo_to_seq = effective[keep_up_to_idx].seq;
+
+        let tombstone = SessionEvent::Tombstone {
+            undo_to_seq,
+            reason: format!("Undo last {} event(s)", undo_count),
+        };
+
+        let mut envelopes = self.append(aggregate_id, vec![tombstone])?;
+        let envelope = envelopes.remove(0);
+        Ok((envelope, undo_to_seq))
+    }
+
+    /// Return only the effective events after applying tombstone filtering.
+    ///
+    /// Finds the latest `Tombstone` event and excludes all events whose seq
+    /// is <= that tombstone's `undo_to_seq`. The tombstone events themselves
+    /// are also excluded from the result.
+    pub fn effective_events(events: &[EventEnvelope]) -> Vec<&EventEnvelope> {
+        // Find the latest Tombstone and its seq + undo_to_seq.
+        // undo_to_seq = last seq to keep; events between (undo_to_seq, tombstone.seq)
+        // are undone.
+        let mut latest_tombstone: Option<(u64, u64)> = None; // (tombstone_seq, undo_to_seq)
+        for env in events {
+            if let Ok(SessionEvent::Tombstone { undo_to_seq, .. }) =
+                serde_json::from_value::<SessionEvent>(env.data.clone())
+            {
+                let dominated = latest_tombstone.is_none_or(|(ts, _)| env.seq > ts);
+                if dominated {
+                    latest_tombstone = Some((env.seq, undo_to_seq));
+                }
+            }
+        }
+
+        events
+            .iter()
+            .filter(|e| {
+                // Exclude tombstone events themselves.
+                if e.event_type == "Tombstone" {
+                    return false;
+                }
+                // If no tombstone, keep everything.
+                let Some((tombstone_seq, undo_to_seq)) = latest_tombstone else {
+                    return true;
+                };
+                // Keep events with seq <= undo_to_seq (before the undo range)
+                // OR seq > tombstone_seq (added after the undo).
+                e.seq <= undo_to_seq || e.seq > tombstone_seq
+            })
+            .collect()
+    }
+
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
@@ -404,6 +489,9 @@ impl ValidateTransition<SessionEvent> for Session {
             }
 
             SessionEvent::SessionCreated { .. } => {}
+
+            // Tombstone is always valid — it's an administrative undo operation.
+            SessionEvent::Tombstone { .. } => {}
         }
 
         Ok(())

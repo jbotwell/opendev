@@ -15,9 +15,33 @@ pub struct SessionProjector;
 impl SessionProjector {
     /// Reconstruct a Session from a sequence of events.
     ///
-    /// The first event MUST be `SessionCreated`. Returns error if
+    /// The first effective event MUST be `SessionCreated`. Returns error if
     /// events are empty or don't start with SessionCreated.
+    ///
+    /// Tombstone events are respected: any event with seq <= the latest
+    /// tombstone's `undo_to_seq` is excluded from replay.
     pub fn project_from_events(events: &[EventEnvelope]) -> Result<Session, String> {
+        let effective = crate::event_store::EventStore::effective_events(events);
+        Self::project_from_effective(&effective)
+    }
+
+    /// Reconstruct a Session from events up to (and including) `target_seq`.
+    ///
+    /// This gives a point-in-time view of the session state. Only events
+    /// with seq <= `target_seq` are considered (tombstone filtering still
+    /// applies within that range).
+    pub fn replay_to(events: &[EventEnvelope], target_seq: u64) -> Result<Session, String> {
+        let truncated: Vec<EventEnvelope> = events
+            .iter()
+            .filter(|e| e.seq <= target_seq)
+            .cloned()
+            .collect();
+        let effective = crate::event_store::EventStore::effective_events(&truncated);
+        Self::project_from_effective(&effective)
+    }
+
+    /// Internal: project from a pre-filtered list of effective event references.
+    fn project_from_effective(events: &[&EventEnvelope]) -> Result<Session, String> {
         let first = events
             .first()
             .ok_or_else(|| "Cannot project from empty events".to_string())?;
@@ -132,6 +156,11 @@ impl SessionProjector {
                     session.messages.truncate(point);
                 }
                 session.updated_at = envelope.timestamp;
+            }
+            SessionEvent::Tombstone { .. } => {
+                // Tombstone events are handled at the filtering layer
+                // (effective_events / project_from_events). If one reaches
+                // apply_event, it's a no-op.
             }
         }
 
