@@ -47,6 +47,8 @@ pub struct TaskWatcherPanel<'a> {
     focus: usize,
     cell_scrolls: &'a [usize],
     page: usize,
+    /// When Some, render a single expanded detail view instead of the grid.
+    detail_idx: Option<usize>,
 }
 
 impl<'a> TaskWatcherPanel<'a> {
@@ -66,6 +68,7 @@ impl<'a> TaskWatcherPanel<'a> {
             focus: 0,
             cell_scrolls: &[],
             page: 0,
+            detail_idx: None,
         }
     }
 
@@ -82,6 +85,38 @@ impl<'a> TaskWatcherPanel<'a> {
     pub fn page(mut self, page: usize) -> Self {
         self.page = page;
         self
+    }
+
+    pub fn detail_idx(mut self, idx: Option<usize>) -> Self {
+        self.detail_idx = idx;
+        self
+    }
+
+    /// Render expanded detail view for a single task.
+    fn render_detail_view(&self, idx: usize, area: Rect, buf: &mut Buffer) {
+        let scroll = self.cell_scrolls.get(idx).copied().unwrap_or(0);
+
+        // Build the cell data (reuse existing builders)
+        let data = if idx < self.subagents.len() {
+            build_subagent_cell(
+                &self.subagents[idx],
+                self.spinner_tick,
+                self.shortener,
+                true,
+                scroll,
+            )
+        } else {
+            let filtered = self.filtered_bg_tasks();
+            let bg_idx = idx - self.subagents.len();
+            if bg_idx < filtered.len() {
+                build_bg_agent_cell(filtered[bg_idx], self.spinner_tick, true, scroll)
+            } else {
+                return;
+            }
+        };
+
+        // Render as a full-size cell using the existing render_cell function
+        render_cell(&data, area, buf);
     }
 
     /// Total number of tasks across all sources (excluding covered parent tasks).
@@ -148,8 +183,10 @@ impl Widget for TaskWatcherPanel<'_> {
             " {spinner_ch} Task Watcher \u{00b7} {running_count} running, {done_count} done "
         );
 
-        let help_text = if total > 0 {
-            " q:close  hjkl:focus  J/K:scroll  x:kill "
+        let help_text = if self.detail_idx.is_some() {
+            " Esc:back  j/k:scroll "
+        } else if total > 0 {
+            " q:close  hjkl:nav  J/K:scroll  Enter:detail  x:kill  r:retry "
         } else {
             " q/Esc:close "
         };
@@ -171,6 +208,12 @@ impl Widget for TaskWatcherPanel<'_> {
 
         let inner = outer_block.inner(area);
         outer_block.render(area, buf);
+
+        // Detail view: render a single expanded cell instead of the grid
+        if let Some(idx) = self.detail_idx {
+            self.render_detail_view(idx, inner, buf);
+            return;
+        }
 
         if total == 0 {
             if inner.height > 0 && inner.width > 10 {
@@ -549,7 +592,22 @@ fn build_subagent_cell(
     } else {
         "Working\u{2026}"
     };
-    let footer = format!("{status_str} · {elapsed_str} · {tool_count} tools");
+    let mut footer_parts = vec![
+        status_str.to_string(),
+        elapsed_str,
+        format!("{tool_count} tools"),
+    ];
+    if sa.token_count > 0 {
+        if sa.token_count >= 1_000 {
+            footer_parts.push(format!("{:.1}k tok", sa.token_count as f64 / 1_000.0));
+        } else {
+            footer_parts.push(format!("{} tok", sa.token_count));
+        }
+    }
+    if sa.cost_usd > 0.001 {
+        footer_parts.push(format!("${:.3}", sa.cost_usd));
+    }
+    let footer = footer_parts.join(" · ");
     let footer_color = if sa.finished && !sa.success {
         style_tokens::ERROR
     } else if sa.finished {
@@ -635,10 +693,15 @@ fn build_bg_agent_cell(
         crate::managers::background_agents::BackgroundAgentState::Failed => "Failed",
         crate::managers::background_agents::BackgroundAgentState::Killed => "Killed",
     };
-    let footer = format!(
-        "{status_str} · {elapsed_str} · {} tools",
-        task.tool_call_count
-    );
+    let mut footer_parts = vec![
+        status_str.to_string(),
+        elapsed_str,
+        format!("{} tools", task.tool_call_count),
+    ];
+    if task.cost_usd > 0.001 {
+        footer_parts.push(format!("${:.3}", task.cost_usd));
+    }
+    let footer = footer_parts.join(" · ");
     let footer_color = match task.state {
         crate::managers::background_agents::BackgroundAgentState::Running => style_tokens::SUBTLE,
         crate::managers::background_agents::BackgroundAgentState::Completed => {

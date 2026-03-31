@@ -148,6 +148,10 @@ pub struct AppState {
     pub task_watcher_cell_scrolls: Vec<usize>,
     /// Page offset when tasks exceed grid capacity.
     pub task_watcher_page: usize,
+    /// Index of expanded detail view cell, or None for grid mode.
+    pub task_watcher_detail: Option<usize>,
+    /// Whether to sort by status (running first) instead of time.
+    pub task_watcher_sort_by_status: bool,
     /// When all tasks finished (for auto-close after 3s grace).
     pub task_watcher_all_done_at: Option<Instant>,
     /// Last task completion flash: (task_id, when).
@@ -254,6 +258,8 @@ impl Default for AppState {
             task_watcher_focus: 0,
             task_watcher_cell_scrolls: Vec::new(),
             task_watcher_page: 0,
+            task_watcher_detail: None,
+            task_watcher_sort_by_status: false,
             task_watcher_all_done_at: None,
             last_task_completion: None,
             toasts: Vec::new(),

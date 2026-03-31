@@ -98,6 +98,50 @@ impl App {
         }
     }
 
+    /// Restart a failed/killed background task by re-submitting its query.
+    fn try_restart_focused_task(&mut self) {
+        let focus = self.state.task_watcher_focus;
+        let sa_count = self.state.active_subagents.len();
+
+        if focus >= sa_count {
+            // Background agent task
+            let filtered: Vec<_> = self
+                .state
+                .bg_agent_manager
+                .all_tasks()
+                .into_iter()
+                .filter(|t| !t.hidden)
+                .collect();
+            let bg_idx = focus - sa_count;
+            if bg_idx < filtered.len() {
+                let task = &filtered[bg_idx];
+                let is_terminal = matches!(
+                    task.state,
+                    crate::managers::background_agents::BackgroundAgentState::Failed
+                        | crate::managers::background_agents::BackgroundAgentState::Killed
+                );
+                if is_terminal {
+                    // Re-queue the query as a user message for the agent to handle
+                    let restart_msg = format!(
+                        "The background agent that was working on this task failed. \
+                         Please retry: {}",
+                        task.query
+                    );
+                    self.state
+                        .pending_queue
+                        .push_back(super::PendingItem::UserMessage(restart_msg));
+                    if !self.state.agent_active {
+                        self.drain_next_pending();
+                    }
+                    self.state.toasts.push(crate::widgets::Toast::new(
+                        "Restart queued".to_string(),
+                        crate::widgets::ToastLevel::Info,
+                    ));
+                }
+            }
+        }
+    }
+
     /// Handle model picker keys. Returns true if the key was consumed.
     fn handle_key_model_picker(&mut self, key: crossterm::event::KeyEvent) -> bool {
         if let Some(ref mut picker) = self.model_picker_controller
@@ -161,12 +205,17 @@ impl App {
         let total_tasks = self.state.active_subagents.len() + filtered_bg_count;
 
         match (key.modifiers, key.code) {
-            // Close
+            // Close: detail view first, then watcher
             (_, KeyCode::Char('q'))
             | (_, KeyCode::Esc)
             | (KeyModifiers::ALT, KeyCode::Char('b')) => {
-                self.state.task_watcher_open = false;
-                self.state.force_clear = true;
+                if self.state.task_watcher_detail.is_some() {
+                    self.state.task_watcher_detail = None; // close detail, keep watcher
+                } else {
+                    self.state.task_watcher_open = false;
+                    self.state.task_watcher_detail = None;
+                    self.state.force_clear = true;
+                }
             }
 
             // Focus navigation: left
@@ -268,6 +317,25 @@ impl App {
                         self.state.bg_agent_manager.kill_task(&task_id);
                     }
                 }
+            }
+
+            // Enter: toggle detail view for focused cell
+            (_, KeyCode::Enter) => {
+                if self.state.task_watcher_detail.is_some() {
+                    self.state.task_watcher_detail = None; // close detail
+                } else if total_tasks > 0 {
+                    self.state.task_watcher_detail = Some(self.state.task_watcher_focus);
+                }
+            }
+
+            // r: restart a failed/killed task
+            (_, KeyCode::Char('r')) => {
+                self.try_restart_focused_task();
+            }
+
+            // t: toggle sort (by start time vs by status)
+            (_, KeyCode::Char('t')) => {
+                self.state.task_watcher_sort_by_status = !self.state.task_watcher_sort_by_status;
             }
 
             // Page navigation: left

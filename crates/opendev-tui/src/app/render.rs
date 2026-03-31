@@ -284,7 +284,8 @@ impl App {
             )
             .focus(self.state.task_watcher_focus)
             .cell_scrolls(&self.state.task_watcher_cell_scrolls)
-            .page(self.state.task_watcher_page);
+            .page(self.state.task_watcher_page)
+            .detail_idx(self.state.task_watcher_detail);
             let w = ((area.width as f32 * 0.85) as u16).clamp(40, area.width);
             let h = ((area.height as f32 * 0.80) as u16).clamp(12, area.height);
             let x = area.x + (area.width.saturating_sub(w)) / 2;
