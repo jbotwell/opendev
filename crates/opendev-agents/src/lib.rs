@@ -12,6 +12,7 @@
 //! - [`agent_types`] — Agent definitions, handoff protocol, parallel tool grouping
 
 pub mod agent_types;
+pub mod attachments;
 pub mod doom_loop;
 pub mod llm_calls;
 pub mod main_agent;
@@ -38,3 +39,21 @@ pub use subagents::{
 pub use traits::{
     AgentDeps, AgentError, AgentEventCallback, AgentResult, BaseAgent, LlmResponse, TaskMonitor,
 };
+
+/// Resolve the git repository root for a working directory.
+///
+/// Returns `None` if the directory is not inside a git repository.
+/// This is a shared helper to avoid redundant `git rev-parse --show-toplevel` calls.
+pub fn git_root(working_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(working_dir)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| {
+            String::from_utf8(o.stdout)
+                .ok()
+                .map(|s| std::path::PathBuf::from(s.trim()))
+        })
+}

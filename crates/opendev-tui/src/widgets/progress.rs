@@ -64,16 +64,16 @@ impl Widget for TaskProgressWidget<'_> {
             Style::default().fg(style_tokens::SUBTLE),
         ));
 
-        // Info section: esc to interrupt · Xs · token_display
+        // Info section: Xs · token_display (Esc to interrupt)
         let mut info_parts = Vec::new();
-        info_parts.push("esc to interrupt".to_string());
         info_parts.push(format!("{}s", self.progress.elapsed_secs));
 
         if let Some(ref token_display) = self.progress.token_display {
             info_parts.push(token_display.clone());
         }
 
-        let info_str = info_parts.join(" \u{00b7} "); // middle dot separator
+        let mut info_str = info_parts.join(" \u{00b7} "); // middle dot separator
+        info_str.push_str(" (Esc to interrupt)");
         spans.push(Span::styled(
             info_str,
             Style::default().fg(style_tokens::SUBTLE),
@@ -109,47 +109,5 @@ pub fn format_final_status(progress: &TaskProgress) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_task_progress_creation() {
-        let progress = TaskProgress {
-            description: "Thinking".to_string(),
-            elapsed_secs: 5,
-            token_display: Some("1.2k tokens".to_string()),
-            interrupted: false,
-            started_at: std::time::Instant::now(),
-        };
-        assert_eq!(progress.description, "Thinking");
-    }
-
-    #[test]
-    fn test_format_final_status_completed() {
-        let progress = TaskProgress {
-            description: "Thinking".to_string(),
-            elapsed_secs: 3,
-            token_display: None,
-            interrupted: false,
-            started_at: std::time::Instant::now(),
-        };
-        let status = format_final_status(&progress);
-        assert!(status.contains("completed in 3s"));
-        assert!(status.starts_with('\u{23fa}'));
-    }
-
-    #[test]
-    fn test_format_final_status_interrupted() {
-        let progress = TaskProgress {
-            description: "Running".to_string(),
-            elapsed_secs: 7,
-            token_display: Some("2.5k tokens".to_string()),
-            interrupted: true,
-            started_at: std::time::Instant::now(),
-        };
-        let status = format_final_status(&progress);
-        assert!(status.contains("interrupted in 7s"));
-        assert!(status.contains("2.5k tokens"));
-        assert!(status.starts_with('\u{23f9}'));
-    }
-}
+#[path = "progress_tests.rs"]
+mod tests;

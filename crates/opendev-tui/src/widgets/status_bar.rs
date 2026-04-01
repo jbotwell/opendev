@@ -40,6 +40,9 @@ pub struct StatusBarWidget<'a> {
     reasoning_level: Option<ReasoningLevel>,
     spinner_char: Option<char>,
     last_completion: Option<String>,
+    session_id: Option<&'a str>,
+    /// Team status: (busy_count, total_count). None if no active team.
+    team_status: Option<(usize, usize)>,
 }
 
 impl<'a> StatusBarWidget<'a> {
@@ -68,6 +71,8 @@ impl<'a> StatusBarWidget<'a> {
             reasoning_level: None,
             spinner_char: None,
             last_completion: None,
+            session_id: None,
+            team_status: None,
         }
     }
 
@@ -107,6 +112,11 @@ impl<'a> StatusBarWidget<'a> {
         self
     }
 
+    pub fn team_status(mut self, status: Option<(usize, usize)>) -> Self {
+        self.team_status = status;
+        self
+    }
+
     pub fn spinner_char(mut self, ch: Option<char>) -> Self {
         self.spinner_char = ch;
         self
@@ -114,6 +124,11 @@ impl<'a> StatusBarWidget<'a> {
 
     pub fn last_completion(mut self, info: Option<String>) -> Self {
         self.last_completion = info;
+        self
+    }
+
+    pub fn session_id(mut self, id: Option<&'a str>) -> Self {
+        self.session_id = id;
         self
     }
 
@@ -256,6 +271,20 @@ impl Widget for StatusBarWidget<'_> {
             ));
         }
 
+        // Team status
+        if let Some((busy, total)) = self.team_status {
+            spans.push(Span::styled(
+                "  \u{2502}  ",
+                Style::default().fg(style_tokens::GREY),
+            ));
+            spans.push(Span::styled(
+                format!("Team:{busy}/{total}"),
+                Style::default()
+                    .fg(style_tokens::CYAN)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+
         // Completion flash
         if let Some(ref info) = self.last_completion {
             spans.push(Span::styled(
@@ -329,6 +358,19 @@ impl Widget for StatusBarWidget<'_> {
 
         // Build right-side spans
         let mut right_spans: Vec<Span> = Vec::new();
+
+        // Session ID (right-aligned, subtle)
+        if let Some(sid) = self.session_id {
+            right_spans.push(Span::styled(
+                format!("#{sid}"),
+                Style::default().fg(style_tokens::GREY),
+            ));
+            right_spans.push(Span::styled(
+                "  \u{2502}  ",
+                Style::default().fg(style_tokens::GREY),
+            ));
+        }
+
         if !cost_str.is_empty() {
             right_spans.push(Span::styled(
                 "Cost ",
@@ -397,44 +439,5 @@ impl StatusBarWidget<'_> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_tokens() {
-        assert_eq!(StatusBarWidget::format_tokens(500), "500");
-        assert_eq!(StatusBarWidget::format_tokens(1_500), "1.5k");
-        assert_eq!(StatusBarWidget::format_tokens(1_500_000), "1.5M");
-    }
-
-    #[test]
-    fn test_shorten_display() {
-        let ps = crate::formatters::PathShortener::default();
-        assert_eq!(ps.shorten_display("/home/user"), "/home/user");
-        assert_eq!(ps.shorten_display("/a/b/c/d/myapp"), "…/d/myapp");
-    }
-
-    #[test]
-    fn test_status_bar_creation() {
-        let _widget = StatusBarWidget::new(
-            "claude-sonnet-4",
-            "/home/user/project",
-            Some("main"),
-            5000,
-            200_000,
-            OperationMode::Normal,
-        )
-        .autonomy(AutonomyLevel::Manual)
-        .context_usage_pct(25.0)
-        .session_cost(0.05)
-        .mcp_status(Some((2, 3)), false)
-        .background_tasks(1);
-    }
-
-    #[test]
-    fn test_autonomy_display() {
-        assert_eq!(AutonomyLevel::Manual.to_string(), "Manual");
-        assert_eq!(AutonomyLevel::SemiAuto.to_string(), "Semi-Auto");
-        assert_eq!(AutonomyLevel::Auto.to_string(), "Auto");
-    }
-}
+#[path = "status_bar_tests.rs"]
+mod tests;

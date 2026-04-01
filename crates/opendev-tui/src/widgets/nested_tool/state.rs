@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use crate::formatters::tool_line::{format_elapsed, format_token_count};
+
 /// State tracking for a single subagent execution.
 #[derive(Debug, Clone)]
 pub struct SubagentDisplayState {
@@ -26,8 +28,10 @@ pub struct SubagentDisplayState {
     pub active_tools: HashMap<String, NestedToolCallState>,
     /// Completed tool calls (for display).
     pub completed_tools: Vec<CompletedToolCall>,
-    /// Accumulated token count (input + output).
-    pub token_count: u64,
+    /// Latest input tokens from the most recent LLM call (replaced, not accumulated).
+    pub latest_input_tokens: u64,
+    /// Cumulative output tokens across all LLM calls.
+    pub cumulative_output_tokens: u64,
     /// Animation tick counter for spinner.
     pub tick: usize,
     /// Optional shallow subagent warning.
@@ -40,6 +44,10 @@ pub struct SubagentDisplayState {
     pub description: Option<String>,
     /// Whether this subagent's parent was sent to background (Ctrl+B).
     pub backgrounded: bool,
+    /// Whether spawned with `run_in_background` (async from start).
+    pub run_in_background: bool,
+    /// Cumulative cost in USD.
+    pub cost_usd: f64,
 }
 
 impl SubagentDisplayState {
@@ -56,13 +64,16 @@ impl SubagentDisplayState {
             tool_call_count: 0,
             active_tools: HashMap::new(),
             completed_tools: Vec::new(),
-            token_count: 0,
+            latest_input_tokens: 0,
+            cumulative_output_tokens: 0,
             tick: 0,
             shallow_warning: None,
             finished_at: None,
             parent_tool_id: None,
             description: None,
             backgrounded: false,
+            run_in_background: false,
+            cost_usd: 0.0,
         }
     }
 
@@ -91,9 +102,16 @@ impl SubagentDisplayState {
         );
     }
 
-    /// Accumulate token usage from an LLM call.
+    /// Record token usage from an LLM call.
+    /// Input tokens are replaced (each call sends full context), output tokens are accumulated.
     pub fn add_tokens(&mut self, input_tokens: u64, output_tokens: u64) {
-        self.token_count += input_tokens + output_tokens;
+        self.latest_input_tokens = input_tokens;
+        self.cumulative_output_tokens += output_tokens;
+    }
+
+    /// Effective token count: latest context window size + total output generated.
+    pub fn effective_token_count(&self) -> u64 {
+        self.latest_input_tokens + self.cumulative_output_tokens
     }
 
     /// Record a tool call completing.
@@ -143,6 +161,29 @@ impl SubagentDisplayState {
     /// Elapsed time since start.
     pub fn elapsed_secs(&self) -> u64 {
         self.started_at.elapsed().as_secs()
+    }
+
+    /// Generate a persistent completion summary for display after the subagent finishes.
+    /// Format: "Done (N tool uses, Xs, N.Nk tokens)"
+    pub fn completion_summary(&self) -> String {
+        let mut parts = Vec::new();
+
+        let tc = self.tool_call_count;
+        parts.push(if tc == 1 {
+            "1 tool use".to_string()
+        } else {
+            format!("{tc} tool uses")
+        });
+
+        let elapsed = self.started_at.elapsed().as_secs();
+        parts.push(format_elapsed(elapsed));
+
+        let effective = self.effective_token_count();
+        if effective > 0 {
+            parts.push(format_token_count(effective));
+        }
+
+        format!("Done ({})", parts.join(", "))
     }
 
     /// Generate a summary of current activity.
@@ -205,127 +246,5 @@ pub struct CompletedToolCall {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_subagent_display_state_new() {
-        let state = SubagentDisplayState::new("id-1".into(), "Explore".into(), "Find TODOs".into());
-        assert_eq!(state.name, "Explore");
-        assert!(!state.finished);
-        assert_eq!(state.tool_call_count, 0);
-    }
-
-    #[test]
-    fn test_add_and_complete_tool_call() {
-        let mut state = SubagentDisplayState::new("id-test".into(), "test".into(), "task".into());
-        state.add_tool_call("read_file".into(), "tc-1".into(), HashMap::new());
-        assert_eq!(state.tool_call_count, 1);
-        assert!(state.active_tools.contains_key("tc-1"));
-
-        state.complete_tool_call("tc-1", true);
-        assert!(state.active_tools.is_empty());
-        assert_eq!(state.completed_tools.len(), 1);
-        assert!(state.completed_tools[0].success);
-    }
-
-    #[test]
-    fn test_finish() {
-        let mut state = SubagentDisplayState::new("id-test".into(), "test".into(), "task".into());
-        state.finish(true, "Done".into(), 3, None);
-        assert!(state.finished);
-        assert!(state.success);
-        assert_eq!(state.result_summary, "Done");
-        assert_eq!(state.tool_call_count, 3);
-    }
-
-    #[test]
-    fn test_finish_preserves_higher_live_count() {
-        let mut state = SubagentDisplayState::new("id-test".into(), "test".into(), "task".into());
-        // Simulate 10 live tool calls
-        for i in 0..10 {
-            let id = format!("tc-{i}");
-            state.add_tool_call("read_file".into(), id.clone(), HashMap::new());
-            state.complete_tool_call(&id, true);
-        }
-        assert_eq!(state.tool_call_count, 10);
-        // finish() with a lower message-based count should NOT decrease the count
-        state.finish(true, "Done".into(), 4, None);
-        assert_eq!(state.tool_call_count, 10);
-    }
-
-    #[test]
-    fn test_finish_with_shallow_warning() {
-        let mut state = SubagentDisplayState::new("id-test".into(), "test".into(), "task".into());
-        state.finish(
-            true,
-            "Done".into(),
-            1,
-            Some("Shallow subagent warning".into()),
-        );
-        assert!(state.shallow_warning.is_some());
-    }
-
-    #[test]
-    fn test_advance_tick() {
-        let mut state = SubagentDisplayState::new("id-test".into(), "test".into(), "task".into());
-        state.add_tool_call("read_file".into(), "tc-1".into(), HashMap::new());
-        state.advance_tick();
-        assert_eq!(state.tick, 1);
-        assert_eq!(state.active_tools["tc-1"].tick, 1);
-    }
-
-    #[test]
-    fn test_token_accumulation() {
-        let mut state = SubagentDisplayState::new("id-tok".into(), "test".into(), "task".into());
-        assert_eq!(state.token_count, 0);
-        state.add_tokens(1000, 500);
-        assert_eq!(state.token_count, 1500);
-        state.add_tokens(2000, 300);
-        assert_eq!(state.token_count, 3800);
-    }
-
-    #[test]
-    fn test_completed_tools_cap() {
-        let mut state = SubagentDisplayState::new("id-cap".into(), "test".into(), "task".into());
-        // Add 150 tool calls and complete them all
-        for i in 0..150 {
-            let id = format!("tc-{i}");
-            state.add_tool_call("read_file".into(), id.clone(), HashMap::new());
-            state.complete_tool_call(&id, true);
-        }
-        // Should be capped at 100
-        assert_eq!(state.completed_tools.len(), 100);
-        assert_eq!(state.tool_call_count, 150);
-    }
-
-    #[test]
-    fn test_activity_summary_reading() {
-        let mut state = SubagentDisplayState::new("id-act".into(), "test".into(), "task".into());
-        state.add_tool_call("read_file".into(), "tc-1".into(), HashMap::new());
-        state.add_tool_call("read_file".into(), "tc-2".into(), HashMap::new());
-        state.add_tool_call("read_file".into(), "tc-3".into(), HashMap::new());
-        assert_eq!(state.activity_summary(), "Reading 3 files...");
-    }
-
-    #[test]
-    fn test_activity_summary_searching() {
-        let mut state = SubagentDisplayState::new("id-act2".into(), "test".into(), "task".into());
-        state.add_tool_call("grep".into(), "tc-1".into(), HashMap::new());
-        state.add_tool_call("list_files".into(), "tc-2".into(), HashMap::new());
-        assert_eq!(state.activity_summary(), "Searching for 2 patterns...");
-    }
-
-    #[test]
-    fn test_activity_summary_running() {
-        let state = SubagentDisplayState::new("id-act3".into(), "test".into(), "task".into());
-        assert_eq!(state.activity_summary(), "Running...");
-    }
-
-    #[test]
-    fn test_activity_summary_done() {
-        let mut state = SubagentDisplayState::new("id-act4".into(), "test".into(), "task".into());
-        state.finish(true, "Done".into(), 0, None);
-        assert_eq!(state.activity_summary(), "Done");
-    }
-}
+#[path = "state_tests.rs"]
+mod tests;

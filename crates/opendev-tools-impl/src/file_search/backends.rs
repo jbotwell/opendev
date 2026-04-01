@@ -54,7 +54,25 @@ impl AstGrepTool {
             if stderr.trim().is_empty() {
                 return ToolResult::ok("No structural matches found");
             }
-            return ToolResult::fail(format!("ast-grep error: {stderr}"));
+            let stderr_str = stderr.trim();
+            let mut msg = format!("ast-grep error: {stderr_str}");
+
+            if stderr_str.contains("Multiple AST nodes") {
+                msg.push_str(
+                    "\n\nHint: Pattern parses as multiple separate AST nodes. \
+                     Use a single expression or statement pattern.",
+                );
+            } else if stderr_str.contains("parse") || stderr_str.contains("Cannot parse") {
+                msg.push_str(
+                    "\n\nHint: Pattern must be valid standalone syntax in the target language. \
+                     Common mistakes:\n\
+                     - Class method definitions like `name(): void {}` are not standalone \
+                     — use `function name(): void {}` or search by call: `$OBJ.name($$$ARGS)`\n\
+                     - Rust functions need visibility: `pub fn $NAME($$$ARGS)` not `fn $NAME($$$ARGS)`",
+                );
+            }
+
+            return ToolResult::fail(msg);
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -119,7 +137,7 @@ impl AstGrepTool {
 
             // Truncate very long matches
             let display_text = if text.len() > 200 {
-                format!("{}...", &text[..200])
+                format!("{}...", &text[..text.floor_char_boundary(200)])
             } else {
                 text.to_string()
             };
@@ -300,7 +318,7 @@ impl GrepTool {
                 for m in &matches {
                     let rel = m.path.strip_prefix(search_path).unwrap_or(&m.path);
                     let line = if m.line.len() > 2000 {
-                        format!("{}...", &m.line[..2000])
+                        format!("{}...", &m.line[..m.line.floor_char_boundary(2000)])
                     } else {
                         m.line.clone()
                     };

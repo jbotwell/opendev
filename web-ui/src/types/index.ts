@@ -29,16 +29,19 @@ export interface Message {
   parent_tool_call_id?: string;
   thinking_trace?: string | null;
   reasoning_content?: string | null;
+  isOptimistic?: boolean;
+  optimisticId?: string;
 }
 
 // Session types
 export interface Session {
   id: string;
-  working_dir: string;  // Backend returns this key even though model has working_directory
+  working_dir?: string;
+  working_directory?: string;  // Backend returns this field name
   created_at: string;
   updated_at: string;
   message_count: number;
-  token_usage: Record<string, number>;
+  token_usage?: Record<string, number>;
   title?: string;
   has_session_model?: boolean;
 }
@@ -69,7 +72,7 @@ export interface Provider {
 
 // WebSocket event types
 export interface WSMessage {
-  type: 'user_message' | 'message_start' | 'message_chunk' | 'message_complete' | 'tool_call' | 'tool_result' | 'approval_required' | 'approval_resolved' | 'error' | 'pong' | 'mcp_status_update' | 'mcp_servers_update' | 'connected' | 'disconnected' | 'thinking_block' | 'status_update' | 'ask_user_required' | 'ask_user_resolved' | 'session_activity' | 'plan_approval_required' | 'plan_approval_resolved' | 'plan_content' | 'subagent_start' | 'subagent_complete' | 'parallel_agents_start' | 'parallel_agents_done' | 'task_completed' | 'progress' | 'nested_tool_call' | 'nested_tool_result';
+  type: 'user_message' | 'message_start' | 'message_chunk' | 'message_complete' | 'tool_call' | 'tool_result' | 'approval_required' | 'approval_resolved' | 'error' | 'pong' | 'mcp_status_update' | 'mcp_servers_update' | 'connected' | 'disconnected' | 'thinking_block' | 'status_update' | 'ask_user_required' | 'ask_user_resolved' | 'session_activity' | 'plan_approval_required' | 'plan_approval_resolved' | 'plan_content' | 'subagent_start' | 'subagent_complete' | 'parallel_agents_start' | 'parallel_agents_done' | 'task_completed' | 'progress' | 'nested_tool_call' | 'nested_tool_result' | 'full_sync';
   data: any;
 }
 
@@ -135,4 +138,5 @@ export interface PerSessionState {
   pendingPlanApproval: PlanApprovalRequest | null;
   progressMessage: string | null;
   queuedMessages: string[];
+  optimisticMessages: Map<string, Message>;
 }

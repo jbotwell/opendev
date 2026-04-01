@@ -15,7 +15,7 @@ use opendev_agents::traits::{AgentEventCallback, AgentResult};
 use opendev_context::{ArtifactIndex, ContextCompactor};
 use opendev_history::SessionManager;
 use opendev_models::AppConfig;
-use opendev_runtime::{CostTracker, InterruptToken};
+use opendev_runtime::{CostTracker, InterruptToken, SessionDebugLogger};
 use opendev_tools_core::{ToolContext, ToolRegistry};
 
 use super::AgentRuntime;
@@ -40,6 +40,7 @@ pub struct BackgroundRuntime {
     artifact_index: Mutex<ArtifactIndex>,
     compactor: Mutex<ContextCompactor>,
     todo_manager: Arc<Mutex<opendev_runtime::TodoManager>>,
+    debug_logger: Arc<SessionDebugLogger>,
 }
 
 impl BackgroundRuntime {
@@ -107,6 +108,7 @@ impl BackgroundRuntime {
                 Some(&self.todo_manager),
                 cancel_token.as_ref(),
                 None, // No tool approval — auto-approve in background
+                Some(&*self.debug_logger),
             )
             .await?;
 
@@ -169,6 +171,7 @@ impl AgentRuntime {
             artifact_index,
             compactor,
             todo_manager: Arc::clone(&self.todo_manager),
+            debug_logger: Arc::clone(&self.debug_logger),
         })
     }
 }

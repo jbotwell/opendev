@@ -17,57 +17,66 @@ use opendev_tools_impl::*;
 use super::AgentRuntime;
 
 impl AgentRuntime {
-    /// Connect to configured MCP servers and register their tools.
+    /// Start MCP server connections in the background.
     ///
     /// Loads MCP config from global (`~/.opendev/mcp.json`) and project
-    /// (`.mcp.json`) files, connects to all enabled servers, discovers
-    /// tools, and registers them as `McpBridgeTool` instances.
+    /// (`.mcp.json`) files, then spawns a background task that connects
+    /// to all enabled servers, discovers tools, and registers them as
+    /// `McpBridgeTool` instances. Returns immediately so startup is
+    /// never blocked by slow or failing MCP servers.
     ///
     /// Failures are logged but do not prevent the runtime from starting —
     /// MCP is optional and best-effort.
-    pub async fn connect_mcp_servers(&mut self) {
+    pub fn start_mcp_connections(&mut self) {
         let manager = Arc::new(McpManager::new(Some(self.working_dir.clone())));
 
-        // Load configuration from disk
-        if let Err(e) = manager.load_configuration().await {
-            debug!(error = %e, "No MCP config loaded (this is normal if no MCP servers are configured)");
-            return;
-        }
+        // Store the manager immediately so BackgroundRuntime can reference it,
+        // even before connections are established.
+        self.mcp_manager = Some(Arc::clone(&manager));
 
-        // Connect all configured servers
-        if let Err(e) = manager.connect_all().await {
-            warn!(error = %e, "Failed to connect MCP servers");
-        }
+        // Clone Arcs for the background task.
+        let tool_registry = Arc::clone(&self.tool_registry);
+        let skill_loader = Arc::clone(&self.skill_loader);
 
-        // Discover tool schemas from connected servers
-        let schemas = manager.get_all_tool_schemas().await;
-        if schemas.is_empty() {
-            debug!("No MCP tools discovered");
-            return;
-        }
+        tokio::spawn(async move {
+            // Load configuration from disk
+            if let Err(e) = manager.load_configuration().await {
+                debug!(error = %e, "No MCP config loaded (this is normal if no MCP servers are configured)");
+                return;
+            }
 
-        // Register each MCP tool as a BaseTool in the registry
-        let mut registered = 0;
-        for schema in &schemas {
-            let bridge = McpBridgeTool::from_schema(schema, Arc::clone(&manager));
-            self.tool_registry.register(Arc::new(bridge));
-            registered += 1;
-        }
+            // Connect all configured servers (in parallel)
+            if let Err(e) = manager.connect_all().await {
+                warn!(error = %e, "Failed to connect MCP servers");
+            }
 
-        info!(
-            mcp_tools = registered,
-            total_tools = self.tool_registry.tool_names().len(),
-            "Registered MCP tools"
-        );
+            // Discover tool schemas from connected servers
+            let schemas = manager.get_all_tool_schemas().await;
+            if schemas.is_empty() {
+                debug!("No MCP tools discovered");
+                return;
+            }
 
-        // Re-register invoke_skill with MCP prompt support.
-        self.tool_registry
-            .register(Arc::new(InvokeSkillTool::with_mcp(
-                Arc::clone(&self.skill_loader),
+            // Register each MCP tool as a BaseTool in the registry
+            let mut registered = 0;
+            for schema in &schemas {
+                let bridge = McpBridgeTool::from_schema(schema, Arc::clone(&manager));
+                tool_registry.register(Arc::new(bridge));
+                registered += 1;
+            }
+
+            info!(
+                mcp_tools = registered,
+                total_tools = tool_registry.tool_names().len(),
+                "Registered MCP tools (background)"
+            );
+
+            // Re-register invoke_skill with MCP prompt support.
+            tool_registry.register(Arc::new(InvokeSkillTool::with_mcp(
+                skill_loader,
                 Arc::clone(&manager),
             )));
-
-        self.mcp_manager = Some(manager);
+        });
     }
 
     /// Run a single query through the full pipeline.
@@ -125,7 +134,6 @@ impl AgentRuntime {
             Some(&session_messages),
             &image_blocks,
             false, // thinking_visible
-            None,  // playbook_context
         );
 
         // Step 4: Get tool schemas for the LLM
@@ -180,6 +188,60 @@ impl AgentRuntime {
             }
         }
 
+        // Inject existing TODO state reminder if there are incomplete todos
+        if let Ok(mgr) = self.todo_manager.lock()
+            && mgr.has_todos()
+            && mgr.has_incomplete_todos()
+        {
+            let todo_status = mgr.format_status();
+            let reminder = opendev_agents::prompts::reminders::get_reminder(
+                "existing_todos_reminder",
+                &[("todo_status", &todo_status)],
+            );
+            if !reminder.is_empty() {
+                messages.push(serde_json::json!({
+                    "role": "user",
+                    "content": format!("<system-reminder>{}</system-reminder>", reminder)
+                }));
+            }
+        }
+
+        // Inject plan file reference on session resume when a plan exists for this session
+        if !plan_requested
+            && let Some(session) = self.session_manager.current_session()
+            && session.messages.len() > 1
+        {
+            // Resumed session — check PlanIndex for an active plan
+            let plans_dir =
+                dirs_next::home_dir().map(|h: std::path::PathBuf| h.join(".opendev").join("plans"));
+            if let Some(ref plans_dir) = plans_dir {
+                let plan_index = opendev_runtime::PlanIndex::new(plans_dir);
+                if let Some(entry) = plan_index.get_by_session(&session.id) {
+                    let plan_path = plans_dir.join(format!("{}.md", entry.name));
+                    if plan_path.exists() {
+                        let path_str = plan_path.to_string_lossy();
+                        let reminder = opendev_agents::prompts::reminders::get_reminder(
+                            "plan_file_reference",
+                            &[("plan_file_path", &path_str)],
+                        );
+                        if !reminder.is_empty() {
+                            messages.push(serde_json::json!({
+                                "role": "user",
+                                "content": format!(
+                                    "<system-reminder>{}</system-reminder>",
+                                    reminder
+                                )
+                            }));
+                            info!(
+                                plan_name = %entry.name,
+                                "Injected plan file reference for resumed session"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         // Step 6: Set original task for completion nudge context
         self.react_loop.set_original_task(Some(query.to_string()));
 
@@ -211,6 +273,7 @@ impl AgentRuntime {
                 Some(&self.todo_manager),
                 cancel_token.as_ref(),
                 self.tool_approval_tx.as_ref(),
+                Some(&*self.debug_logger),
             )
             .await?;
 
@@ -287,6 +350,20 @@ impl AgentRuntime {
             warn!("Failed to save session: {e}");
         }
 
+        // Step 8b: Persist file history (best-effort)
+        if let Ok(idx) = self.artifact_index.lock()
+            && !idx.is_empty()
+        {
+            let paths = opendev_config::paths::Paths::new(Some(self.working_dir.clone()));
+            let fh_path = paths.project_file_history();
+            let mut global =
+                opendev_context::ArtifactIndex::load_from_file(&fh_path).unwrap_or_default();
+            global.merge(&idx);
+            if let Err(e) = global.save_to_file(&fh_path) {
+                warn!("Failed to save file history: {e}");
+            }
+        }
+
         // Step 9: Auto-detect session title (1st message + every 5th user message)
         if self.topic_detector.is_enabled() {
             let (should_detect, current_title) = self
@@ -322,7 +399,7 @@ impl AgentRuntime {
                                     return None;
                                 }
                                 let truncated = if m.content.len() > 500 {
-                                    m.content[..500].to_string()
+                                    m.content[..m.content.floor_char_boundary(500)].to_string()
                                 } else {
                                     m.content.clone()
                                 };
@@ -372,6 +449,230 @@ impl AgentRuntime {
             content_len = result.content.len(),
             "Query completed"
         );
+
+        Ok(result)
+    }
+
+    /// Inject a background agent result as a tool-call/tool-result pair and
+    /// run a new react-loop turn so the foreground LLM can synthesize it.
+    ///
+    /// Instead of injecting the result as a `role: "user"` message (which
+    /// makes the LLM treat it as external input), this adds a single
+    /// assistant message with a synthetic `get_background_result` tool call
+    /// whose result is already populated. `chatmessages_to_api_values` then
+    /// emits both the assistant tool_calls and the `role: "tool"` result.
+    ///
+    /// The LLM sees a natural tool-call → tool-result pair and responds
+    /// with a conversational summary rather than re-investigating.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn inject_background_result(
+        &mut self,
+        task_id: &str,
+        query: &str,
+        result: &str,
+        tool_call_count: usize,
+        system_prompt: &str,
+        event_callback: Option<&dyn AgentEventCallback>,
+        interrupt_token: Option<&opendev_runtime::InterruptToken>,
+    ) -> Result<AgentResult, AgentError> {
+        info!(
+            task_id,
+            tool_call_count, "Injecting background result as tool-result pair"
+        );
+
+        // Synthetic tool_call_id linking the assistant call to its result
+        let synthetic_id = format!("bg_{task_id}");
+
+        let tool_result_content = format!(
+            "[Background task [{task_id}] completed ({tool_call_count} tools)]\n\
+             Task: {query}\n\n\
+             {result}"
+        );
+
+        // Add a single assistant ChatMessage with a tool call whose result is
+        // already populated.  `chatmessages_to_api_values` will emit both:
+        //   - an assistant message with the tool_calls array
+        //   - a role:"tool" message with tool_call_id + content
+        let mut tool_call = opendev_models::message::ToolCall {
+            id: synthetic_id.clone(),
+            name: "get_background_result".to_string(),
+            parameters: {
+                let mut p = HashMap::new();
+                p.insert("task_id".to_string(), serde_json::json!(task_id));
+                p
+            },
+            result: Some(serde_json::json!(tool_result_content)),
+            result_summary: None,
+            timestamp: Utc::now(),
+            approved: true,
+            error: None,
+            nested_tool_calls: Vec::new(),
+        };
+        if tool_result_content.len() > 300 {
+            tool_call.result_summary = Some(format!(
+                "Background task {task_id} completed ({tool_call_count} tools) for: {query}"
+            ));
+        }
+
+        self.session_manager.add_message(ChatMessage {
+            role: Role::Assistant,
+            content: String::new(),
+            timestamp: Utc::now(),
+            metadata: HashMap::new(),
+            tool_calls: vec![tool_call],
+            tokens: None,
+            thinking_trace: None,
+            reasoning_content: None,
+            token_usage: None,
+            provenance: None,
+        });
+
+        // 3. Build messages from session history (includes the new tool pair)
+        let session_messages = self
+            .session_manager
+            .current_session()
+            .map(|s| opendev_history::message_convert::chatmessages_to_api_values(&s.messages))
+            .unwrap_or_default();
+
+        let mut messages = self.query_enhancer.prepare_messages(
+            "", // no user query — the tool result is the trigger
+            "",
+            system_prompt,
+            Some(&session_messages),
+            &[],
+            false,
+        );
+
+        // 4. Run the react loop
+        let tool_schemas = self.tool_registry.get_schemas();
+        let tool_context = ToolContext {
+            working_dir: self.working_dir.clone(),
+            is_subagent: false,
+            session_id: self.session_manager.current_session().map(|s| s.id.clone()),
+            values: HashMap::new(),
+            timeout_config: None,
+            cancel_token: interrupt_token.map(|t| t.child_token()),
+            diagnostic_provider: None,
+            shared_state: None,
+        };
+
+        self.react_loop.set_original_task(None);
+
+        let pre_count = messages.len();
+        let cancel_token = interrupt_token.map(|t| t.child_token());
+        let result = self
+            .react_loop
+            .run(
+                &self.llm_caller,
+                &self.http_client,
+                &mut messages,
+                &tool_schemas,
+                &self.tool_registry,
+                &tool_context,
+                interrupt_token,
+                event_callback,
+                Some(&self.cost_tracker),
+                Some(&self.artifact_index),
+                Some(&self.compactor),
+                Some(&self.todo_manager),
+                cancel_token.as_ref(),
+                self.tool_approval_tx.as_ref(),
+                Some(&*self.debug_logger),
+            )
+            .await?;
+
+        // Save new messages from the react loop
+        {
+            let new_values = &result.messages[pre_count..];
+            let new_chat_messages =
+                opendev_history::message_convert::api_values_to_chatmessages(new_values);
+            for msg in new_chat_messages {
+                self.session_manager.add_message(msg);
+            }
+        }
+
+        if let Err(e) = self.session_manager.save_current() {
+            warn!("Failed to save session: {e}");
+        }
+
+        // Log session cost
+        if let Ok(tracker) = self.cost_tracker.lock() {
+            info!(
+                cost = tracker.format_cost(),
+                calls = tracker.call_count,
+                "Session cost update (background result)"
+            );
+        }
+
+        Ok(result)
+    }
+
+    /// Resume an agent from existing message history.
+    #[allow(dead_code)] // API for future team member resume from sidechain
+    ///
+    /// Used for mid-execution backgrounding (Ctrl+B): the agent's accumulated
+    /// messages are passed in and the react loop continues from where it left off.
+    /// No new user message is injected — the loop picks up from the last state.
+    pub async fn resume_with_messages(
+        &mut self,
+        mut messages: Vec<serde_json::Value>,
+        system_prompt: &str,
+        event_callback: Option<&dyn AgentEventCallback>,
+        interrupt_token: Option<&opendev_runtime::InterruptToken>,
+    ) -> Result<AgentResult, AgentError> {
+        info!(
+            message_count = messages.len(),
+            "Resuming agent from existing message history"
+        );
+
+        // Prepend system prompt if not already present
+        if messages
+            .first()
+            .and_then(|m| m.get("role"))
+            .and_then(|r| r.as_str())
+            != Some("system")
+        {
+            messages.insert(
+                0,
+                serde_json::json!({"role": "system", "content": system_prompt}),
+            );
+        }
+
+        let tool_schemas = self.tool_registry.get_schemas();
+        let tool_context = ToolContext {
+            working_dir: self.working_dir.clone(),
+            is_subagent: false,
+            session_id: self.session_manager.current_session().map(|s| s.id.clone()),
+            values: HashMap::new(),
+            timeout_config: None,
+            cancel_token: interrupt_token.map(|t| t.child_token()),
+            diagnostic_provider: None,
+            shared_state: None,
+        };
+
+        self.react_loop.set_original_task(None);
+
+        let cancel_token = interrupt_token.map(|t| t.child_token());
+        let result = self
+            .react_loop
+            .run(
+                &self.llm_caller,
+                &self.http_client,
+                &mut messages,
+                &tool_schemas,
+                &self.tool_registry,
+                &tool_context,
+                interrupt_token,
+                event_callback,
+                None, // no cost tracking for background agents
+                None, // no artifact index
+                None, // no compaction
+                None, // no todo manager
+                cancel_token.as_ref(),
+                None, // no tool approval (background agents auto-deny)
+                Some(&*self.debug_logger),
+            )
+            .await?;
 
         Ok(result)
     }

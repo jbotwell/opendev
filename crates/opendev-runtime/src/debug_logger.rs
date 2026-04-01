@@ -82,13 +82,73 @@ impl SessionDebugLogger {
         self.inner.as_ref().map(|i| i.file_path.as_path())
     }
 
-    /// Log a structured event.
+    /// Log a structured event (string values truncated for readability).
     ///
     /// # Arguments
     /// - `event` — Event type (e.g., `"llm_call_start"`, `"tool_call_end"`)
     /// - `component` — Component name (e.g., `"react"`, `"tool"`, `"llm"`)
     /// - `data` — Arbitrary JSON data (string values truncated if too long)
     pub fn log(&self, event: &str, component: &str, data: Value) {
+        self.write_entry(event, component, truncate_value(&data));
+    }
+
+    /// Log a structured event WITHOUT truncating string values.
+    ///
+    /// Use for LLM request/response payloads where full content is needed.
+    pub fn log_full(&self, event: &str, component: &str, data: Value) {
+        self.write_entry(event, component, data);
+    }
+
+    /// Log an outgoing LLM request payload.
+    pub fn log_llm_request(&self, iteration: usize, model: &str, streaming: bool, payload: &Value) {
+        self.log_full(
+            "llm_request",
+            "react",
+            serde_json::json!({
+                "iteration": iteration,
+                "model": model,
+                "streaming": streaming,
+                "payload": payload,
+            }),
+        );
+    }
+
+    /// Log an incoming LLM response body.
+    pub fn log_llm_response(
+        &self,
+        iteration: usize,
+        latency_ms: u64,
+        input_tokens: u64,
+        output_tokens: u64,
+        body: &Value,
+    ) {
+        self.log_full(
+            "llm_response",
+            "react",
+            serde_json::json!({
+                "iteration": iteration,
+                "latency_ms": latency_ms,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "body": body,
+            }),
+        );
+    }
+
+    /// Log an LLM call error.
+    pub fn log_llm_error(&self, iteration: usize, error: &str) {
+        self.log_full(
+            "llm_error",
+            "react",
+            serde_json::json!({
+                "iteration": iteration,
+                "error": error,
+            }),
+        );
+    }
+
+    /// Internal: write a JSONL entry to the debug file.
+    fn write_entry(&self, event: &str, component: &str, data: Value) {
         let inner = match &self.inner {
             Some(i) => i,
             None => return,
@@ -97,14 +157,12 @@ impl SessionDebugLogger {
         let elapsed_ms = inner.start_time.elapsed().as_millis() as u64;
         let ts = chrono::Utc::now().to_rfc3339();
 
-        let truncated_data = truncate_value(&data);
-
         let entry = serde_json::json!({
             "ts": ts,
             "elapsed_ms": elapsed_ms,
             "event": event,
             "component": component,
-            "data": truncated_data,
+            "data": data,
         });
 
         let line = match serde_json::to_string(&entry) {
@@ -134,73 +192,5 @@ impl std::fmt::Debug for SessionDebugLogger {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_noop_logger() {
-        let logger = SessionDebugLogger::noop();
-        assert!(!logger.is_enabled());
-        assert!(logger.file_path().is_none());
-        // Should not panic
-        logger.log("test", "test", serde_json::json!({"key": "value"}));
-    }
-
-    #[test]
-    fn test_active_logger() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let logger = SessionDebugLogger::new(tmp.path(), "test123");
-        assert!(logger.is_enabled());
-        assert!(logger.file_path().is_some());
-
-        logger.log("event1", "comp1", serde_json::json!({"foo": "bar"}));
-        logger.log("event2", "comp2", serde_json::json!({"count": 42}));
-
-        let content = std::fs::read_to_string(logger.file_path().unwrap()).unwrap();
-        let lines: Vec<&str> = content.lines().collect();
-        assert_eq!(lines.len(), 2);
-
-        let entry: Value = serde_json::from_str(lines[0]).unwrap();
-        assert_eq!(entry["event"], "event1");
-        assert_eq!(entry["component"], "comp1");
-        assert_eq!(entry["data"]["foo"], "bar");
-    }
-
-    #[test]
-    fn test_truncation() {
-        let long_string = "x".repeat(300);
-        let data = serde_json::json!({"msg": long_string});
-        let truncated = truncate_value(&data);
-
-        let msg = truncated["msg"].as_str().unwrap();
-        assert!(msg.len() < 300);
-        assert!(msg.contains("300 chars"));
-    }
-
-    #[test]
-    fn test_nested_truncation() {
-        let long = "y".repeat(500);
-        let data = serde_json::json!({
-            "outer": {
-                "inner": long
-            }
-        });
-        let truncated = truncate_value(&data);
-        let inner = truncated["outer"]["inner"].as_str().unwrap();
-        assert!(inner.contains("500 chars"));
-    }
-
-    #[test]
-    fn test_elapsed_ms() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let logger = SessionDebugLogger::new(tmp.path(), "elapsed_test");
-
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        logger.log("test", "test", serde_json::json!({}));
-
-        let content = std::fs::read_to_string(logger.file_path().unwrap()).unwrap();
-        let entry: Value = serde_json::from_str(content.lines().next().unwrap()).unwrap();
-        let elapsed = entry["elapsed_ms"].as_u64().unwrap();
-        assert!(elapsed >= 10);
-    }
-}
+#[path = "debug_logger_tests.rs"]
+mod tests;

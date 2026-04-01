@@ -4,9 +4,13 @@
 //! CLI → REPL → QueryEnhancer → ReactLoop → ToolExecutor → display
 
 pub mod background;
+mod channel_executor;
 mod query;
 mod tools;
 
+pub use channel_executor::ChannelAgentExecutor;
+// Re-export for backward compat (used in tests)
+#[cfg(test)]
 pub use tools::build_system_prompt;
 
 use std::path::{Path, PathBuf};
@@ -27,7 +31,7 @@ use opendev_mcp::McpManager;
 use opendev_models::AppConfig;
 use opendev_repl::HandlerRegistry;
 use opendev_repl::query_enhancer::QueryEnhancer;
-use opendev_runtime::CostTracker;
+use opendev_runtime::{CostTracker, SessionDebugLogger};
 use opendev_tools_core::{BaseTool, ToolRegistry};
 use opendev_tools_impl::*;
 
@@ -73,7 +77,13 @@ pub struct AgentRuntime {
     /// LLM-based topic detector for auto-generating session titles.
     pub(super) topic_detector: TopicDetector,
     /// Shadow git snapshot manager for tracking file changes per query.
-    pub(super) snapshot_manager: Mutex<opendev_history::SnapshotManager>,
+    pub(super) snapshot_manager: Arc<Mutex<opendev_history::SnapshotManager>>,
+    /// Per-session debug logger for LLM interactions (noop when debug_logging is off).
+    pub debug_logger: Arc<SessionDebugLogger>,
+    /// Prompt composer for per-turn system prompt composition with section caching.
+    pub prompt_composer: Mutex<opendev_agents::prompts::PromptComposer>,
+    /// Prompt context (runtime values for conditional section inclusion).
+    pub prompt_context: Mutex<opendev_agents::prompts::PromptContext>,
 }
 
 /// Receivers returned from tool registration for TUI bridging.
@@ -107,6 +117,9 @@ impl AgentRuntime {
             tool_registry.register(Arc::new(tool));
         }
 
+        // Compute git root once — shared by skill scanning and subagent manager below.
+        let git_root = opendev_agents::git_root(working_dir);
+
         // Register invoke_skill tool with project-local and user-global skill dirs.
         // Scans .opendev/skills at each level from working_dir up to git root,
         // then global dir, then config-specified skill_paths (lowest priority).
@@ -115,17 +128,6 @@ impl AgentRuntime {
         // Walk from working_dir up to git root, scanning for skill directories
         // at each level. This supports monorepos where subdirectories can have
         // their own skill overrides.
-        let git_root = std::process::Command::new("git")
-            .args(["rev-parse", "--show-toplevel"])
-            .current_dir(working_dir)
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .and_then(|o| {
-                String::from_utf8(o.stdout)
-                    .ok()
-                    .map(|s| PathBuf::from(s.trim()))
-            });
         let stop_dir = git_root.as_deref().unwrap_or(working_dir);
 
         {
@@ -241,6 +243,19 @@ impl AgentRuntime {
                     ),
                 )
             }
+            "ollama" => {
+                let adapter = opendev_http::adapters::ollama::OllamaAdapter::new();
+                let url = effective_base_url.unwrap_or_else(|| adapter.api_url().to_string());
+                let mut hdrs = HeaderMap::new();
+                hdrs.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                (
+                    url,
+                    hdrs,
+                    Some(
+                        Box::new(adapter) as Box<dyn opendev_http::adapters::base::ProviderAdapter>
+                    ),
+                )
+            }
             "gemini" | "google" => {
                 let adapter = opendev_http::adapters::gemini::GeminiAdapter::new(&config.model);
                 let api_url = effective_base_url
@@ -322,7 +337,7 @@ impl AgentRuntime {
         });
 
         // Check model capabilities via models.dev metadata
-        let (supports_temperature, model_max_tokens) = {
+        let (supports_temperature, model_max_tokens, model_context_length) = {
             let model_info = registry.find_model_by_id(&config.model);
             let supports_temp = model_info
                 .map(|(_, _, m)| m.supports_temperature)
@@ -330,13 +345,31 @@ impl AgentRuntime {
             let max_tok = model_info
                 .and_then(|(_, _, m)| m.max_tokens)
                 .unwrap_or(config.max_tokens as u64);
-            (supports_temp, max_tok)
+            let ctx_len = model_info
+                .map(|(_, _, m)| m.context_length)
+                .filter(|&v| v > 0)
+                .unwrap_or(config.max_context_tokens);
+            (supports_temp, max_tok, ctx_len)
         };
+
+        // Create debug logger early so it can be shared with subagent tool
+        let debug_logger = Arc::new(if config.debug_logging {
+            let session_id = session_manager
+                .current_session()
+                .map(|s| s.id.as_str())
+                .unwrap_or("unknown");
+            SessionDebugLogger::new(session_manager.session_dir(), session_id)
+        } else {
+            SessionDebugLogger::noop()
+        });
 
         // Register SpawnSubagentTool now that we have Arc<ToolRegistry> and Arc<HttpClient>
         let session_dir = session_manager.session_dir().to_path_buf();
         let mut subagent_manager =
-            opendev_agents::SubagentManager::with_builtins_and_custom(working_dir);
+            opendev_agents::SubagentManager::with_builtins_and_custom_git_root(
+                working_dir,
+                git_root.as_deref(),
+            );
         // Apply inline agent config overrides from opendev.json
         if !config.agents.is_empty() {
             subagent_manager.apply_config_overrides(&config.agents);
@@ -364,7 +397,8 @@ impl AgentRuntime {
                 None
             } else {
                 Some(config.reasoning_effort.clone())
-            }),
+            })
+            .with_debug_logger(Arc::clone(&debug_logger)),
         ));
         channel_receivers.subagent_event_rx = Some(subagent_event_rx);
         info!(
@@ -392,8 +426,11 @@ impl AgentRuntime {
 
         let cost_tracker = Mutex::new(CostTracker::new());
         let artifact_index = Mutex::new(ArtifactIndex::new());
-        let compactor = Mutex::new(ContextCompactor::new(config.max_context_tokens));
+        let compactor = Mutex::new(ContextCompactor::new(model_context_length));
         let topic_detector = TopicDetector::new(&provider);
+
+        // Create per-turn prompt composer with section caching
+        let (prompt_composer, prompt_context) = tools::create_prompt_composer(working_dir, &config);
 
         Ok(Self {
             config,
@@ -414,14 +451,71 @@ impl AgentRuntime {
             mcp_manager: None,
             skill_loader,
             topic_detector,
-            snapshot_manager: Mutex::new(opendev_history::SnapshotManager::new(
+            snapshot_manager: Arc::new(Mutex::new(opendev_history::SnapshotManager::new(
                 &working_dir.to_string_lossy(),
-            )),
+            ))),
+            debug_logger,
+            prompt_composer: Mutex::new(prompt_composer),
+            prompt_context: Mutex::new(prompt_context),
         })
     }
 }
 
 impl AgentRuntime {
+    /// Compose the system prompt for the current turn.
+    ///
+    /// Uses the section cache: `Static` sections are resolved once per session,
+    /// `Cached` sections are resolved once until `/clear` or `/compact`,
+    /// `Uncached` sections are resolved fresh every call.
+    pub fn compose_system_prompt(&self) -> String {
+        let mut composer = self.prompt_composer.lock().expect("prompt_composer lock");
+        let context = self.prompt_context.lock().expect("prompt_context lock");
+        composer.compose(&context)
+    }
+
+    /// Pre-resolve MCP instructions and inject as an override before composing.
+    ///
+    /// Call this before `compose_system_prompt()` when MCP servers may have
+    /// connected or disconnected since the last turn.
+    pub async fn resolve_mcp_instructions(&self) {
+        let mcp_instructions = if let Some(ref mgr) = self.mcp_manager {
+            let schemas = mgr.get_all_tool_schemas().await;
+            if schemas.is_empty() {
+                None
+            } else {
+                let mut parts = vec![
+                    "# MCP Server Instructions\n\nThe following tools are provided by MCP servers:"
+                        .to_string(),
+                ];
+                for schema in &schemas {
+                    parts.push(format!("- **{}**: {}", schema.name, schema.description));
+                }
+                Some(parts.join("\n"))
+            }
+        } else {
+            None
+        };
+
+        if let Ok(mut composer) = self.prompt_composer.lock() {
+            composer.set_section_override("mcp_instructions", mcp_instructions);
+        }
+    }
+
+    /// Clear `Cached` section entries. Called on `/compact` and `/clear`.
+    pub fn clear_prompt_cache(&self) {
+        if let Ok(mut composer) = self.prompt_composer.lock() {
+            composer.clear_cache();
+        }
+    }
+
+    /// Clear all cache entries including `Static`. Called on session switch.
+    #[allow(dead_code)]
+    pub fn clear_all_prompt_cache(&self) {
+        if let Ok(mut composer) = self.prompt_composer.lock() {
+            composer.clear_all_cache();
+        }
+    }
+
     /// Switch to a new model, rebuilding the HTTP client if the provider changes.
     ///
     /// Returns the new model name for confirmation, or an error message.
@@ -468,6 +562,12 @@ impl AgentRuntime {
             if let Some(max_tok) = info.max_tokens {
                 self.llm_caller.config.max_tokens = Some(max_tok);
             }
+            // Update compactor max context for new model's context window
+            if info.context_length > 0
+                && let Ok(mut comp) = self.compactor.lock()
+            {
+                comp.set_max_context(info.context_length);
+            }
         }
 
         // Reset reasoning effort: new model may not support the current level.
@@ -489,9 +589,7 @@ impl AgentRuntime {
                 .unwrap_or_default();
 
             if api_key.is_empty() {
-                let env_hint = registry_env
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or("API_KEY");
+                let env_hint = registry_env.filter(|s| !s.is_empty()).unwrap_or("API_KEY");
                 return Err(format!(
                     "No API key for provider '{}'. Set {} environment variable.",
                     new_provider_id, env_hint
@@ -585,6 +683,19 @@ impl AgentRuntime {
                         Some(Box::new(adapter) as Box<dyn ProviderAdapter>),
                     )
                 }
+                "ollama" => {
+                    let adapter = opendev_http::adapters::ollama::OllamaAdapter::new();
+                    let url = api_base_url
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| adapter.api_url().to_string());
+                    let mut hdrs = HeaderMap::new();
+                    hdrs.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    (
+                        url,
+                        hdrs,
+                        Some(Box::new(adapter) as Box<dyn ProviderAdapter>),
+                    )
+                }
                 "azure" => {
                     let base = api_base_url.unwrap_or("https://api.openai.com");
                     let url = format!(
@@ -649,61 +760,4 @@ impl std::fmt::Debug for AgentRuntime {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_runtime_creation() {
-        let tmp = tempfile::tempdir().unwrap();
-        let session_dir = tmp.path().join("sessions");
-        std::fs::create_dir_all(&session_dir).unwrap();
-        let sm = SessionManager::new(session_dir).unwrap();
-        let config = AppConfig::default();
-
-        let runtime = AgentRuntime::new(config, tmp.path(), sm);
-        assert!(runtime.is_ok());
-        let rt = runtime.unwrap();
-        // Should have tools registered
-        assert!(rt.tool_registry.tool_names().len() > 20);
-        assert!(
-            !rt.tool_registry
-                .tool_names()
-                .contains(&"batch_tool".to_string()),
-            "batch_tool should not be registered"
-        );
-        assert!(
-            !rt.tool_registry.get_schemas().iter().any(|schema| schema
-                .get("function")
-                .and_then(|f| f.get("name"))
-                .and_then(|n| n.as_str())
-                == Some("batch_tool")),
-            "batch_tool schema should not be exposed"
-        );
-    }
-
-    #[test]
-    fn test_runtime_debug_format() {
-        let tmp = tempfile::tempdir().unwrap();
-        let session_dir = tmp.path().join("sessions");
-        std::fs::create_dir_all(&session_dir).unwrap();
-        let sm = SessionManager::new(session_dir).unwrap();
-        let config = AppConfig::default();
-
-        let runtime = AgentRuntime::new(config, tmp.path(), sm).unwrap();
-        let debug = format!("{:?}", runtime);
-        assert!(debug.contains("AgentRuntime"));
-    }
-
-    #[test]
-    fn test_build_system_prompt() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config = AppConfig::default();
-        let prompt = build_system_prompt(tmp.path(), &config);
-        // Should produce a non-trivial prompt from embedded templates
-        assert!(!prompt.is_empty());
-        assert!(
-            !prompt.contains("batch_tool"),
-            "system prompt should not advertise batch_tool"
-        );
-    }
-}
+mod tests;

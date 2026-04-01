@@ -12,9 +12,9 @@ fn tool_groups() -> HashMap<&'static str, HashSet<&'static str>> {
     groups.insert(
         "group:read",
         HashSet::from([
-            "read_file",
-            "list_files",
-            "search",
+            "Read",
+            "Glob",
+            "Grep",
             "find_symbol",
             "find_referencing_symbols",
             "read_pdf",
@@ -25,24 +25,24 @@ fn tool_groups() -> HashMap<&'static str, HashSet<&'static str>> {
     groups.insert(
         "group:write",
         HashSet::from([
-            "write_file",
-            "edit_file",
+            "Write",
+            "Edit",
             "insert_before_symbol",
             "insert_after_symbol",
             "replace_symbol_body",
             "rename_symbol",
-            "notebook_edit",
+            "NotebookEdit",
             "apply_patch",
         ]),
     );
 
-    groups.insert("group:process", HashSet::from(["run_command"]));
+    groups.insert("group:process", HashSet::from(["Bash"]));
 
     groups.insert(
         "group:web",
         HashSet::from([
-            "fetch_url",
-            "web_search",
+            "WebFetch",
+            "WebSearch",
             "capture_web_screenshot",
             "capture_screenshot",
             "browser",
@@ -55,7 +55,7 @@ fn tool_groups() -> HashMap<&'static str, HashSet<&'static str>> {
         HashSet::from([
             "list_sessions",
             "get_session_history",
-            "spawn_subagent",
+            "Agent",
             "get_subagent_output",
             "list_subagents",
         ]),
@@ -69,20 +69,20 @@ fn tool_groups() -> HashMap<&'static str, HashSet<&'static str>> {
     groups.insert(
         "group:meta",
         HashSet::from([
-            "task_complete",
-            "ask_user",
-            "present_plan",
-            "write_todos",
-            "update_todo",
+            "TaskStop",
+            "AskUserQuestion",
+            "EnterPlanMode",
+            "TodoWrite",
+            "TaskUpdate",
             "complete_todo",
-            "list_todos",
+            "TaskList",
             "clear_todos",
             "search_tools",
-            "invoke_skill",
+            "Skill",
         ]),
     );
 
-    groups.insert("group:messaging", HashSet::from(["send_message"]));
+    groups.insert("group:messaging", HashSet::from(["SendMessage"]));
     groups.insert("group:automation", HashSet::from(["schedule"]));
     groups.insert("group:thinking", HashSet::new());
     groups.insert("group:mcp", HashSet::new());
@@ -130,7 +130,7 @@ fn profiles() -> HashMap<&'static str, Vec<&'static str>> {
 }
 
 /// Tools that are always allowed regardless of profile.
-const ALWAYS_ALLOWED: &[&str] = &["task_complete", "ask_user"];
+const ALWAYS_ALLOWED: &[&str] = &["TaskStop", "AskUserQuestion"];
 
 /// Resolves which tools are allowed based on profile, additions, and exclusions.
 pub struct ToolPolicy;
@@ -228,126 +228,5 @@ impl ToolPolicy {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resolve_full_profile() {
-        let allowed = ToolPolicy::resolve("full", None, None).unwrap();
-        assert!(allowed.contains("read_file"));
-        assert!(allowed.contains("write_file"));
-        assert!(allowed.contains("run_command"));
-        assert!(allowed.contains("task_complete"));
-        assert!(allowed.contains("ask_user"));
-        assert!(allowed.contains("send_message"));
-        assert!(allowed.contains("schedule"));
-    }
-
-    #[test]
-    fn test_resolve_minimal_profile() {
-        let allowed = ToolPolicy::resolve("minimal", None, None).unwrap();
-        assert!(allowed.contains("read_file"));
-        assert!(allowed.contains("search"));
-        assert!(allowed.contains("task_complete")); // always allowed
-        assert!(!allowed.contains("write_file"));
-        assert!(!allowed.contains("run_command"));
-    }
-
-    #[test]
-    fn test_resolve_coding_profile() {
-        let allowed = ToolPolicy::resolve("coding", None, None).unwrap();
-        assert!(allowed.contains("read_file"));
-        assert!(allowed.contains("write_file"));
-        assert!(allowed.contains("run_command"));
-        assert!(!allowed.contains("send_message")); // not in coding
-    }
-
-    #[test]
-    fn test_resolve_unknown_profile() {
-        let result = ToolPolicy::resolve("nonexistent", None, None);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Unknown tool profile"));
-    }
-
-    #[test]
-    fn test_resolve_with_additions() {
-        let allowed = ToolPolicy::resolve("minimal", Some(&["custom_tool"]), None).unwrap();
-        assert!(allowed.contains("custom_tool"));
-        assert!(allowed.contains("read_file"));
-    }
-
-    #[test]
-    fn test_resolve_with_exclusions() {
-        let allowed = ToolPolicy::resolve("full", None, Some(&["run_command"])).unwrap();
-        assert!(!allowed.contains("run_command"));
-        assert!(allowed.contains("read_file"));
-    }
-
-    #[test]
-    fn test_resolve_exclusion_overrides_always_allowed() {
-        let allowed = ToolPolicy::resolve("minimal", None, Some(&["task_complete"])).unwrap();
-        assert!(!allowed.contains("task_complete"));
-    }
-
-    #[test]
-    fn test_get_profile_names() {
-        let names = ToolPolicy::get_profile_names();
-        assert!(names.contains(&"minimal"));
-        assert!(names.contains(&"full"));
-        assert!(names.contains(&"coding"));
-        assert!(names.contains(&"review"));
-    }
-
-    #[test]
-    fn test_get_group_names() {
-        let names = ToolPolicy::get_group_names();
-        assert!(names.contains(&"group:read"));
-        assert!(names.contains(&"group:write"));
-        assert!(names.contains(&"group:process"));
-    }
-
-    #[test]
-    fn test_get_tools_in_group() {
-        let tools = ToolPolicy::get_tools_in_group("group:read");
-        assert!(tools.contains("read_file"));
-        assert!(tools.contains("search"));
-        assert!(!tools.contains("write_file"));
-    }
-
-    #[test]
-    fn test_get_tools_in_unknown_group() {
-        let tools = ToolPolicy::get_tools_in_group("group:nonexistent");
-        assert!(tools.is_empty());
-    }
-
-    #[test]
-    fn test_profile_descriptions() {
-        assert_eq!(
-            ToolPolicy::get_profile_description("minimal"),
-            "Read-only tools + meta tools (for planning/exploration)"
-        );
-        assert_eq!(
-            ToolPolicy::get_profile_description("full"),
-            "All available tools (default)"
-        );
-        assert_eq!(
-            ToolPolicy::get_profile_description("unknown"),
-            "Unknown profile"
-        );
-    }
-
-    #[test]
-    fn test_always_allowed_in_all_profiles() {
-        for profile in &["minimal", "review", "coding", "full"] {
-            let allowed = ToolPolicy::resolve(profile, None, None).unwrap();
-            assert!(
-                allowed.contains("task_complete"),
-                "task_complete missing from {profile}"
-            );
-            assert!(
-                allowed.contains("ask_user"),
-                "ask_user missing from {profile}"
-            );
-        }
-    }
-}
+#[path = "policy_tests.rs"]
+mod tests;

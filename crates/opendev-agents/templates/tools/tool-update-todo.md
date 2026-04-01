@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: update_todo'
+name: 'Tool Description: TaskUpdate'
 description: Update an existing todo status
 version: 2.0.0
 -->
@@ -18,4 +18,4 @@ pending → in_progress → completed
 
 - Use the todo ID (e.g., 'todo-1' or just '1') to identify which task to update
 - This is how you track progress through your plan — the user sees status changes in real time
-- After marking a task completed, check list_todos for the next pending task
+- After marking a task completed, check TaskList for the next pending task

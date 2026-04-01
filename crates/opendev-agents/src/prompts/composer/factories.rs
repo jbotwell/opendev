@@ -5,184 +5,181 @@
 
 use std::path::Path;
 
+use super::CachePolicy;
 use super::PromptComposer;
 use super::conditions::{ctx_bool, ctx_eq, ctx_in, ctx_present};
 
 /// Create a default composer with standard sections registered.
 ///
 /// Priority ranges:
-/// - 10-30: Core identity and policies (always loaded)
-/// - 40-50: Tool guidance and interaction patterns
-/// - 55-65: Code quality and workflows
+/// - 10-30: Core identity and policies (always loaded, `Static`)
+/// - 40-50: Tool guidance and interaction patterns (`Static`)
+/// - 55-65: Code quality and workflows (`Static`)
 /// - 70-80: Conditional sections (git, MCP, etc.)
-/// - 85-95: Context-specific additions
+/// - 85-95: Context-specific additions (`Cached` for dynamic content)
 pub fn create_default_composer(templates_dir: impl AsRef<Path>) -> PromptComposer {
     let mut composer = PromptComposer::new(templates_dir.as_ref());
 
-    // Core sections (always included) - Priority 10-30
-    composer.register_section(
+    // Core sections (always included) - Priority 10-30, Static
+    composer.register_section_with_policy(
         "mode_awareness",
         "system/main/main-mode-awareness.md",
         None,
         12,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "security_policy",
         "system/main/main-security-policy.md",
         None,
         15,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "tone_and_style",
         "system/main/main-tone-and-style.md",
         None,
         20,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
+        "output_efficiency",
+        "system/main/main-output-efficiency.md",
+        None,
+        22,
+        CachePolicy::Static,
+    );
+    composer.register_section_with_policy(
         "no_time_estimates",
         "system/main/main-no-time-estimates.md",
         None,
         25,
-        true,
+        CachePolicy::Static,
     );
 
-    // Interaction patterns - Priority 40-50
-    composer.register_section(
-        "interaction_pattern",
-        "system/main/main-interaction-pattern.md",
-        None,
-        40,
-        true,
-    );
-    composer.register_section(
-        "available_tools",
-        "system/main/main-available-tools.md",
-        None,
-        45,
-        true,
-    );
-    composer.register_section(
+    // Tool guidance - Priority 45, Static
+    composer.register_section_with_policy(
         "tool_selection",
         "system/main/main-tool-selection.md",
         None,
-        50,
-        true,
+        45,
+        CachePolicy::Static,
     );
 
-    // Code quality and workflows - Priority 55-65
-    composer.register_section(
+    // Code quality and workflows - Priority 55-65, Static
+    composer.register_section_with_policy(
         "code_quality",
         "system/main/main-code-quality.md",
         None,
         55,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "action_safety",
         "system/main/main-action-safety.md",
         None,
         56,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
-        "read_before_edit",
-        "system/main/main-read-before-edit.md",
-        None,
-        58,
-        true,
-    );
-    composer.register_section(
+    composer.register_section_with_policy(
         "error_recovery",
         "system/main/main-error-recovery.md",
         None,
         60,
-        true,
+        CachePolicy::Static,
     );
 
-    // Conditional sections - Priority 65-80
-    composer.register_section(
+    // Conditional sections - Priority 65-80, Static
+    composer.register_section_with_policy(
         "subagent_guide",
         "system/main/main-subagent-guide.md",
         Some(ctx_bool("has_subagents")),
         65,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "git_workflow",
         "system/main/main-git-workflow.md",
         Some(ctx_bool("in_git_repo")),
         70,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "verification",
         "system/main/main-verification.md",
         None,
         72,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "task_tracking",
         "system/main/main-task-tracking.md",
         Some(ctx_bool("todo_tracking_enabled")),
         75,
-        true,
+        CachePolicy::Static,
     );
 
-    // Provider-specific sections - Priority 80
-    composer.register_section(
+    // Provider-specific sections - Priority 80, Static
+    composer.register_section_with_policy(
         "provider_openai",
         "system/main/main-provider-openai.md",
         Some(ctx_eq("model_provider", "openai")),
         80,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "provider_anthropic",
         "system/main/main-provider-anthropic.md",
         Some(ctx_eq("model_provider", "anthropic")),
         80,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "provider_fireworks",
         "system/main/main-provider-fireworks.md",
         Some(ctx_in("model_provider", &["fireworks", "fireworks-ai"])),
         80,
-        true,
+        CachePolicy::Static,
     );
 
     // Context awareness - Priority 85-95
-    composer.register_section(
+    composer.register_section_with_policy(
         "output_awareness",
         "system/main/main-output-awareness.md",
         None,
         85,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    // Auto memory: Cached — content may change if memory files are updated mid-session
+    composer.register_section_with_policy(
+        "auto_memory",
+        "system/main/main-auto-memory.md",
+        None,
+        86,
+        CachePolicy::Cached,
+    );
+    // Scratchpad: Cached — session-specific, refreshed on /clear or /compact
+    composer.register_section_with_policy(
         "scratchpad",
         "system/main/main-scratchpad.md",
         Some(ctx_present("session_id")),
         87,
-        false, // Dynamic
+        CachePolicy::Cached,
     );
-    composer.register_section(
+    composer.register_section_with_policy(
         "code_references",
         "system/main/main-code-references.md",
         None,
         90,
-        true,
+        CachePolicy::Static,
     );
-    composer.register_section(
+    // System reminders note: Cached — refreshed on /clear or /compact
+    composer.register_section_with_policy(
         "system_reminders_note",
         "system/main/main-reminders-note.md",
         None,
         95,
-        false, // Dynamic
+        CachePolicy::Cached,
     );
 
     composer
@@ -194,22 +191,5 @@ pub fn create_composer(templates_dir: impl AsRef<Path>, _mode: &str) -> PromptCo
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_create_default_composer_section_count() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let composer = create_default_composer(dir.path());
-        // Should have many sections registered
-        assert!(composer.section_count() > 15);
-    }
-
-    #[test]
-    fn test_create_composer_dispatch() {
-        let dir = tempfile::TempDir::new().unwrap();
-
-        let main = create_composer(dir.path(), "system/main");
-        assert!(main.section_count() > 15);
-    }
-}
+#[path = "factories_tests.rs"]
+mod tests;

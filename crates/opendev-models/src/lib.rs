@@ -8,16 +8,18 @@ pub mod api;
 pub mod config;
 pub mod datetime_compat;
 pub mod file_change;
+pub mod frontend_event;
 pub mod message;
 pub mod operation;
 pub mod session;
+pub mod transition;
 pub mod user;
 pub mod validator;
 
 // Re-export commonly used types at crate root
 pub use config::{
-    AgentConfigInline, AppConfig, AutoModeConfig, ModelVariant, OperationConfig, PermissionConfig,
-    PlaybookConfig, PlaybookScoringWeights, ToolPermission,
+    AgentConfigInline, AppConfig, AutoModeConfig, ChannelsConfig, DmPolicy, ModelVariant,
+    OperationConfig, PermissionConfig, TelegramChannelConfig, ToolPermission,
 };
 pub use file_change::{FileChange, FileChangeType};
 pub use message::{ChatMessage, InputProvenance, ProvenanceKind, Role, ToolCall};
@@ -25,4 +27,5 @@ pub use operation::{
     BashResult, EditResult, Operation, OperationStatus, OperationType, WriteResult,
 };
 pub use session::{Session, SessionMetadata};
+pub use transition::{TransitionError, ValidateTransition};
 pub use user::User;

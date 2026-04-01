@@ -102,7 +102,7 @@ pub fn inject_system_message(
 ) {
     messages.push(serde_json::json!({
         "role": "user",
-        "content": format!("[SYSTEM] {content}"),
+        "content": format!("<system-reminder>\n{content}\n</system-reminder>"),
         "_msg_class": class.as_str(),
     }));
 }
@@ -122,125 +122,68 @@ pub fn append_directive(messages: &mut Vec<serde_json::Value>, content: &str) {
     inject_system_message(messages, content, MessageClass::Directive);
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// ---------------------------------------------------------------------------
+// Proactive (turn-count-based) reminder scheduler
+// ---------------------------------------------------------------------------
 
-    #[test]
-    fn test_parse_sections_finds_templates() {
-        let sections = SECTIONS.get_or_init(parse_sections);
-        assert!(
-            sections.contains_key("failed_tool_nudge"),
-            "Should find failed_tool_nudge section"
-        );
-        assert!(
-            sections.contains_key("nudge_permission_error"),
-            "Should find nudge_permission_error section"
-        );
-        assert!(
-            sections.contains_key("incomplete_todos_nudge"),
-            "Should find incomplete_todos_nudge section"
-        );
-        assert!(
-            sections.contains_key("consecutive_reads_nudge"),
-            "Should find consecutive_reads_nudge section"
-        );
-        assert!(
-            sections.contains_key("implicit_completion_nudge"),
-            "Should find implicit_completion_nudge section"
-        );
-        assert!(
-            sections.contains_key("all_todos_complete_nudge"),
-            "Should find all_todos_complete_nudge section"
-        );
-        assert!(
-            sections.contains_key("thinking_analysis_prompt"),
-            "Should find thinking_analysis_prompt section"
-        );
-        assert!(
-            sections.contains_key("thinking_analysis_prompt_with_todos"),
-            "Should find thinking_analysis_prompt_with_todos section"
-        );
-        assert!(
-            sections.contains_key("doom_loop_redirect_nudge"),
-            "Should find doom_loop_redirect_nudge section"
-        );
-        assert!(
-            sections.contains_key("doom_loop_stepback_nudge"),
-            "Should find doom_loop_stepback_nudge section"
-        );
-        assert!(
-            sections.contains_key("truncation_continue_directive"),
-            "Should find truncation_continue_directive section"
-        );
-        assert!(
-            sections.contains_key("doom_loop_compact_directive"),
-            "Should find doom_loop_compact_directive section"
-        );
-        assert!(
-            sections.contains_key("doom_loop_force_stop_message"),
-            "Should find doom_loop_force_stop_message section"
-        );
+/// Configuration for a proactive reminder that fires based on turn counts.
+#[derive(Debug, Clone)]
+pub struct ProactiveReminderConfig {
+    pub name: &'static str,
+    pub turns_since_reset: usize,
+    pub turns_between: usize,
+    pub class: MessageClass,
+}
+
+/// Tracks turn counts and fires proactive reminders on schedule.
+#[derive(Debug)]
+pub struct ProactiveReminderScheduler {
+    configs: Vec<ProactiveReminderConfig>,
+    turns_since_reset: Vec<usize>,
+    turns_since_fired: Vec<usize>,
+}
+
+impl ProactiveReminderScheduler {
+    pub fn new(configs: Vec<ProactiveReminderConfig>) -> Self {
+        let len = configs.len();
+        Self {
+            configs,
+            turns_since_reset: vec![0; len],
+            turns_since_fired: vec![0; len],
+        }
     }
 
-    #[test]
-    fn test_get_reminder_with_vars() {
-        let result = get_reminder(
-            "incomplete_todos_nudge",
-            &[("count", "3"), ("todo_list", "  - A\n  - B\n  - C")],
-        );
-        assert!(result.contains("3 incomplete todo(s)"));
-        assert!(result.contains("  - A"));
+    pub fn tick(&mut self) {
+        for counter in &mut self.turns_since_reset {
+            *counter += 1;
+        }
+        for counter in &mut self.turns_since_fired {
+            *counter += 1;
+        }
     }
 
-    #[test]
-    fn test_get_reminder_missing() {
-        let result = get_reminder("nonexistent_section_xyz", &[]);
-        assert!(result.is_empty());
+    pub fn reset(&mut self, name: &str) {
+        for (i, config) in self.configs.iter().enumerate() {
+            if config.name == name {
+                self.turns_since_reset[i] = 0;
+            }
+        }
     }
 
-    #[test]
-    fn test_append_nudge() {
-        let mut messages = Vec::new();
-        append_nudge(&mut messages, "test nudge");
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0]["role"], "user");
-        assert_eq!(messages[0]["content"], "[SYSTEM] test nudge");
-        assert_eq!(messages[0]["_msg_class"], "nudge");
-    }
-
-    #[test]
-    fn test_inject_system_message_directive() {
-        let mut messages = Vec::new();
-        inject_system_message(&mut messages, "error context", MessageClass::Directive);
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0]["role"], "user");
-        assert_eq!(messages[0]["content"], "[SYSTEM] error context");
-        assert_eq!(messages[0]["_msg_class"], "directive");
-    }
-
-    #[test]
-    fn test_inject_system_message_internal() {
-        let mut messages = Vec::new();
-        inject_system_message(&mut messages, "debug info", MessageClass::Internal);
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0]["role"], "user");
-        assert_eq!(messages[0]["content"], "[SYSTEM] debug info");
-        assert_eq!(messages[0]["_msg_class"], "internal");
-    }
-
-    #[test]
-    fn test_append_directive() {
-        let mut messages = Vec::new();
-        append_directive(&mut messages, "strategy change");
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0]["_msg_class"], "directive");
-    }
-
-    #[test]
-    fn test_message_class_as_str() {
-        assert_eq!(MessageClass::Directive.as_str(), "directive");
-        assert_eq!(MessageClass::Nudge.as_str(), "nudge");
-        assert_eq!(MessageClass::Internal.as_str(), "internal");
+    pub fn check_and_fire(&mut self) -> Vec<(&'static str, MessageClass)> {
+        let mut fired = Vec::new();
+        for (i, config) in self.configs.iter().enumerate() {
+            if self.turns_since_reset[i] >= config.turns_since_reset
+                && self.turns_since_fired[i] >= config.turns_between
+            {
+                fired.push((config.name, config.class));
+                self.turns_since_fired[i] = 0;
+            }
+        }
+        fired
     }
 }
+
+#[cfg(test)]
+#[path = "reminders_tests.rs"]
+mod tests;

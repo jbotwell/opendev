@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: grep'
+name: 'Tool Description: Grep'
 description: Search file contents using regex patterns via ripgrep
 version: 1.0.0
 -->
@@ -17,7 +17,6 @@ Search file contents using regex patterns (ripgrep).
 
 ## Usage notes
 
-- ALWAYS use grep for content searching. NEVER use run_command with grep or rg — the grep tool has been optimized for correct permissions and access
-- For simple, directed searches (specific class/function name), use grep directly. For broader codebase exploration requiring multiple rounds, consider a subagent
-- When to use grep vs find_symbol: use grep for text/regex matching across files; use find_symbol for structured code navigation via LSP (finds definitions, understands symbol hierarchy)
-- When to use grep vs ast_grep: use grep for text/regex matching; use ast_grep when you care about code structure (matching AST patterns regardless of whitespace/formatting)
+- ALWAYS use Grep for content searching. NEVER use Bash with grep or rg — the Grep tool has been optimized for correct permissions and access
+- For simple, directed searches (specific class/function name), use Grep directly. For broader codebase exploration requiring multiple rounds, consider a subagent
+- When to use Grep vs find_symbol: use Grep for text/regex matching across files; use find_symbol for structured code navigation via LSP (finds definitions, understands symbol hierarchy)

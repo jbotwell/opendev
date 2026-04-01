@@ -1,11 +1,10 @@
 use super::types::SubAgentSpec;
 
 /// Tools available to the Explore subagent.
-pub const CODE_EXPLORER_TOOLS: &[&str] =
-    &["read_file", "grep", "list_files", "run_command", "ast_grep"];
+pub const CODE_EXPLORER_TOOLS: &[&str] = &["Read", "Grep", "Glob", "Bash", "ast_grep"];
 
 /// Tools available to the Planner subagent.
-pub const PLANNER_TOOLS: &[&str] = &["read_file", "grep", "list_files", "write_file", "edit_file"];
+pub const PLANNER_TOOLS: &[&str] = &["Read", "Grep", "Glob", "Write", "Edit"];
 
 /// Create the Explore subagent spec.
 pub fn code_explorer(system_prompt: &str) -> SubAgentSpec {
@@ -33,38 +32,10 @@ pub fn planner(system_prompt: &str) -> SubAgentSpec {
     .with_tools(PLANNER_TOOLS.iter().map(|s| s.to_string()).collect())
 }
 
-/// Create the Ask User subagent spec.
-pub fn ask_user(system_prompt: &str) -> SubAgentSpec {
-    SubAgentSpec::new(
-        "ask-user",
-        "Ask the user clarifying questions with structured multiple-choice options. \
-         Use when you need to gather preferences, clarify ambiguous requirements, \
-         or confirm critical decisions.",
-        system_prompt,
-    )
-    // No tools — UI-only interaction
-}
-
-/// Tools available to the General subagent (broad access for multi-step tasks).
-pub const GENERAL_TOOLS: &[&str] = &[
-    "read_file",
-    "grep",
-    "list_files",
-    "write_file",
-    "edit_file",
-    "multi_edit",
-    "run_command",
-    "web_fetch",
-    "web_search",
-    "patch",
-    "git",
-];
-
 /// Create the General subagent spec.
 ///
-/// This is the most versatile subagent type, with access to file operations,
-/// shell commands, web tools, and git. Use for multi-step tasks that require
-/// both reading and modifying code.
+/// This is the most versatile subagent type with access to all parent tools.
+/// Use for multi-step tasks that require broad tool access.
 pub fn general(system_prompt: &str) -> SubAgentSpec {
     SubAgentSpec::new(
         "General",
@@ -74,18 +45,11 @@ pub fn general(system_prompt: &str) -> SubAgentSpec {
          and any task requiring broad tool access.",
         system_prompt,
     )
-    .with_tools(GENERAL_TOOLS.iter().map(|s| s.to_string()).collect())
+    // No .with_tools() — inherits all parent tools
 }
 
 /// Tools available to the Build/Test subagent.
-pub const BUILD_TOOLS: &[&str] = &[
-    "read_file",
-    "grep",
-    "list_files",
-    "run_command",
-    "edit_file",
-    "write_file",
-];
+pub const BUILD_TOOLS: &[&str] = &["Read", "Grep", "Glob", "Bash", "Edit", "Write"];
 
 /// Create the Build subagent spec.
 ///
@@ -101,8 +65,28 @@ pub fn build(system_prompt: &str) -> SubAgentSpec {
     .with_tools(BUILD_TOOLS.iter().map(|s| s.to_string()).collect())
 }
 
+/// Tools available to the Verification subagent (read-only).
+pub const VERIFICATION_TOOLS: &[&str] = &["Read", "Grep", "Glob", "Bash"];
+
+/// Create the Verification subagent spec.
+///
+/// Adversarial code review agent that runs in background to find bugs,
+/// edge cases, and regressions in recent changes.
+pub fn verification(system_prompt: &str) -> SubAgentSpec {
+    SubAgentSpec::new(
+        "Verification",
+        "Adversarial code review agent. Finds bugs, edge cases, and regressions \
+         in recent changes. Always runs in background. USE FOR: After making 3+ file \
+         edits, backend/API changes, or infrastructure changes, spawn this agent \
+         to independently verify your work.",
+        system_prompt,
+    )
+    .with_tools(VERIFICATION_TOOLS.iter().map(|s| s.to_string()).collect())
+    .with_background(true)
+}
+
 /// Tools available to the Project Init subagent.
-pub const PROJECT_INIT_TOOLS: &[&str] = &["read_file", "list_files", "grep", "run_command"];
+pub const PROJECT_INIT_TOOLS: &[&str] = &["Read", "Glob", "Grep", "Bash"];
 
 /// Create the Project Init subagent spec.
 pub fn project_init(system_prompt: &str) -> SubAgentSpec {
@@ -115,75 +99,5 @@ pub fn project_init(system_prompt: &str) -> SubAgentSpec {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_code_explorer_builtin() {
-        let spec = code_explorer("You explore code.");
-        assert_eq!(spec.name, "Explore");
-        assert!(spec.has_tool_restriction());
-        assert!(spec.tools.contains(&"read_file".to_string()));
-        assert!(spec.tools.contains(&"grep".to_string()));
-        assert!(spec.tools.contains(&"ast_grep".to_string()));
-        assert!(!spec.tools.contains(&"write_file".to_string()));
-    }
-
-    #[test]
-    fn test_planner_builtin() {
-        let spec = planner("You plan tasks.");
-        assert_eq!(spec.name, "Planner");
-        assert!(spec.tools.contains(&"write_file".to_string()));
-        assert!(spec.tools.contains(&"edit_file".to_string()));
-    }
-
-    #[test]
-    fn test_ask_user_builtin() {
-        let spec = ask_user("You ask questions.");
-        assert_eq!(spec.name, "ask-user");
-        assert!(!spec.has_tool_restriction()); // No tools
-    }
-
-    #[test]
-    fn test_general_builtin() {
-        let spec = general("You are versatile.");
-        assert_eq!(spec.name, "General");
-        assert!(spec.has_tool_restriction());
-        // General has broad tool access
-        assert!(spec.tools.contains(&"read_file".to_string()));
-        assert!(spec.tools.contains(&"write_file".to_string()));
-        assert!(spec.tools.contains(&"edit_file".to_string()));
-        assert!(spec.tools.contains(&"run_command".to_string()));
-        assert!(spec.tools.contains(&"web_fetch".to_string()));
-        assert!(spec.tools.contains(&"git".to_string()));
-        assert_eq!(spec.tools.len(), GENERAL_TOOLS.len());
-    }
-
-    #[test]
-    fn test_build_builtin() {
-        let spec = build("You build code.");
-        assert_eq!(spec.name, "Build");
-        assert!(spec.has_tool_restriction());
-        assert!(spec.tools.contains(&"run_command".to_string()));
-        assert!(spec.tools.contains(&"edit_file".to_string()));
-        assert!(spec.tools.contains(&"read_file".to_string()));
-        assert_eq!(spec.tools.len(), BUILD_TOOLS.len());
-    }
-
-    #[test]
-    fn test_project_init_builtin() {
-        let spec = project_init("You analyze codebases.");
-        assert_eq!(spec.name, "project_init");
-        assert_eq!(
-            spec.description,
-            "Analyze codebase and generate project instructions"
-        );
-        assert!(spec.has_tool_restriction());
-        assert_eq!(spec.tools.len(), 4);
-        assert!(spec.tools.contains(&"read_file".to_string()));
-        assert!(spec.tools.contains(&"list_files".to_string()));
-        assert!(spec.tools.contains(&"grep".to_string()));
-        assert!(spec.tools.contains(&"run_command".to_string()));
-        assert!(spec.model.is_none());
-    }
-}
+#[path = "builtins_tests.rs"]
+mod tests;

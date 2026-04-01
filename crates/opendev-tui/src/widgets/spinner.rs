@@ -4,9 +4,7 @@
 //! Provides consistent spinner animation for tool execution, thinking phases,
 //! and agent activity indicators.
 
-use super::thinking_verbs::{
-    self, THINKING_VERBS,
-};
+use super::thinking_verbs::{self, THINKING_VERBS};
 
 /// Braille-dot spinner frames (matches Python `SPINNER_FRAMES`).
 pub const SPINNER_FRAMES: &[char] = &[
@@ -93,16 +91,15 @@ impl SpinnerState {
         self.tick_count
     }
 
-    /// Get the current thinking verb text (typewriter-revealed).
-    pub fn current_verb(&self) -> &str {
-        let verb = THINKING_VERBS[self.verb_index];
-        thinking_verbs::compute_verb_text(verb, self.verb_tick)
+    /// Get the current thinking verb (full text).
+    pub fn current_verb(&self) -> &'static str {
+        THINKING_VERBS[self.verb_index]
     }
 
-    /// Whether the current verb is fully revealed (for ellipsis display).
-    pub fn is_verb_fully_revealed(&self) -> bool {
+    /// Get the fade-in intensity for the current verb (0.0 = dim, 1.0 = bright).
+    pub fn verb_fade_intensity(&self) -> f32 {
         let verb = THINKING_VERBS[self.verb_index];
-        thinking_verbs::is_fully_revealed(verb, self.verb_tick)
+        thinking_verbs::compute_fade_intensity(verb, self.verb_tick)
     }
 
     /// Reset to initial state.
@@ -121,64 +118,5 @@ impl Default for SpinnerState {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_spinner_cycles() {
-        let mut spinner = SpinnerState::new();
-        let first = spinner.tick();
-        assert_eq!(first, '\u{280b}');
-
-        // Cycle through all frames
-        for _ in 1..SPINNER_FRAMES.len() {
-            spinner.tick();
-        }
-        // Should be back to first frame
-        assert_eq!(spinner.current(), '\u{280b}');
-    }
-
-    #[test]
-    fn test_spinner_tick_count() {
-        let mut spinner = SpinnerState::new();
-        assert_eq!(spinner.tick_count(), 0);
-        spinner.tick();
-        spinner.tick();
-        assert_eq!(spinner.tick_count(), 2);
-    }
-
-    #[test]
-    fn test_spinner_reset() {
-        let mut spinner = SpinnerState::new();
-        spinner.tick();
-        spinner.tick();
-        spinner.reset();
-        assert_eq!(spinner.tick_count(), 0);
-        assert_eq!(spinner.current(), SPINNER_FRAMES[0]);
-        assert_eq!(spinner.current_verb(), "T"); // reset to first verb, tick 0
-    }
-
-    #[test]
-    fn test_verb_advances() {
-        let mut spinner = SpinnerState::new();
-        let first_verb = THINKING_VERBS[0];
-        // Tick past the first verb's full cycle
-        let cycle = thinking_verbs::cycle_ticks_for(first_verb);
-        for _ in 0..cycle {
-            spinner.tick();
-        }
-        // Should now be on a different verb
-        assert_ne!(spinner.current_verb(), &first_verb[..1]);
-    }
-
-    #[test]
-    fn test_verb_no_immediate_repeat() {
-        let mut spinner = SpinnerState::new();
-        let first_idx = spinner.verb_index;
-        let cycle = thinking_verbs::cycle_ticks_for(THINKING_VERBS[first_idx]);
-        for _ in 0..cycle {
-            spinner.tick();
-        }
-        assert_ne!(spinner.verb_index, first_idx);
-    }
-}
+#[path = "spinner_tests.rs"]
+mod tests;

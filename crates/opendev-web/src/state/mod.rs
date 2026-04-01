@@ -8,8 +8,9 @@
 mod approvals;
 mod bridge;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc, oneshot};
 
 use opendev_config::ModelRegistry;
@@ -24,6 +25,22 @@ pub struct WsBroadcast {
     pub msg_type: String,
     #[serde(default)]
     pub data: serde_json::Value,
+    /// Monotonically increasing sequence number for ordering and gap detection.
+    /// Defaults to 0 for backward compatibility with old frontends.
+    #[serde(default)]
+    pub seq: u64,
+}
+
+impl WsBroadcast {
+    /// Create a new broadcast message. The `seq` field starts at 0 and is
+    /// overwritten by [`AppState::broadcast`] before sending.
+    pub fn new(msg_type: impl Into<String>, data: serde_json::Value) -> Self {
+        Self {
+            msg_type: msg_type.into(),
+            data,
+            seq: 0,
+        }
+    }
 }
 
 /// Shared application state wrapped in Arc for use with Axum.
@@ -65,6 +82,10 @@ pub(super) struct AppStateInner {
     pub(super) model_registry: RwLock<ModelRegistry>,
     /// Bridge mode state.
     pub(super) bridge: RwLock<BridgeState>,
+    /// Monotonically increasing broadcast sequence counter.
+    pub(super) broadcast_seq: AtomicU64,
+    /// Ring buffer of recent broadcasts for client catch-up on reconnect.
+    pub(super) recent_broadcasts: Mutex<VecDeque<WsBroadcast>>,
 }
 
 /// Bridge mode state: when the TUI owns agent execution and
@@ -170,8 +191,11 @@ pub trait AgentExecutor: Send + Sync + 'static {
 /// Injection queue capacity per session.
 const INJECTION_QUEUE_CAPACITY: usize = 10;
 
+/// Maximum number of recent broadcasts kept for client catch-up on reconnect.
+const RING_BUFFER_CAPACITY: usize = 1000;
+
 impl AppState {
-    /// Create a new AppState.
+    /// Create a new AppState without per-directory isolation.
     pub fn new(
         session_manager: SessionManager,
         config: AppConfig,
@@ -198,6 +222,8 @@ impl AppState {
                 user_store: Arc::new(user_store),
                 model_registry: RwLock::new(model_registry),
                 bridge: RwLock::new(BridgeState::default()),
+                broadcast_seq: AtomicU64::new(1),
+                recent_broadcasts: Mutex::new(VecDeque::with_capacity(RING_BUFFER_CAPACITY)),
             }),
         }
     }
@@ -271,9 +297,41 @@ impl AppState {
     }
 
     /// Broadcast a message to all WebSocket subscribers.
-    pub fn broadcast(&self, msg: WsBroadcast) {
+    ///
+    /// Assigns a monotonically increasing sequence number before sending.
+    pub fn broadcast(&self, mut msg: WsBroadcast) {
+        msg.seq = self.inner.broadcast_seq.fetch_add(1, Ordering::Relaxed);
+        // Store in ring buffer for catch-up on reconnect.
+        if let Ok(mut buf) = self.inner.recent_broadcasts.try_lock() {
+            if buf.len() >= RING_BUFFER_CAPACITY {
+                buf.pop_front();
+            }
+            buf.push_back(msg.clone());
+        }
         // Ignore send errors (no subscribers is fine).
         let _ = self.inner.ws_tx.send(msg);
+    }
+
+    /// Get the current broadcast sequence number (next to be assigned).
+    pub fn current_broadcast_seq(&self) -> u64 {
+        self.inner.broadcast_seq.load(Ordering::Relaxed)
+    }
+
+    /// Get all broadcasts with seq > `last_seq` from the ring buffer.
+    /// Returns `None` if the requested seq is too old (no longer in buffer).
+    pub async fn catch_up_since(&self, last_seq: u64) -> Option<Vec<WsBroadcast>> {
+        let buf = self.inner.recent_broadcasts.lock().await;
+        // If buffer is empty, there is nothing to catch up on.
+        if buf.is_empty() {
+            return Some(vec![]);
+        }
+        // Check if the requested seq is still in the buffer.
+        if let Some(oldest) = buf.front()
+            && last_seq < oldest.seq.saturating_sub(1)
+        {
+            return None; // Gap too large, client needs full sync
+        }
+        Some(buf.iter().filter(|m| m.seq > last_seq).cloned().collect())
     }
 
     // --- Mode / settings ---
@@ -406,358 +464,4 @@ impl AppState {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    fn make_state() -> AppState {
-        let tmp = TempDir::new().unwrap();
-        let tmp_path = tmp.into_path();
-        let session_manager = SessionManager::new(tmp_path.clone()).unwrap();
-        let config = AppConfig::default();
-        let user_store = UserStore::new(tmp_path.clone()).unwrap();
-        let model_registry = ModelRegistry::new();
-        AppState::new(
-            session_manager,
-            config,
-            "/tmp/test".to_string(),
-            user_store,
-            model_registry,
-        )
-    }
-
-    #[tokio::test]
-    async fn test_mode_default() {
-        let state = make_state();
-        assert_eq!(state.mode().await, OperationMode::Normal);
-    }
-
-    #[tokio::test]
-    async fn test_set_mode() {
-        let state = make_state();
-        state.set_mode(OperationMode::Plan).await;
-        assert_eq!(state.mode().await, OperationMode::Plan);
-    }
-
-    #[tokio::test]
-    async fn test_autonomy_level() {
-        let state = make_state();
-        assert_eq!(state.autonomy_level().await, "Manual");
-        state.set_autonomy_level("Auto".to_string()).await;
-        assert_eq!(state.autonomy_level().await, "Auto");
-    }
-
-    #[tokio::test]
-    async fn test_interrupt_flag() {
-        let state = make_state();
-        assert!(!state.is_interrupt_requested().await);
-        state.request_interrupt().await;
-        assert!(state.is_interrupt_requested().await);
-        state.clear_interrupt().await;
-        assert!(!state.is_interrupt_requested().await);
-    }
-
-    #[tokio::test]
-    async fn test_session_running() {
-        let state = make_state();
-        assert!(!state.is_session_running("s1").await);
-        state.set_session_running("s1".to_string()).await;
-        assert!(state.is_session_running("s1").await);
-        state.set_session_idle("s1").await;
-        assert!(!state.is_session_running("s1").await);
-    }
-
-    #[tokio::test]
-    async fn test_approval_oneshot_lifecycle() {
-        let state = make_state();
-        let approval = PendingApproval {
-            tool_name: "bash".to_string(),
-            arguments: serde_json::json!({"command": "ls"}),
-            session_id: Some("s1".to_string()),
-        };
-
-        // Add approval and get receiver.
-        let rx = state.add_pending_approval("a1".to_string(), approval).await;
-
-        // Verify pending.
-        let pending = state.get_pending_approval("a1").await;
-        assert!(pending.is_some());
-        assert_eq!(pending.unwrap().tool_name, "bash");
-
-        // Resolve it.
-        let resolved = state.resolve_approval("a1", true, false).await;
-        assert!(resolved.is_some());
-
-        // Receiver should get the result.
-        let result = rx.await.unwrap();
-        assert!(result.approved);
-        assert!(!result.auto_approve);
-
-        // Second resolve returns None (already consumed).
-        assert!(state.resolve_approval("a1", false, false).await.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_interrupt_denies_pending_approvals() {
-        let state = make_state();
-        let approval = PendingApproval {
-            tool_name: "bash".to_string(),
-            arguments: serde_json::json!({}),
-            session_id: Some("s1".to_string()),
-        };
-
-        let rx = state.add_pending_approval("a1".to_string(), approval).await;
-
-        // Interrupt should deny all pending approvals.
-        state.request_interrupt().await;
-
-        let result = rx.await.unwrap();
-        assert!(!result.approved);
-    }
-
-    #[tokio::test]
-    async fn test_clear_session_approvals() {
-        let state = make_state();
-
-        let approval_s1 = PendingApproval {
-            tool_name: "bash".to_string(),
-            arguments: serde_json::json!({}),
-            session_id: Some("s1".to_string()),
-        };
-        let approval_s2 = PendingApproval {
-            tool_name: "edit".to_string(),
-            arguments: serde_json::json!({}),
-            session_id: Some("s2".to_string()),
-        };
-
-        let rx_s1 = state
-            .add_pending_approval("a1".to_string(), approval_s1)
-            .await;
-        let _rx_s2 = state
-            .add_pending_approval("a2".to_string(), approval_s2)
-            .await;
-
-        // Clear only s1's approvals.
-        state.clear_session_approvals("s1").await;
-
-        // s1 approval should be rejected.
-        let result = rx_s1.await.unwrap();
-        assert!(!result.approved);
-
-        // s2 approval should still be pending.
-        assert!(state.get_pending_approval("a2").await.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_ask_user_oneshot_lifecycle() {
-        let state = make_state();
-        let ask = PendingAskUser {
-            prompt: "What is your name?".to_string(),
-            session_id: Some("s1".to_string()),
-        };
-
-        let rx = state.add_pending_ask_user("q1".to_string(), ask).await;
-
-        let pending = state.get_pending_ask_user("q1").await;
-        assert!(pending.is_some());
-
-        let resolved = state
-            .resolve_ask_user("q1", Some(serde_json::json!({"name": "Alice"})), false)
-            .await;
-        assert!(resolved.is_some());
-
-        let result = rx.await.unwrap();
-        assert!(!result.cancelled);
-        assert_eq!(
-            result.answers.unwrap(),
-            serde_json::json!({"name": "Alice"})
-        );
-    }
-
-    #[tokio::test]
-    async fn test_interrupt_cancels_ask_users() {
-        let state = make_state();
-        let ask = PendingAskUser {
-            prompt: "question".to_string(),
-            session_id: None,
-        };
-
-        let rx = state.add_pending_ask_user("q1".to_string(), ask).await;
-
-        state.request_interrupt().await;
-
-        let result = rx.await.unwrap();
-        assert!(result.cancelled);
-    }
-
-    #[tokio::test]
-    async fn test_plan_approval_oneshot_lifecycle() {
-        let state = make_state();
-        let plan = PendingPlanApproval {
-            data: serde_json::json!({"plan": "do something"}),
-            session_id: Some("s1".to_string()),
-        };
-
-        let rx = state
-            .add_pending_plan_approval("p1".to_string(), plan)
-            .await;
-
-        // Verify pending.
-        let pending = state.get_pending_plan_approval("p1").await;
-        assert!(pending.is_some());
-
-        // Resolve it.
-        let resolved = state
-            .resolve_plan_approval("p1", "approve".to_string(), "looks good".to_string())
-            .await;
-        assert!(resolved.is_some());
-
-        // Receiver should get the result.
-        let result = rx.await.unwrap();
-        assert_eq!(result.action, "approve");
-        assert_eq!(result.feedback, "looks good");
-
-        // Second resolve returns None.
-        assert!(
-            state
-                .resolve_plan_approval("p1", "reject".to_string(), String::new())
-                .await
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
-    async fn test_interrupt_rejects_plan_approvals() {
-        let state = make_state();
-        let plan = PendingPlanApproval {
-            data: serde_json::json!({"plan": "test"}),
-            session_id: None,
-        };
-
-        let rx = state
-            .add_pending_plan_approval("p1".to_string(), plan)
-            .await;
-
-        state.request_interrupt().await;
-
-        let result = rx.await.unwrap();
-        assert_eq!(result.action, "reject");
-    }
-
-    #[tokio::test]
-    async fn test_clear_session_plan_approvals() {
-        let state = make_state();
-
-        let plan_s1 = PendingPlanApproval {
-            data: serde_json::json!({}),
-            session_id: Some("s1".to_string()),
-        };
-        let plan_s2 = PendingPlanApproval {
-            data: serde_json::json!({}),
-            session_id: Some("s2".to_string()),
-        };
-
-        let rx_s1 = state
-            .add_pending_plan_approval("p1".to_string(), plan_s1)
-            .await;
-        let _rx_s2 = state
-            .add_pending_plan_approval("p2".to_string(), plan_s2)
-            .await;
-
-        state.clear_session_plan_approvals("s1").await;
-
-        let result = rx_s1.await.unwrap();
-        assert_eq!(result.action, "reject");
-
-        // s2 should still be pending.
-        assert!(state.get_pending_plan_approval("p2").await.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_bridge_mode() {
-        let state = make_state();
-
-        // Initially not in bridge mode.
-        assert!(!state.is_bridge_mode().await);
-        assert!(state.bridge_session_id().await.is_none());
-        assert!(!state.is_bridge_guarded("s1").await);
-
-        // Activate bridge mode.
-        state.set_bridge_session("s1".to_string()).await;
-        assert!(state.is_bridge_mode().await);
-        assert_eq!(state.bridge_session_id().await.unwrap(), "s1");
-        assert!(state.is_bridge_guarded("s1").await);
-        assert!(!state.is_bridge_guarded("s2").await);
-
-        // Deactivate.
-        state.clear_bridge_session().await;
-        assert!(!state.is_bridge_mode().await);
-        assert!(!state.is_bridge_guarded("s1").await);
-    }
-
-    #[tokio::test]
-    async fn test_injection_queue() {
-        let state = make_state();
-
-        // First call creates the queue and returns the receiver.
-        let (tx, rx) = state.get_or_create_injection_queue("s1").await;
-        assert!(rx.is_some());
-        let mut rx = rx.unwrap();
-
-        // Second call returns the sender but no new receiver.
-        let (tx2, rx2) = state.get_or_create_injection_queue("s1").await;
-        assert!(rx2.is_none());
-
-        // Send through either sender.
-        tx.try_send("hello".to_string()).unwrap();
-        tx2.try_send("world".to_string()).unwrap();
-
-        assert_eq!(rx.recv().await.unwrap(), "hello");
-        assert_eq!(rx.recv().await.unwrap(), "world");
-
-        // try_inject_message works too.
-        state
-            .try_inject_message("s1", "via state".to_string())
-            .await
-            .unwrap();
-        assert_eq!(rx.recv().await.unwrap(), "via state");
-
-        // Clear and verify injection fails.
-        state.clear_injection_queue("s1").await;
-        assert!(
-            state
-                .try_inject_message("s1", "fail".to_string())
-                .await
-                .is_err()
-        );
-    }
-
-    #[tokio::test]
-    async fn test_broadcast() {
-        let state = make_state();
-        let mut rx = state.ws_subscribe();
-
-        state.broadcast(WsBroadcast {
-            msg_type: "test".to_string(),
-            data: serde_json::json!({"hello": "world"}),
-        });
-
-        let msg = rx.recv().await.unwrap();
-        assert_eq!(msg.msg_type, "test");
-    }
-
-    #[tokio::test]
-    async fn test_user_store_access() {
-        let state = make_state();
-        // Verify user store is accessible.
-        assert_eq!(state.user_store().count(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_model_registry_access() {
-        let state = make_state();
-        let registry = state.model_registry().await;
-        // Empty registry by default.
-        assert!(registry.providers.is_empty());
-    }
-}
+mod tests;

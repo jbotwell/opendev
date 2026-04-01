@@ -34,6 +34,10 @@ pub struct SpawnSubagentTool {
     parent_max_tokens: u64,
     /// Parent agent's reasoning effort (subagents inherit this).
     parent_reasoning_effort: Option<String>,
+    /// Debug logger for LLM interaction logging (None = disabled).
+    debug_logger: Option<Arc<opendev_runtime::SessionDebugLogger>>,
+    /// Pre-computed tool description including dynamic agent listing.
+    cached_description: String,
 }
 
 impl SpawnSubagentTool {
@@ -46,6 +50,11 @@ impl SpawnSubagentTool {
         parent_model: impl Into<String>,
         working_dir: impl Into<String>,
     ) -> Self {
+        let agent_listing = manager.build_agent_listing();
+        let listing_section =
+            format!("Available agent types and the tools they have access to:\n{agent_listing}");
+        let cached_description = opendev_agents::prompts::embedded::TOOLS_TOOL_SPAWN_AGENT
+            .replace("{agent_listing}", &listing_section);
         Self {
             manager,
             tool_registry,
@@ -56,6 +65,8 @@ impl SpawnSubagentTool {
             event_tx: None,
             parent_max_tokens: 16384,
             parent_reasoning_effort: None,
+            debug_logger: None,
+            cached_description,
         }
     }
 
@@ -76,23 +87,22 @@ impl SpawnSubagentTool {
         self.parent_reasoning_effort = effort;
         self
     }
+
+    /// Set the debug logger for LLM interaction logging.
+    pub fn with_debug_logger(mut self, logger: Arc<opendev_runtime::SessionDebugLogger>) -> Self {
+        self.debug_logger = Some(logger);
+        self
+    }
 }
 
 #[async_trait::async_trait]
 impl BaseTool for SpawnSubagentTool {
     fn name(&self) -> &str {
-        "spawn_subagent"
+        "Agent"
     }
 
     fn description(&self) -> &str {
-        "Spawn a subagent to handle an isolated task. The subagent runs its own \
-         ReAct loop with restricted tools and returns the result. Use for tasks \
-         that require multiple tool calls and benefit from isolated context \
-         (code exploration, summarization, codebase analysis, planning, web cloning, etc.). \
-         This is the correct tool for 'summarize the codebase', 'how does X work', \
-         'explore the code', etc. — NOT invoke_skill. \
-         Do NOT spawn a subagent for tasks that only need 1-2 tool calls — \
-         use the tools directly instead."
+        &self.cached_description
     }
 
     fn parameter_schema(&self) -> serde_json::Value {
@@ -130,6 +140,18 @@ impl BaseTool for SpawnSubagentTool {
                     "type": "string",
                     "description": "A short (3-8 word) summary of the task for display. \
                                     Examples: 'Trace tool_call_count updates', 'Find auth middleware chain'."
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Override the model for this subagent. If omitted, uses the \
+                                    agent's configured model or inherits from parent."
+                },
+                "run_in_background": {
+                    "type": "boolean",
+                    "description": "Run the agent in background. Returns a task_id immediately \
+                                    and you'll be notified when the agent completes. Use for \
+                                    long-running tasks where you don't need the result right away.",
+                    "default": false
                 }
             },
             "required": ["agent_type", "task"]
@@ -184,11 +206,13 @@ impl BaseTool for SpawnSubagentTool {
         }
 
         let task_id = args.get("task_id").and_then(|v| v.as_str());
+        let model_override = args.get("model").and_then(|v| v.as_str());
 
         info!(
             agent_type = %agent_type,
             task_len = task.len(),
             resume = task_id.is_some(),
+            model_override = ?model_override,
             "spawn_subagent called"
         );
 
@@ -244,6 +268,45 @@ impl BaseTool for SpawnSubagentTool {
             CancellationToken::new()
         };
 
+        // Check run_in_background (also check spec.background for auto-background agents)
+        let run_in_background = args
+            .get("run_in_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+            || self.manager.get(agent_type).is_some_and(|s| s.background);
+
+        // Prevent background-in-background spawning
+        if run_in_background
+            && ctx
+                .values
+                .get("is_background_agent")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        {
+            return ToolResult::fail(
+                "Background agents cannot spawn other background agents. \
+                 Use synchronous subagents (remove run_in_background) instead.",
+            );
+        }
+
+        if run_in_background {
+            return self
+                .spawn_background(BackgroundSpawnParams {
+                    agent_type,
+                    task,
+                    wd: &wd,
+                    child_session_id: &child_session_id,
+                    subagent_id: &subagent_id,
+                    cancel_token: subagent_cancel,
+                    description: args
+                        .get("description")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(agent_type),
+                    model_override,
+                })
+                .await;
+        }
+
         // Create progress callback
         let progress: Arc<dyn opendev_agents::SubagentProgressCallback> =
             if let Some(ref tx) = self.event_tx {
@@ -272,6 +335,8 @@ impl BaseTool for SpawnSubagentTool {
                 self.parent_max_tokens,
                 self.parent_reasoning_effort.clone(),
                 Some(subagent_cancel),
+                self.debug_logger.as_deref(),
+                model_override,
             )
             .await;
 
@@ -319,9 +384,7 @@ impl BaseTool for SpawnSubagentTool {
                         content.len(),
                         MAX_SUBAGENT_OUTPUT
                     ));
-                    output.push_str(
-                        opendev_runtime::safe_truncate(content, half),
-                    );
+                    output.push_str(opendev_runtime::safe_truncate(content, half));
                     output.push_str(&format!(
                         "\n\n[...truncated {} chars...]\n\n",
                         content.len() - MAX_SUBAGENT_OUTPUT
@@ -351,10 +414,7 @@ impl BaseTool for SpawnSubagentTool {
                         subagent_name: agent_type.to_string(),
                         success: effective_success,
                         result_summary: if content.len() > 200 {
-                            format!(
-                                "{}...",
-                                opendev_runtime::safe_truncate(content, 200)
-                            )
+                            format!("{}...", opendev_runtime::safe_truncate(content, 200))
                         } else {
                             content.clone()
                         },
@@ -396,6 +456,169 @@ impl BaseTool for SpawnSubagentTool {
                 ToolResult::fail(format!("Subagent failed: {e}"))
             }
         }
+    }
+}
+
+/// Parameters for spawning a background agent.
+struct BackgroundSpawnParams<'a> {
+    agent_type: &'a str,
+    task: &'a str,
+    wd: &'a str,
+    child_session_id: &'a str,
+    subagent_id: &'a str,
+    cancel_token: CancellationToken,
+    description: &'a str,
+    model_override: Option<&'a str>,
+}
+
+impl SpawnSubagentTool {
+    /// Spawn an agent in the background. Returns immediately with a task_id.
+    async fn spawn_background(&self, params: BackgroundSpawnParams<'_>) -> ToolResult {
+        let task_id = params.subagent_id[..12.min(params.subagent_id.len())].to_string();
+        let agent_type_display = params.agent_type.to_string();
+        let cancel_token = params.cancel_token;
+        let interrupt_token = opendev_runtime::InterruptToken::new();
+
+        info!(
+            agent_type = %agent_type_display,
+            task_id = %task_id,
+            "Spawning background agent"
+        );
+
+        // Notify TUI to register the background task
+        if let Some(ref tx) = self.event_tx {
+            let _ = tx.send(SubagentEvent::BackgroundSpawned {
+                task_id: task_id.clone(),
+                agent_type: params.agent_type.to_string(),
+                query: params.task.to_string(),
+                description: params.description.to_string(),
+                session_id: params.child_session_id.to_string(),
+                interrupt_token: interrupt_token.clone(),
+            });
+        }
+
+        // Clone all needed data for the background task
+        let manager = Arc::clone(&self.manager);
+        let registry = Arc::clone(&self.tool_registry);
+        let http = Arc::clone(&self.http_client);
+        let event_tx = self.event_tx.clone();
+        let parent_model = self.parent_model.clone();
+        let parent_max_tokens = self.parent_max_tokens;
+        let reasoning_effort = self.parent_reasoning_effort.clone();
+        let debug_logger_arc = self.debug_logger.clone();
+        let session_dir = self.session_dir.clone();
+        let agent_type_owned = params.agent_type.to_string();
+        let task_owned = params.task.to_string();
+        let wd_owned = params.wd.to_string();
+        let child_session_id_owned = params.child_session_id.to_string();
+        let task_id_clone = task_id.clone();
+        let model_override_owned = params.model_override.map(|s| s.to_string());
+
+        tokio::spawn(async move {
+            // Create background-specific progress callback
+            let progress: Arc<dyn opendev_agents::SubagentProgressCallback> =
+                if let Some(ref tx) = event_tx {
+                    Arc::new(super::events::BackgroundProgressCallback::new(
+                        tx.clone(),
+                        task_id_clone.clone(),
+                    ))
+                } else {
+                    Arc::new(opendev_agents::NoopProgressCallback)
+                };
+
+            let result = manager
+                .spawn(
+                    &agent_type_owned,
+                    &task_owned,
+                    &parent_model,
+                    registry,
+                    http,
+                    &wd_owned,
+                    progress,
+                    None,
+                    None,
+                    parent_max_tokens,
+                    reasoning_effort,
+                    Some(cancel_token),
+                    debug_logger_arc.as_deref(),
+                    model_override_owned.as_deref(),
+                )
+                .await;
+
+            match result {
+                Ok(run_result) => {
+                    // Save child session for future resume
+                    let child_mgr = opendev_history::SessionManager::new(session_dir);
+                    if let Ok(child_mgr) = child_mgr {
+                        let mut session = opendev_models::session::Session::new();
+                        session.id = child_session_id_owned.clone();
+                        session.working_directory = Some(wd_owned);
+                        session.metadata.insert(
+                            "title".to_string(),
+                            serde_json::json!(format!(
+                                "{} (@{})",
+                                task_owned.chars().take(80).collect::<String>(),
+                                agent_type_owned
+                            )),
+                        );
+                        session.metadata.insert(
+                            "subagent_type".to_string(),
+                            serde_json::json!(agent_type_owned),
+                        );
+                        let messages = opendev_history::message_convert::api_values_to_chatmessages(
+                            &run_result.agent_result.messages,
+                        );
+                        session.messages = messages;
+                        let _ = child_mgr.save_session(&session);
+                    }
+
+                    let success =
+                        run_result.agent_result.success && !run_result.agent_result.interrupted;
+                    let summary = if run_result.agent_result.content.len() > 200 {
+                        format!(
+                            "{}...",
+                            opendev_runtime::safe_truncate(&run_result.agent_result.content, 200)
+                        )
+                    } else {
+                        run_result.agent_result.content.clone()
+                    };
+
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(SubagentEvent::BackgroundCompleted {
+                            task_id: task_id_clone,
+                            success,
+                            result_summary: summary,
+                            full_result: run_result.agent_result.content,
+                            cost_usd: 0.0,
+                            tool_call_count: run_result.tool_call_count,
+                        });
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        agent_type = %agent_type_owned,
+                        task_id = %task_id_clone,
+                        error = %e,
+                        "Background agent failed"
+                    );
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(SubagentEvent::BackgroundCompleted {
+                            task_id: task_id_clone,
+                            success: false,
+                            result_summary: e.to_string(),
+                            full_result: String::new(),
+                            cost_usd: 0.0,
+                            tool_call_count: 0,
+                        });
+                    }
+                }
+            }
+        });
+
+        ToolResult::ok(format!(
+            "Background agent started.\ntask_id: {task_id}\nAgent: {agent_type_display}\n\n\
+             Running in background. You'll be notified when it completes. Continue your work."
+        ))
     }
 }
 
@@ -446,258 +669,5 @@ fn clean_subagent_output(text: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_spawn_subagent_missing_params() {
-        let manager = Arc::new(opendev_agents::SubagentManager::new());
-        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
-        let raw = opendev_http::HttpClient::new(
-            "https://api.example.com/v1/chat/completions",
-            reqwest::header::HeaderMap::new(),
-            None,
-        )
-        .unwrap();
-        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
-        let tool = SpawnSubagentTool::new(
-            manager,
-            registry,
-            http,
-            PathBuf::from("/tmp"),
-            "gpt-4o",
-            "/tmp",
-        );
-        let ctx = ToolContext::new("/tmp");
-
-        // Missing agent_type
-        let result = tool.execute(HashMap::new(), &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("agent_type"));
-
-        // Missing task
-        let mut args = HashMap::new();
-        args.insert("agent_type".into(), serde_json::json!("code_explorer"));
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("task"));
-    }
-
-    #[tokio::test]
-    async fn test_spawn_subagent_unknown_type() {
-        let manager = Arc::new(opendev_agents::SubagentManager::new());
-        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
-        let raw = opendev_http::HttpClient::new(
-            "https://api.example.com/v1/chat/completions",
-            reqwest::header::HeaderMap::new(),
-            None,
-        )
-        .unwrap();
-        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
-        let tool = SpawnSubagentTool::new(
-            manager,
-            registry,
-            http,
-            PathBuf::from("/tmp"),
-            "gpt-4o",
-            "/tmp",
-        );
-        let ctx = ToolContext::new("/tmp");
-
-        let mut args = HashMap::new();
-        args.insert("agent_type".into(), serde_json::json!("nonexistent"));
-        args.insert("task".into(), serde_json::json!("do something"));
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("Unknown subagent type"));
-    }
-
-    #[tokio::test]
-    async fn test_spawn_subagent_blocked_in_subagent_context() {
-        let manager = Arc::new(opendev_agents::SubagentManager::new());
-        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
-        let raw = opendev_http::HttpClient::new(
-            "https://api.example.com/v1/chat/completions",
-            reqwest::header::HeaderMap::new(),
-            None,
-        )
-        .unwrap();
-        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
-        let tool = SpawnSubagentTool::new(
-            manager,
-            registry,
-            http,
-            PathBuf::from("/tmp"),
-            "gpt-4o",
-            "/tmp",
-        );
-
-        // Simulate being called from within a subagent context
-        let mut ctx = ToolContext::new("/tmp");
-        ctx.is_subagent = true;
-
-        let mut args = HashMap::new();
-        args.insert("agent_type".into(), serde_json::json!("code_explorer"));
-        args.insert("task".into(), serde_json::json!("explore code"));
-
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(
-            result
-                .error
-                .unwrap()
-                .contains("cannot spawn other subagents")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_planner_blocked_during_explore_phase() {
-        let mut manager = opendev_agents::SubagentManager::new();
-        // Register a planner spec so agent_type validation passes
-        manager.register(opendev_agents::SubAgentSpec::new(
-            "Planner",
-            "Plans tasks",
-            "",
-        ));
-        let manager = Arc::new(manager);
-        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
-        let raw = opendev_http::HttpClient::new(
-            "https://api.example.com/v1/chat/completions",
-            reqwest::header::HeaderMap::new(),
-            None,
-        )
-        .unwrap();
-        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
-        let tool = SpawnSubagentTool::new(
-            manager,
-            registry,
-            http,
-            PathBuf::from("/tmp"),
-            "gpt-4o",
-            "/tmp",
-        );
-
-        // Create shared state in explore phase
-        let mut state = HashMap::new();
-        state.insert("planning_phase".to_string(), serde_json::json!("explore"));
-        state.insert("explore_count".to_string(), serde_json::json!(0));
-        let shared = std::sync::Arc::new(std::sync::Mutex::new(state));
-
-        let mut ctx = ToolContext::new("/tmp");
-        ctx.shared_state = Some(shared);
-
-        let mut args = HashMap::new();
-        args.insert("agent_type".into(), serde_json::json!("Planner"));
-        args.insert("task".into(), serde_json::json!("plan the task"));
-
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("Before planning"));
-    }
-
-    #[tokio::test]
-    async fn test_planner_allowed_during_plan_phase() {
-        let mut manager = opendev_agents::SubagentManager::new();
-        manager.register(opendev_agents::SubAgentSpec::new(
-            "Planner",
-            "Plans tasks",
-            "",
-        ));
-        let manager = Arc::new(manager);
-        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
-        let raw = opendev_http::HttpClient::new(
-            "https://api.example.com/v1/chat/completions",
-            reqwest::header::HeaderMap::new(),
-            None,
-        )
-        .unwrap();
-        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
-        // Use non-existent working dir so spawn fails fast at dir validation
-        // (never reaches network call)
-        let tool = SpawnSubagentTool::new(
-            manager,
-            registry,
-            http,
-            PathBuf::from("/tmp"),
-            "gpt-4o",
-            "/nonexistent/path/for/test",
-        );
-
-        // Create shared state in plan phase (exploration already done)
-        let mut state = HashMap::new();
-        state.insert("planning_phase".to_string(), serde_json::json!("plan"));
-        state.insert("explore_count".to_string(), serde_json::json!(1));
-        let shared = std::sync::Arc::new(std::sync::Mutex::new(state));
-
-        let mut ctx = ToolContext::new("/tmp");
-        ctx.shared_state = Some(shared);
-
-        let mut args = HashMap::new();
-        args.insert("agent_type".into(), serde_json::json!("Planner"));
-        args.insert("task".into(), serde_json::json!("plan the task"));
-
-        // Should NOT be blocked by the explore guard — will fail at dir validation
-        // Use explicit non-existent working_dir arg to trigger fast failure
-        args.insert(
-            "working_dir".into(),
-            serde_json::json!("/nonexistent/test/path"),
-        );
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        let err = result.error.unwrap();
-        assert!(
-            !err.contains("Before planning"),
-            "Planner should not be blocked in plan phase, got: {err}"
-        );
-        assert!(
-            err.contains("does not exist"),
-            "Expected dir validation error, got: {err}"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_planner_allowed_without_shared_state() {
-        let mut manager = opendev_agents::SubagentManager::new();
-        manager.register(opendev_agents::SubAgentSpec::new(
-            "Planner",
-            "Plans tasks",
-            "",
-        ));
-        let manager = Arc::new(manager);
-        let registry = Arc::new(opendev_tools_core::ToolRegistry::new());
-        let raw = opendev_http::HttpClient::new(
-            "https://api.example.com/v1/chat/completions",
-            reqwest::header::HeaderMap::new(),
-            None,
-        )
-        .unwrap();
-        let http = Arc::new(opendev_http::AdaptedClient::new(raw));
-        let tool = SpawnSubagentTool::new(
-            manager,
-            registry,
-            http,
-            PathBuf::from("/tmp"),
-            "gpt-4o",
-            "/tmp",
-        );
-
-        // No shared state — normal non-plan-mode usage
-        let ctx = ToolContext::new("/tmp");
-
-        let mut args = HashMap::new();
-        args.insert("agent_type".into(), serde_json::json!("Planner"));
-        args.insert("task".into(), serde_json::json!("plan the task"));
-        args.insert(
-            "working_dir".into(),
-            serde_json::json!("/nonexistent/test/path"),
-        );
-
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        let err = result.error.unwrap();
-        assert!(
-            !err.contains("Before planning"),
-            "Planner should not be blocked without shared state, got: {err}"
-        );
-    }
-}
+#[path = "spawn_tests.rs"]
+mod tests;

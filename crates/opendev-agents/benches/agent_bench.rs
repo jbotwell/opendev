@@ -117,7 +117,7 @@ fn bench_prompt_compose(c: &mut Criterion) {
     // Compose with empty context (only unconditional sections)
     group.bench_function("default_no_conditions", |b| {
         let dir = tempfile::TempDir::new().unwrap();
-        let composer = create_default_composer(dir.path());
+        let mut composer = create_default_composer(dir.path());
         let ctx = HashMap::new();
         b.iter(|| {
             composer.compose(black_box(&ctx));
@@ -127,7 +127,7 @@ fn bench_prompt_compose(c: &mut Criterion) {
     // Compose with full context (all conditions met)
     group.bench_function("default_all_conditions", |b| {
         let dir = tempfile::TempDir::new().unwrap();
-        let composer = create_default_composer(dir.path());
+        let mut composer = create_default_composer(dir.path());
         let mut ctx = HashMap::new();
         ctx.insert("has_subagents".to_string(), serde_json::json!(true));
         ctx.insert("in_git_repo".to_string(), serde_json::json!(true));
@@ -142,7 +142,7 @@ fn bench_prompt_compose(c: &mut Criterion) {
     // Two-part composition (cache-split)
     group.bench_function("two_part_split", |b| {
         let dir = tempfile::TempDir::new().unwrap();
-        let composer = create_default_composer(dir.path());
+        let mut composer = create_default_composer(dir.path());
         let mut ctx = HashMap::new();
         ctx.insert("in_git_repo".to_string(), serde_json::json!(true));
         ctx.insert("session_id".to_string(), serde_json::json!("test-123"));
@@ -154,7 +154,7 @@ fn bench_prompt_compose(c: &mut Criterion) {
     // Compose with variable substitution
     group.bench_function("compose_with_vars", |b| {
         let dir = tempfile::TempDir::new().unwrap();
-        let composer = create_default_composer(dir.path());
+        let mut composer = create_default_composer(dir.path());
         let ctx = HashMap::new();
         let mut vars = HashMap::new();
         vars.insert("session_id".to_string(), "abc-123".to_string());

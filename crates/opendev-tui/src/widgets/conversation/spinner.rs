@@ -16,6 +16,30 @@ use crate::app::DisplayRole;
 
 use super::ConversationWidget;
 
+/// Format a token count for display: 500 → "500", 1234 → "1.2k", 1500000 → "1.5M".
+fn format_token_count(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}k", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
+}
+
+/// Return spinner color based on time since last token event.
+///
+/// - `None` or `< 3s` → blue (normal)
+/// - `3–10s` → orange/warning (stalling)
+/// - `> 10s` → red/error (likely stuck)
+fn stall_color(stalled_secs: Option<u64>) -> ratatui::style::Color {
+    match stalled_secs {
+        Some(s) if s >= 10 => style_tokens::ERROR,
+        Some(s) if s >= 3 => style_tokens::WARNING,
+        _ => style_tokens::BLUE_BRIGHT,
+    }
+}
+
 impl<'a> ConversationWidget<'a> {
     /// Get or create a `PathShortener` for this widget.
     fn get_shortener(&self) -> std::borrow::Cow<'_, crate::formatters::PathShortener> {
@@ -45,7 +69,7 @@ impl<'a> ConversationWidget<'a> {
                 Span::styled(
                     format!("{} ", COMPACTION_CHAR),
                     Style::default()
-                        .fg(style_tokens::BLUE_BRIGHT)
+                        .fg(stall_color(self.stalled_secs))
                         .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
@@ -56,7 +80,9 @@ impl<'a> ConversationWidget<'a> {
                 ),
             ]));
         } else if self.backgrounding_pending
-            && !active_unfinished.iter().any(|t| t.name == "spawn_subagent")
+            && !active_unfinished
+                .iter()
+                .any(|t| matches!(t.name.as_str(), "Agent" | "spawn_subagent"))
         {
             // Backgrounding feedback for non-subagent tools (e.g. bash, run_command).
             // When subagents are active, we fall through to the normal rendering loop
@@ -64,7 +90,7 @@ impl<'a> ConversationWidget<'a> {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("{} ", self.spinner_char),
-                    Style::default().fg(style_tokens::BLUE_BRIGHT),
+                    Style::default().fg(stall_color(self.stalled_secs)),
                 ),
                 Span::styled(
                     "Sending to background\u{2026}",
@@ -78,7 +104,7 @@ impl<'a> ConversationWidget<'a> {
                 let frame_idx = tool.tick_count % SPINNER_FRAMES.len();
                 let spinner = SPINNER_FRAMES[frame_idx];
 
-                if tool.name == "spawn_subagent" {
+                if matches!(tool.name.as_str(), "Agent" | "spawn_subagent") {
                     let subagent = self
                         .active_subagents
                         .iter()
@@ -107,15 +133,16 @@ impl<'a> ConversationWidget<'a> {
 
                     let task_desc = shortener.shorten_text(&task_desc);
                     let task_short = if task_desc.len() > 60 {
-                        format!("{}...", &task_desc[..60])
+                        let end = task_desc.floor_char_boundary(60);
+                        format!("{}...", &task_desc[..end])
                     } else {
                         task_desc
                     };
 
-                    lines.push(Line::from(vec![
+                    let spans = vec![
                         Span::styled(
                             format!("{spinner} "),
-                            Style::default().fg(style_tokens::BLUE_BRIGHT),
+                            Style::default().fg(stall_color(self.stalled_secs)),
                         ),
                         Span::styled(
                             agent_name,
@@ -127,7 +154,9 @@ impl<'a> ConversationWidget<'a> {
                             format!(" {task_short}"),
                             Style::default().fg(style_tokens::SUBTLE),
                         ),
-                    ]));
+                    ];
+
+                    lines.push(Line::from(spans));
 
                     if let Some(sa) = subagent {
                         self.build_subagent_spinner_lines(sa, &shortener, &mut lines);
@@ -151,33 +180,80 @@ impl<'a> ConversationWidget<'a> {
         } else if let Some(progress) = self.task_progress {
             // Skip TaskProgress spinner during active reasoning streaming —
             // the reasoning message renders its own "⟡ Thinking..." line
-            let has_active_thinking = self
-                .messages
-                .iter()
-                .rev()
-                .any(|m| m.role == DisplayRole::Reasoning && m.thinking_duration_secs.is_none());
+            let has_active_thinking =
+                self.messages.iter().rev().any(|m| {
+                    m.role == DisplayRole::Reasoning && m.thinking_duration_secs.is_none()
+                });
             if !has_active_thinking {
                 let elapsed = progress.started_at.elapsed().as_secs();
-                lines.push(Line::from(vec![
+                let mut progress_spans = vec![
                     Span::styled(
                         format!("{} ", self.spinner_char),
-                        Style::default().fg(style_tokens::BLUE_BRIGHT),
+                        Style::default().fg(stall_color(self.stalled_secs)),
                     ),
                     Span::styled(
                         if progress.description == "Thinking" {
-                            let suffix = if self.verb_fully_revealed { "... " } else { " " };
-                            format!("{}{}", self.thinking_verb, suffix)
+                            if let Some(ctx) = self.last_tool_context {
+                                format!("{ctx}... ")
+                            } else {
+                                format!("{}... ", self.thinking_verb)
+                            }
                         } else {
                             format!("{}... ", progress.description)
                         },
-                        Style::default().fg(style_tokens::SUBTLE),
+                        if progress.description == "Thinking" {
+                            // Fade from DIM_GREY to SUBTLE based on intensity
+                            let (dr, dg, db) = (107u8, 114u8, 128u8); // DIM_GREY
+                            let (sr, sg, sb) = (154u8, 160u8, 172u8); // SUBTLE
+                            let t = self.verb_fade_intensity;
+                            let r = dr as f32 + (sr as f32 - dr as f32) * t;
+                            let g = dg as f32 + (sg as f32 - dg as f32) * t;
+                            let b = db as f32 + (sb as f32 - db as f32) * t;
+                            Style::default()
+                                .fg(ratatui::style::Color::Rgb(r as u8, g as u8, b as u8))
+                        } else {
+                            Style::default().fg(style_tokens::SUBTLE)
+                        },
                     ),
                     Span::styled(
-                        format!("{}s \u{00b7} esc to interrupt", elapsed),
+                        format!("{}s", elapsed),
                         Style::default().fg(style_tokens::SUBTLE),
                     ),
-                ]));
+                ];
+                // Show token count after 30s of turn execution
+                if self.turn_elapsed_secs >= 30 && self.turn_token_count > 0 {
+                    progress_spans.push(Span::styled(
+                        format!(
+                            " \u{00b7} {} tokens",
+                            format_token_count(self.turn_token_count)
+                        ),
+                        Style::default().fg(style_tokens::SUBTLE),
+                    ));
+                }
+                progress_spans.push(Span::styled(
+                    " (Esc to interrupt)",
+                    Style::default().fg(style_tokens::SUBTLE),
+                ));
+                lines.push(Line::from(progress_spans));
             }
+        } else if self
+            .active_subagents
+            .iter()
+            .any(|s| !s.finished && !s.backgrounded)
+        {
+            // Leader is idle while subagents are still working
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{} ", COMPACTION_CHAR),
+                    Style::default().fg(style_tokens::ACCENT),
+                ),
+                Span::styled(
+                    "Idle \u{00b7} teammates running",
+                    Style::default()
+                        .fg(style_tokens::SUBTLE)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]));
         }
 
         lines
@@ -294,7 +370,7 @@ impl<'a> ConversationWidget<'a> {
         let hidden = total_completed.saturating_sub(1);
         if hidden > 0 {
             lines.push(Line::from(Span::styled(
-                format!("      +{hidden} more tool uses · ctrl+b to run in background"),
+                format!("      +{hidden} more tool uses (Ctrl+B to run in background)"),
                 Style::default()
                     .fg(style_tokens::GREY)
                     .add_modifier(Modifier::ITALIC),
@@ -304,83 +380,5 @@ impl<'a> ConversationWidget<'a> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::ConversationWidget;
-    use crate::app::{DisplayMessage, DisplayRole, ToolExecution, ToolState};
-    use crate::widgets::nested_tool::SubagentDisplayState;
-
-    #[test]
-    fn test_25_subagents_all_rendered_individually() {
-        let msgs: Vec<DisplayMessage> = vec![DisplayMessage::new(
-            DisplayRole::Assistant,
-            "Spawning 25 agents.",
-        )];
-
-        let tools: Vec<ToolExecution> = (0..25)
-            .map(|i| {
-                let mut args = std::collections::HashMap::new();
-                args.insert(
-                    "task".into(),
-                    serde_json::Value::String(format!("Task_{i}")),
-                );
-                args.insert(
-                    "description".into(),
-                    serde_json::Value::String(format!("Task_{i}")),
-                );
-                args.insert(
-                    "agent_type".into(),
-                    serde_json::Value::String(format!("agent_{i}")),
-                );
-                ToolExecution {
-                    id: format!("t{i}"),
-                    name: "spawn_subagent".into(),
-                    output_lines: vec![],
-                    state: ToolState::Running,
-                    elapsed_secs: 1,
-                    started_at: std::time::Instant::now(),
-                    tick_count: 0,
-                    parent_id: None,
-                    depth: 0,
-                    args,
-                }
-            })
-            .collect();
-
-        let subagents: Vec<SubagentDisplayState> = (0..25)
-            .map(|i| {
-                let mut sa = SubagentDisplayState::new(
-                    format!("sa{i}"),
-                    format!("agent_{i}"),
-                    format!("Task_{i}"),
-                );
-                sa.parent_tool_id = Some(format!("t{i}"));
-                sa
-            })
-            .collect();
-
-        let widget = ConversationWidget::new(&msgs, 0)
-            .active_tools(&tools)
-            .active_subagents(&subagents);
-
-        let lines = widget.build_spinner_lines();
-        let all_text: String = lines
-            .iter()
-            .flat_map(|l| l.spans.iter())
-            .map(|s| s.content.to_string())
-            .collect();
-
-        // No grouping header
-        assert!(
-            !all_text.contains("subagents"),
-            "should not contain grouped 'subagents' text, got: {all_text}"
-        );
-
-        // All 25 agents rendered individually
-        for i in 0..25 {
-            assert!(
-                all_text.contains(&format!("Task_{i}")),
-                "agent Task_{i} missing from spinner output"
-            );
-        }
-    }
-}
+#[path = "spinner_tests.rs"]
+mod tests;

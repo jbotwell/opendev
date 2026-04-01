@@ -47,9 +47,22 @@ impl LlmCaller {
         }
     }
 
-    /// Strip internal `_`-prefixed keys and filter out `Internal`-class messages
-    /// before API calls.
+    /// Clean and normalize messages before sending to the LLM API.
+    ///
+    /// Four phases applied in order:
+    /// 1. Filter out `Internal`-class messages and strip `_`-prefixed metadata keys
+    /// 2. Remove whitespace-only messages (preserving tool results and tool-call-only assistants)
+    /// 3. Merge consecutive same-role messages (user or assistant)
+    /// 4. Remove orphaned tool results (no matching `tool_call_id` in any assistant message)
     pub fn clean_messages(messages: &[Value]) -> Vec<Value> {
+        let filtered = Self::filter_internal_and_strip(messages);
+        let filtered = Self::filter_whitespace_only(filtered);
+        let merged = Self::merge_consecutive(filtered);
+        Self::remove_orphaned_tool_results(merged)
+    }
+
+    /// Phase 1: Filter out Internal-class messages and strip `_`-prefixed keys.
+    fn filter_internal_and_strip(messages: &[Value]) -> Vec<Value> {
         messages
             .iter()
             .filter(|msg| msg.get("_msg_class").and_then(|v| v.as_str()) != Some("internal"))
@@ -68,6 +81,117 @@ impl LlmCaller {
                 } else {
                     msg.clone()
                 }
+            })
+            .collect()
+    }
+
+    /// Phase 2: Remove messages with empty or whitespace-only content.
+    ///
+    /// Preserves:
+    /// - `role: "tool"` messages (structurally required even if empty)
+    /// - `role: "assistant"` messages with non-empty `tool_calls` (tool-only responses)
+    fn filter_whitespace_only(messages: Vec<Value>) -> Vec<Value> {
+        messages
+            .into_iter()
+            .filter(|msg| {
+                let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                if role == "tool" {
+                    return true;
+                }
+                if role == "assistant"
+                    && let Some(tc) = msg.get("tool_calls").and_then(|v| v.as_array())
+                    && !tc.is_empty()
+                {
+                    return true;
+                }
+                match msg.get("content").and_then(|v| v.as_str()) {
+                    Some(s) => !s.trim().is_empty(),
+                    None => {
+                        // Keep non-object values (backwards compat) and messages without content
+                        !msg.is_object()
+                    }
+                }
+            })
+            .collect()
+    }
+
+    /// Phase 3: Merge consecutive messages with the same role.
+    ///
+    /// Only merges `user` and `assistant` roles. Tool messages are never merged
+    /// (each has a unique `tool_call_id`). System messages pass through individually.
+    fn merge_consecutive(messages: Vec<Value>) -> Vec<Value> {
+        let mut result: Vec<Value> = Vec::with_capacity(messages.len());
+
+        for msg in messages {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+
+            if role != "user" && role != "assistant" {
+                result.push(msg);
+                continue;
+            }
+
+            let should_merge = result
+                .last()
+                .and_then(|prev| prev.get("role").and_then(|v| v.as_str()))
+                .is_some_and(|prev_role| prev_role == role);
+
+            if should_merge {
+                let prev = result.last_mut().unwrap();
+                Self::merge_into(prev, &msg);
+            } else {
+                result.push(msg);
+            }
+        }
+
+        result
+    }
+
+    /// Merge `source` message content and tool_calls into `target`.
+    fn merge_into(target: &mut Value, source: &Value) {
+        let target_content = target.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let source_content = source.get("content").and_then(|v| v.as_str()).unwrap_or("");
+
+        let merged_content = match (target_content.is_empty(), source_content.is_empty()) {
+            (_, true) => target_content.to_string(),
+            (true, _) => source_content.to_string(),
+            _ => format!("{target_content}\n\n{source_content}"),
+        };
+        target["content"] = Value::String(merged_content);
+
+        // Merge tool_calls arrays (relevant for assistant messages)
+        if let Some(source_tc) = source.get("tool_calls").and_then(|v| v.as_array())
+            && !source_tc.is_empty()
+        {
+            let mut combined = target
+                .get("tool_calls")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            combined.extend(source_tc.iter().cloned());
+            target["tool_calls"] = Value::Array(combined);
+        }
+    }
+
+    /// Phase 4: Remove tool result messages whose `tool_call_id` has no matching
+    /// entry in any assistant message's `tool_calls` array.
+    fn remove_orphaned_tool_results(messages: Vec<Value>) -> Vec<Value> {
+        let valid_ids: std::collections::HashSet<String> = messages
+            .iter()
+            .filter(|m| m.get("role").and_then(|v| v.as_str()) == Some("assistant"))
+            .filter_map(|m| m.get("tool_calls").and_then(|v| v.as_array()))
+            .flatten()
+            .filter_map(|tc| tc.get("id").and_then(|v| v.as_str()).map(String::from))
+            .collect();
+
+        messages
+            .into_iter()
+            .filter(|msg| {
+                if msg.get("role").and_then(|v| v.as_str()) != Some("tool") {
+                    return true;
+                }
+                msg.get("tool_call_id")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|id| valid_ids.contains(id as &str))
             })
             .collect()
     }
@@ -142,173 +266,4 @@ impl LlmCaller {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_caller() -> LlmCaller {
-        LlmCaller::new(LlmCallConfig {
-            model: "gpt-4o".to_string(),
-            temperature: Some(0.7),
-            max_tokens: Some(4096),
-            reasoning_effort: None,
-        })
-    }
-
-    #[test]
-    fn test_clean_messages_strips_underscore_keys() {
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "hello", "_internal": true}),
-            serde_json::json!({"role": "assistant", "content": "world"}),
-        ];
-        let cleaned = LlmCaller::clean_messages(&messages);
-        assert!(cleaned[0].get("_internal").is_none());
-        assert_eq!(cleaned[0]["role"], "user");
-        assert_eq!(cleaned[1]["role"], "assistant");
-    }
-
-    #[test]
-    fn test_clean_messages_preserves_non_object() {
-        let messages = vec![serde_json::json!("string_value")];
-        let cleaned = LlmCaller::clean_messages(&messages);
-        assert_eq!(cleaned[0], "string_value");
-    }
-
-    #[test]
-    fn test_clean_messages_strips_internal() {
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "hello"}),
-            serde_json::json!({"role": "user", "content": "[SYSTEM] debug", "_msg_class": "internal"}),
-            serde_json::json!({"role": "user", "content": "[SYSTEM] error", "_msg_class": "directive"}),
-            serde_json::json!({"role": "user", "content": "[SYSTEM] nudge", "_msg_class": "nudge"}),
-        ];
-        let cleaned = LlmCaller::clean_messages(&messages);
-        assert_eq!(cleaned.len(), 3);
-        assert_eq!(cleaned[0]["content"], "hello");
-        assert_eq!(cleaned[1]["content"], "[SYSTEM] error");
-        assert_eq!(cleaned[2]["content"], "[SYSTEM] nudge");
-        assert!(cleaned[1].get("_msg_class").is_none());
-        assert!(cleaned[2].get("_msg_class").is_none());
-    }
-
-    #[test]
-    fn test_build_action_payload() {
-        let caller = make_caller();
-        let messages = vec![serde_json::json!({"role": "user", "content": "do something"})];
-        let tools = vec![serde_json::json!({
-            "type": "function",
-            "function": {"name": "read_file", "parameters": {}}
-        })];
-        let payload = caller.build_action_payload(&messages, &tools);
-        assert_eq!(payload["model"], "gpt-4o");
-        assert_eq!(payload["tool_choice"], "auto");
-        assert!(payload["tools"].as_array().unwrap().len() == 1);
-        assert_eq!(payload["temperature"], 0.7);
-    }
-
-    #[test]
-    fn test_parse_action_response_success() {
-        let caller = make_caller();
-        let body = serde_json::json!({
-            "choices": [{"message": {"role": "assistant", "content": "Hello world", "tool_calls": null}}],
-            "usage": {"total_tokens": 100}
-        });
-        let resp = caller.parse_action_response(&body);
-        assert!(resp.success);
-        assert_eq!(resp.content.as_deref(), Some("Hello world"));
-        assert!(resp.usage.is_some());
-    }
-
-    #[test]
-    fn test_parse_action_response_with_tool_calls() {
-        let caller = make_caller();
-        let body = serde_json::json!({
-            "choices": [{"message": {"role": "assistant", "content": null,
-                "tool_calls": [{"id": "tc-1", "function": {"name": "read_file", "arguments": "{\"path\": \"test.rs\"}"}}]
-            }}]
-        });
-        let resp = caller.parse_action_response(&body);
-        assert!(resp.success);
-        assert!(resp.content.is_none());
-        assert!(resp.tool_calls.is_some());
-        assert_eq!(resp.tool_calls.as_ref().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn test_parse_action_response_no_choices() {
-        let caller = make_caller();
-        let body = serde_json::json!({"choices": []});
-        let resp = caller.parse_action_response(&body);
-        assert!(!resp.success);
-        assert!(resp.error.is_some());
-    }
-
-    #[test]
-    fn test_parse_response_cleans_provider_tokens() {
-        let caller = make_caller();
-        let body = serde_json::json!({"choices": [{"message": {"role": "assistant", "content": "Hello<|im_end|> world"}}]});
-        let resp = caller.parse_action_response(&body);
-        assert!(resp.success);
-        assert_eq!(resp.content.as_deref(), Some("Hello world"));
-    }
-
-    #[test]
-    fn test_action_payload_reasoning_model() {
-        let caller = LlmCaller::new(LlmCallConfig {
-            model: "o3-mini".to_string(),
-            temperature: Some(0.7),
-            max_tokens: Some(4096),
-            reasoning_effort: None,
-        });
-        let messages = vec![serde_json::json!({"role": "user", "content": "test"})];
-        let tools = vec![serde_json::json!({"type": "function", "function": {"name": "test"}})];
-        let payload = caller.build_action_payload(&messages, &tools);
-        assert_eq!(payload["max_completion_tokens"], 4096);
-        assert!(payload.get("max_tokens").is_none());
-        assert!(payload.get("temperature").is_none());
-    }
-
-    #[test]
-    fn test_parse_response_with_reasoning_content() {
-        let caller = make_caller();
-        let body = serde_json::json!({
-            "choices": [{"message": {"role": "assistant", "content": "The answer is 42.", "reasoning_content": "Let me think step by step..."}}]
-        });
-        let resp = caller.parse_action_response(&body);
-        assert!(resp.success);
-        assert_eq!(
-            resp.reasoning_content.as_deref(),
-            Some("Let me think step by step...")
-        );
-    }
-
-    #[test]
-    fn test_parse_action_response_extracts_finish_reason() {
-        let caller = make_caller();
-        let body = serde_json::json!({
-            "choices": [{"message": {"role": "assistant", "content": "partial..."}, "finish_reason": "length"}]
-        });
-        let resp = caller.parse_action_response(&body);
-        assert!(resp.success);
-        assert_eq!(resp.finish_reason.as_deref(), Some("length"));
-    }
-
-    #[test]
-    fn test_parse_action_response_finish_reason_stop() {
-        let caller = make_caller();
-        let body = serde_json::json!({
-            "choices": [{"message": {"role": "assistant", "content": "done"}, "finish_reason": "stop"}]
-        });
-        let resp = caller.parse_action_response(&body);
-        assert_eq!(resp.finish_reason.as_deref(), Some("stop"));
-    }
-
-    #[test]
-    fn test_parse_action_response_finish_reason_null() {
-        let caller = make_caller();
-        let body = serde_json::json!({
-            "choices": [{"message": {"role": "assistant", "content": "done"}, "finish_reason": null}]
-        });
-        let resp = caller.parse_action_response(&body);
-        assert!(resp.finish_reason.is_none());
-    }
-}
+mod tests;

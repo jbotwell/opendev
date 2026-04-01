@@ -6,8 +6,11 @@
 
 mod compaction;
 mod config;
+mod emitter;
 mod execution;
 mod helpers;
+mod loop_state;
+mod phases;
 mod types;
 
 pub use config::ReactLoopConfig;

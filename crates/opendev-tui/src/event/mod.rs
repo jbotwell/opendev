@@ -226,6 +226,22 @@ pub enum AppEvent {
         interrupt_token: InterruptToken,
     },
 
+    // -- Team events --
+    /// A team was created.
+    TeamCreated {
+        team_id: String,
+        leader_name: String,
+        member_names: Vec<String>,
+    },
+    /// An inter-agent message was sent.
+    TeamMessageSent {
+        from: String,
+        to: String,
+        content_preview: String,
+    },
+    /// A team was deleted.
+    TeamDeleted { team_id: String },
+
     // -- Undo/Redo events --
     /// Snapshot was taken (stores tree hash for undo stack).
     SnapshotTaken { hash: String },
@@ -241,36 +257,12 @@ pub enum AppEvent {
     /// Session title was auto-detected by the topic detector.
     SessionTitleUpdated(String),
 
+    /// Session cost updated (cumulative USD from cost tracker).
+    CostUpdate(f64),
+
     /// Quit the application.
     Quit,
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    #[test]
-    fn test_event_handler_creation() {
-        let handler = EventHandler::new(Duration::from_millis(250));
-        let _sender = handler.sender();
-    }
-
-    #[tokio::test]
-    async fn test_sender_delivers_events() {
-        let mut handler = EventHandler::new(Duration::from_millis(250));
-        let tx = handler.sender();
-        tx.send(AppEvent::Tick).unwrap();
-        let event = handler.next().await.unwrap();
-        assert!(matches!(event, AppEvent::Tick));
-    }
-
-    #[tokio::test]
-    async fn test_quit_event() {
-        let mut handler = EventHandler::new(Duration::from_millis(250));
-        let tx = handler.sender();
-        tx.send(AppEvent::Quit).unwrap();
-        let event = handler.next().await.unwrap();
-        assert!(matches!(event, AppEvent::Quit));
-    }
-}
+mod tests;

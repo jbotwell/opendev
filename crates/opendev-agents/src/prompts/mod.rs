@@ -10,8 +10,8 @@ pub mod loader;
 pub mod reminders;
 
 pub use composer::{
-    ConditionFn, PromptComposer, PromptContext, PromptSection, create_composer,
-    create_default_composer, strip_frontmatter, substitute_variables,
+    CachePolicy, ConditionFn, ContentProviderFn, PromptComposer, PromptContext, PromptSection,
+    create_composer, create_default_composer, strip_frontmatter, substitute_variables,
 };
 pub use embedded::{TEMPLATE_COUNT, TEMPLATES, get_embedded};
 pub use loader::{PromptLoadError, PromptLoader};

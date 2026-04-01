@@ -10,7 +10,9 @@
 mod events;
 mod list;
 mod spawn;
+pub mod team_tools;
 
 pub use events::{ChannelProgressCallback, SubagentEvent};
 pub use list::AgentsTool;
 pub use spawn::SpawnSubagentTool;
+pub use team_tools::{CreateTeamTool, DeleteTeamTool, SendMessageTool};

@@ -34,11 +34,12 @@ impl App {
             return false;
         }
         // Only allow backgrounding when a bash tool or subagent is actively running
-        let has_backgroundable = self
-            .state
-            .active_tools
-            .iter()
-            .any(|t| t.name == "bash" || t.name == "run_command" || t.name == "spawn_subagent");
+        let has_backgroundable = self.state.active_tools.iter().any(|t| {
+            matches!(
+                t.name.as_str(),
+                "Bash" | "bash" | "run_command" | "Agent" | "spawn_subagent"
+            )
+        });
         if !has_backgroundable {
             use crate::widgets::toast::{Toast, ToastLevel};
             self.state.toasts.push(Toast::new(
@@ -98,58 +99,52 @@ impl App {
         }
     }
 
-    /// Handle a key press event.
-    pub(super) fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
-        // Only process key-press and repeat events (Kitty protocol also sends Release)
-        if !matches!(
-            key.kind,
-            crossterm::event::KeyEventKind::Press | crossterm::event::KeyEventKind::Repeat
-        ) {
-            return;
-        }
+    /// Restart a failed/killed background task by re-submitting its query.
+    fn try_restart_focused_task(&mut self) {
+        let focus = self.state.task_watcher_focus;
+        let sa_count = self.state.active_subagents.len();
 
-        // Ctrl+B — background agent: handle before any modal can swallow it
-        if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('b') {
-            // If task watcher is open, Ctrl+B closes it
-            if self.state.task_watcher_open {
-                self.state.task_watcher_open = false;
-                self.state.force_clear = true;
-                self.state.dirty = true;
-                return;
-            }
-            if self.try_background_agent() {
-                // Dismiss any active modal with a permissive response to unblock the react loop
-                self.dismiss_modals_for_background();
-            }
-            self.state.dirty = true;
-            return;
-        }
-
-        // Ctrl+P — toggle task watcher panel: handle before any modal can swallow it
-        if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('p') {
-            if self.state.task_watcher_open {
-                self.state.task_watcher_open = false;
-                self.state.force_clear = true;
-            } else {
-                let has_bg_subagents = self.state.active_subagents.iter().any(|s| s.backgrounded);
-                let has_bg_agents = !self.state.bg_agent_manager.all_tasks().is_empty();
-                if has_bg_subagents || has_bg_agents {
-                    self.state.task_watcher_open = true;
-                    self.state.task_watcher_focus = 0;
-                    self.state.task_watcher_cell_scrolls.clear();
-                    self.state.task_watcher_page = 0;
-                } else {
-                    use crate::widgets::toast::{Toast, ToastLevel};
+        if focus >= sa_count {
+            // Background agent task
+            let filtered: Vec<_> = self
+                .state
+                .bg_agent_manager
+                .all_tasks()
+                .into_iter()
+                .filter(|t| !t.hidden)
+                .collect();
+            let bg_idx = focus - sa_count;
+            if bg_idx < filtered.len() {
+                let task = &filtered[bg_idx];
+                let is_terminal = matches!(
+                    task.state,
+                    crate::managers::background_agents::BackgroundAgentState::Failed
+                        | crate::managers::background_agents::BackgroundAgentState::Killed
+                );
+                if is_terminal {
+                    // Re-queue the query as a user message for the agent to handle
+                    let restart_msg = format!(
+                        "The background agent that was working on this task failed. \
+                         Please retry: {}",
+                        task.query
+                    );
                     self.state
-                        .toasts
-                        .push(Toast::new("No background tasks", ToastLevel::Info));
+                        .pending_queue
+                        .push_back(super::PendingItem::UserMessage(restart_msg));
+                    if !self.state.agent_active {
+                        self.drain_next_pending();
+                    }
+                    self.state.toasts.push(crate::widgets::Toast::new(
+                        "Restart queued".to_string(),
+                        crate::widgets::ToastLevel::Info,
+                    ));
                 }
             }
-            self.state.dirty = true;
-            return;
         }
+    }
 
-        // Delegate to model picker controller when active
+    /// Handle model picker keys. Returns true if the key was consumed.
+    fn handle_key_model_picker(&mut self, key: crossterm::event::KeyEvent) -> bool {
         if let Some(ref mut picker) = self.model_picker_controller
             && picker.active()
         {
@@ -182,341 +177,510 @@ impl App {
                 _ => {}
             }
             self.state.dirty = true;
-            return;
+            return true;
+        }
+        false
+    }
+
+    /// Handle task watcher overlay keys. Returns true if the key was consumed.
+    fn handle_key_task_watcher(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        if !self.state.task_watcher_open {
+            return false;
         }
 
-        // Delegate to task watcher overlay when open — consume all keys
-        if self.state.task_watcher_open {
-            // Compute covered bg task IDs (parent tasks with backgrounded subagents)
-            let covered_bg_task_ids: std::collections::HashSet<&String> = self
-                .state
-                .active_subagents
-                .iter()
-                .filter(|s| s.backgrounded && !s.finished)
-                .filter_map(|s| self.state.bg_subagent_map.get(&s.subagent_id))
-                .collect();
-            let filtered_bg_count = self
-                .state
-                .bg_agent_manager
-                .all_tasks()
-                .iter()
-                .filter(|t| !t.hidden && !covered_bg_task_ids.contains(&t.task_id))
-                .count();
-            let total_tasks = self.state.active_subagents.len() + filtered_bg_count;
-
-            match (key.modifiers, key.code) {
-                // Close
-                (_, KeyCode::Char('q'))
-                | (_, KeyCode::Esc)
-                | (KeyModifiers::ALT, KeyCode::Char('b')) => {
-                    self.state.task_watcher_open = false;
-                    self.state.force_clear = true;
-                }
-
-                // Focus navigation: left
-                (_, KeyCode::Char('h')) | (_, KeyCode::Left) => {
-                    if self.state.task_watcher_focus > 0 {
-                        self.state.task_watcher_focus -= 1;
-                    }
-                }
-                // Focus navigation: right
-                (_, KeyCode::Char('l')) | (_, KeyCode::Right) => {
-                    if total_tasks > 0 {
-                        self.state.task_watcher_focus =
-                            (self.state.task_watcher_focus + 1).min(total_tasks - 1);
-                    }
-                }
-                // Focus navigation: up (move by cols)
-                (_, KeyCode::Char('k')) | (_, KeyCode::Up) => {
-                    let cols = crate::widgets::background_tasks::compute_grid_cols(
-                        total_tasks,
-                        self.state.terminal_width,
-                    );
-                    if self.state.task_watcher_focus >= cols {
-                        self.state.task_watcher_focus -= cols;
-                    }
-                }
-                // Focus navigation: down (move by cols)
-                (_, KeyCode::Char('j')) | (_, KeyCode::Down) => {
-                    let cols = crate::widgets::background_tasks::compute_grid_cols(
-                        total_tasks,
-                        self.state.terminal_width,
-                    );
-                    let new_focus = self.state.task_watcher_focus + cols;
-                    if total_tasks > 0 {
-                        self.state.task_watcher_focus = new_focus.min(total_tasks - 1);
-                    }
-                }
-
-                // Scroll within focused cell: up
-                (KeyModifiers::SHIFT, KeyCode::Char('K')) => {
-                    let idx = self.state.task_watcher_focus;
-                    while self.state.task_watcher_cell_scrolls.len() <= idx {
-                        self.state.task_watcher_cell_scrolls.push(0);
-                    }
-                    self.state.task_watcher_cell_scrolls[idx] += 1;
-                }
-                // Scroll within focused cell: down
-                (KeyModifiers::SHIFT, KeyCode::Char('J')) => {
-                    let idx = self.state.task_watcher_focus;
-                    if let Some(scroll) = self.state.task_watcher_cell_scrolls.get_mut(idx) {
-                        *scroll = scroll.saturating_sub(1);
-                    }
-                }
-
-                // Kill focused background task
-                (_, KeyCode::Char('x')) => {
-                    let sa_count = self.state.active_subagents.len();
-                    let focus = self.state.task_watcher_focus;
-                    if focus < sa_count {
-                        // Focused on a subagent cell — cancel just this subagent
-                        let subagent = &self.state.active_subagents[focus];
-                        if subagent.backgrounded
-                            && !subagent.finished
-                            && let Some(token) =
-                                self.state.subagent_cancel_tokens.get(&subagent.subagent_id)
-                        {
-                            token.cancel();
-                            // If this was the last active subagent for the parent bg task, kill the parent too
-                            if let Some(parent_bg_id) = self
-                                .state
-                                .bg_subagent_map
-                                .get(&subagent.subagent_id)
-                                .cloned()
-                            {
-                                let other_active = self.state.active_subagents.iter().any(|s| {
-                                    s.backgrounded
-                                        && !s.finished
-                                        && s.subagent_id != subagent.subagent_id
-                                        && self.state.bg_subagent_map.get(&s.subagent_id)
-                                            == Some(&parent_bg_id)
-                                });
-                                if !other_active {
-                                    self.state.bg_agent_manager.kill_task(&parent_bg_id);
-                                    self.state.bg_agent_manager.hide_task(&parent_bg_id);
-                                }
-                            }
-                        }
-                    } else {
-                        // Focused on a bg_agent_manager cell — use filtered list to match display order
-                        let bg_idx = focus - sa_count;
-                        let filtered: Vec<_> = self
-                            .state
-                            .bg_agent_manager
-                            .all_tasks()
-                            .into_iter()
-                            .filter(|t| !t.hidden && !covered_bg_task_ids.contains(&t.task_id))
-                            .collect();
-                        if bg_idx < filtered.len() {
-                            let task_id = filtered[bg_idx].task_id.clone();
-                            self.state.bg_agent_manager.kill_task(&task_id);
-                        }
-                    }
-                }
-
-                // Page navigation: left
-                (KeyModifiers::SHIFT, KeyCode::Char('H')) => {
-                    self.state.task_watcher_page = self.state.task_watcher_page.saturating_sub(1);
-                }
-                // Page navigation: right
-                (KeyModifiers::SHIFT, KeyCode::Char('L')) => {
-                    self.state.task_watcher_page += 1; // clamped in render
-                }
-
-                _ => {}
-            }
-            self.state.dirty = true;
-            return;
-        }
-
-        // Delegate to ask-user controller when active
-        if self.ask_user_controller.active() {
-            match key.code {
-                KeyCode::Up if self.ask_user_controller.has_options() => {
-                    self.ask_user_controller.prev();
-                }
-                KeyCode::Down if self.ask_user_controller.has_options() => {
-                    self.ask_user_controller.next();
-                }
-                KeyCode::Char(c) if !self.ask_user_controller.has_options() => {
-                    self.ask_user_controller.push_char(c);
-                }
-                KeyCode::Backspace if !self.ask_user_controller.has_options() => {
-                    self.ask_user_controller.pop_char();
-                }
-                KeyCode::Enter => {
-                    if let Some(answer) = self.ask_user_controller.confirm()
-                        && let Some(tx) = self.ask_user_response_tx.take()
-                    {
-                        let _ = tx.send(answer);
-                    }
-                }
-                KeyCode::Esc => {
-                    let fallback = self.ask_user_controller.default_value().unwrap_or_default();
-                    self.ask_user_controller.cancel();
-                    if let Some(tx) = self.ask_user_response_tx.take() {
-                        let _ = tx.send(fallback);
-                    }
-                    let _ = self.event_tx.send(AppEvent::Interrupt);
-                }
-                _ => {}
-            }
-            self.state.dirty = true;
-            return;
-        }
-
-        // Delegate to plan approval controller when active
-        if self.plan_approval_controller.active() {
-            match key.code {
-                KeyCode::Up => self.plan_approval_controller.prev(),
-                KeyCode::Down => self.plan_approval_controller.next(),
-                KeyCode::Enter => {
-                    if let Some(decision) = self.plan_approval_controller.confirm() {
-                        // Switch mode based on decision
-                        match decision.action.as_str() {
-                            "approve_auto" | "approve" => {
-                                self.state.mode = OperationMode::Normal;
-                            }
-                            _ => {} // "modify" stays in Plan mode
-                        }
-                        // Forward decision back to the blocking tool
-                        if let Some(tx) = self.plan_approval_response_tx.take() {
-                            let _ = tx.send(decision);
-                        }
-                    }
-                }
-                KeyCode::Esc => {
-                    self.plan_approval_controller.cancel();
-                    // cancel() internally confirms with "modify" via the controller's
-                    // oneshot — but we also need to forward through our stored sender.
-                    // The controller already sent via its own oneshot in cancel(),
-                    // so just clean up our stored tx (it's already consumed by cancel).
-                    self.plan_approval_response_tx.take();
-                    let _ = self.event_tx.send(AppEvent::Interrupt);
-                }
-                _ => {}
-            }
-            self.state.dirty = true;
-            return;
-        }
-
-        // Delegate to approval controller when active
-        if self.approval_controller.active() {
-            match key.code {
-                KeyCode::Up => self.approval_controller.move_selection(-1),
-                KeyCode::Down => self.approval_controller.move_selection(1),
-                KeyCode::Enter => {
-                    // Capture selected option before confirm() clears state
-                    let idx = self.approval_controller.selected_index();
-                    let option = self.approval_controller.options()[idx].clone();
-                    let command = self.approval_controller.command().to_string();
-                    self.approval_controller.confirm();
-                    // Forward decision back to the react loop
-                    if let Some(tx) = self.approval_response_tx.take() {
-                        let choice = if option.choice == "2" {
-                            "yes_remember".to_string()
-                        } else if option.approved {
-                            "yes".to_string()
-                        } else {
-                            "no".to_string()
-                        };
-                        let _ = tx.send(opendev_runtime::ToolApprovalDecision {
-                            approved: option.approved,
-                            choice,
-                            command,
-                        });
-                    }
-                }
-                KeyCode::Esc => {
-                    let command = self.approval_controller.command().to_string();
-                    self.approval_controller.cancel();
-                    // Send denial back to the react loop
-                    if let Some(tx) = self.approval_response_tx.take() {
-                        let _ = tx.send(opendev_runtime::ToolApprovalDecision {
-                            approved: false,
-                            choice: "no".to_string(),
-                            command,
-                        });
-                    }
-                    let _ = self.event_tx.send(AppEvent::Interrupt);
-                }
-                _ => {}
-            }
-            self.state.dirty = true;
-            return;
-        }
-
-        // Leader key dispatch (Ctrl+X was pressed, waiting for second key)
-        if self.state.leader_pending {
-            self.state.leader_pending = false;
-            self.state.leader_timestamp = None;
-            match key.code {
-                KeyCode::Char('u') => {
-                    // Undo
-                    self.execute_slash_command("/undo");
-                }
-                KeyCode::Char('r') => {
-                    // Redo
-                    self.execute_slash_command("/redo");
-                }
-                KeyCode::Char('s') => {
-                    // Share
-                    self.execute_slash_command("/share");
-                }
-                KeyCode::Char('m') => {
-                    // Models
-                    self.execute_slash_command("/models");
-                }
-                KeyCode::Char('p') => {
-                    // Sessions
-                    self.execute_slash_command("/sessions");
-                }
-                KeyCode::Char('d') => {
-                    // Debug panel
-                    self.state.debug_panel_open = !self.state.debug_panel_open;
-                }
-                KeyCode::Esc => {
-                    // Cancel leader
-                }
-                _ => {
-                    use crate::widgets::toast::{Toast, ToastLevel};
-                    self.state.toasts.push(Toast::new(
-                        format!("C-x {:?} — unknown", key.code),
-                        ToastLevel::Warning,
-                    ));
-                }
-            }
-            self.state.dirty = true;
-            return;
-        }
-
-        // Debug panel key handler
-        if self.state.debug_panel_open {
-            match key.code {
-                KeyCode::Esc | KeyCode::Char('q') => {
-                    self.state.debug_panel_open = false;
-                }
-                _ => {}
-            }
-            self.state.dirty = true;
-            if matches!(key.code, KeyCode::Esc | KeyCode::Char('q')) {
-                return;
-            }
-        }
+        // Compute covered bg task IDs (parent tasks with backgrounded subagents)
+        let covered_bg_task_ids: std::collections::HashSet<&String> = self
+            .state
+            .active_subagents
+            .iter()
+            .filter(|s| s.backgrounded && !s.finished)
+            .filter_map(|s| self.state.bg_subagent_map.get(&s.subagent_id))
+            .collect();
+        let filtered_bg_count = self
+            .state
+            .bg_agent_manager
+            .all_tasks()
+            .iter()
+            .filter(|t| !t.hidden && !covered_bg_task_ids.contains(&t.task_id))
+            .count();
+        let total_tasks = self.state.active_subagents.len() + filtered_bg_count;
 
         match (key.modifiers, key.code) {
-            // Ctrl+C — quit or clear input
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
-                if self.state.input_buffer.is_empty() && !self.state.agent_active {
-                    self.state.running = false;
-                } else if self.state.agent_active {
-                    // Interrupt agent
-                    let _ = self.event_tx.send(AppEvent::Interrupt);
+            // Close: detail view first, then watcher
+            (_, KeyCode::Char('q'))
+            | (_, KeyCode::Esc)
+            | (KeyModifiers::ALT, KeyCode::Char('b')) => {
+                if self.state.task_watcher_detail.is_some() {
+                    self.state.task_watcher_detail = None; // close detail, keep watcher
                 } else {
-                    self.state.input_buffer.clear();
-                    self.state.input_cursor = 0;
+                    self.state.task_watcher_open = false;
+                    self.state.task_watcher_detail = None;
+                    self.state.force_clear = true;
                 }
             }
+
+            // Focus navigation: left
+            (_, KeyCode::Char('h')) | (_, KeyCode::Left) => {
+                if self.state.task_watcher_focus > 0 {
+                    self.state.task_watcher_focus -= 1;
+                }
+            }
+            // Focus navigation: right
+            (_, KeyCode::Char('l')) | (_, KeyCode::Right) => {
+                if total_tasks > 0 {
+                    self.state.task_watcher_focus =
+                        (self.state.task_watcher_focus + 1).min(total_tasks - 1);
+                }
+            }
+            // Focus navigation: up (move by cols)
+            (_, KeyCode::Char('k')) | (_, KeyCode::Up) => {
+                let cols = crate::widgets::background_tasks::compute_grid_cols(
+                    total_tasks,
+                    self.state.terminal_width,
+                );
+                if self.state.task_watcher_focus >= cols {
+                    self.state.task_watcher_focus -= cols;
+                }
+            }
+            // Focus navigation: down (move by cols)
+            (_, KeyCode::Char('j')) | (_, KeyCode::Down) => {
+                let cols = crate::widgets::background_tasks::compute_grid_cols(
+                    total_tasks,
+                    self.state.terminal_width,
+                );
+                let new_focus = self.state.task_watcher_focus + cols;
+                if total_tasks > 0 {
+                    self.state.task_watcher_focus = new_focus.min(total_tasks - 1);
+                }
+            }
+
+            // Scroll within focused cell: up
+            (KeyModifiers::SHIFT, KeyCode::Char('K')) => {
+                let idx = self.state.task_watcher_focus;
+                while self.state.task_watcher_cell_scrolls.len() <= idx {
+                    self.state.task_watcher_cell_scrolls.push(0);
+                }
+                self.state.task_watcher_cell_scrolls[idx] += 1;
+            }
+            // Scroll within focused cell: down
+            (KeyModifiers::SHIFT, KeyCode::Char('J')) => {
+                let idx = self.state.task_watcher_focus;
+                if let Some(scroll) = self.state.task_watcher_cell_scrolls.get_mut(idx) {
+                    *scroll = scroll.saturating_sub(1);
+                }
+            }
+
+            // Kill focused background task
+            (_, KeyCode::Char('x')) => {
+                let sa_count = self.state.active_subagents.len();
+                let focus = self.state.task_watcher_focus;
+                if focus < sa_count {
+                    // Focused on a subagent cell — cancel just this subagent
+                    let subagent = &self.state.active_subagents[focus];
+                    if subagent.backgrounded
+                        && !subagent.finished
+                        && let Some(token) =
+                            self.state.subagent_cancel_tokens.get(&subagent.subagent_id)
+                    {
+                        token.cancel();
+                        // If this was the last active subagent for the parent bg task, kill the parent too
+                        if let Some(parent_bg_id) = self
+                            .state
+                            .bg_subagent_map
+                            .get(&subagent.subagent_id)
+                            .cloned()
+                        {
+                            let other_active = self.state.active_subagents.iter().any(|s| {
+                                s.backgrounded
+                                    && !s.finished
+                                    && s.subagent_id != subagent.subagent_id
+                                    && self.state.bg_subagent_map.get(&s.subagent_id)
+                                        == Some(&parent_bg_id)
+                            });
+                            if !other_active {
+                                self.state.bg_agent_manager.kill_task(&parent_bg_id);
+                                self.state.bg_agent_manager.hide_task(&parent_bg_id);
+                            }
+                        }
+                    }
+                } else {
+                    // Focused on a bg_agent_manager cell — use filtered list to match display order
+                    let bg_idx = focus - sa_count;
+                    let filtered: Vec<_> = self
+                        .state
+                        .bg_agent_manager
+                        .all_tasks()
+                        .into_iter()
+                        .filter(|t| !t.hidden && !covered_bg_task_ids.contains(&t.task_id))
+                        .collect();
+                    if bg_idx < filtered.len() {
+                        let task_id = filtered[bg_idx].task_id.clone();
+                        self.state.bg_agent_manager.kill_task(&task_id);
+                    }
+                }
+            }
+
+            // Enter: toggle detail view for focused cell
+            (_, KeyCode::Enter) => {
+                if self.state.task_watcher_detail.is_some() {
+                    self.state.task_watcher_detail = None; // close detail
+                } else if total_tasks > 0 {
+                    self.state.task_watcher_detail = Some(self.state.task_watcher_focus);
+                }
+            }
+
+            // r: restart a failed/killed task
+            (_, KeyCode::Char('r')) => {
+                self.try_restart_focused_task();
+            }
+
+            // t: toggle sort (by start time vs by status)
+            (_, KeyCode::Char('t')) => {
+                self.state.task_watcher_sort_by_status = !self.state.task_watcher_sort_by_status;
+            }
+
+            // Page navigation: left
+            (KeyModifiers::SHIFT, KeyCode::Char('H')) => {
+                self.state.task_watcher_page = self.state.task_watcher_page.saturating_sub(1);
+            }
+            // Page navigation: right
+            (KeyModifiers::SHIFT, KeyCode::Char('L')) => {
+                self.state.task_watcher_page += 1; // clamped in render
+            }
+
+            _ => {}
+        }
+        self.state.dirty = true;
+        true
+    }
+
+    /// Handle ask-user dialog keys. Returns true if the key was consumed.
+    fn handle_key_ask_user(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        if !self.ask_user_controller.active() {
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Up if self.ask_user_controller.has_options() => {
+                self.ask_user_controller.prev();
+            }
+            KeyCode::Down if self.ask_user_controller.has_options() => {
+                self.ask_user_controller.next();
+            }
+            KeyCode::Char(c) if !self.ask_user_controller.has_options() => {
+                self.ask_user_controller.push_char(c);
+            }
+            KeyCode::Backspace if !self.ask_user_controller.has_options() => {
+                self.ask_user_controller.pop_char();
+            }
+            KeyCode::Enter => {
+                if let Some(answer) = self.ask_user_controller.confirm()
+                    && let Some(tx) = self.ask_user_response_tx.take()
+                {
+                    let _ = tx.send(answer);
+                }
+            }
+            KeyCode::Esc => {
+                let fallback = self.ask_user_controller.default_value().unwrap_or_default();
+                self.ask_user_controller.cancel();
+                if let Some(tx) = self.ask_user_response_tx.take() {
+                    let _ = tx.send(fallback);
+                }
+                let _ = self.event_tx.send(AppEvent::Interrupt);
+            }
+            _ => {}
+        }
+        self.state.dirty = true;
+        true
+    }
+
+    /// Handle plan approval dialog keys. Returns true if the key was consumed.
+    fn handle_key_plan_approval(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        if !self.plan_approval_controller.active() {
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Up => self.plan_approval_controller.prev(),
+            KeyCode::Down => self.plan_approval_controller.next(),
+            KeyCode::Enter => {
+                if let Some(decision) = self.plan_approval_controller.confirm() {
+                    // Switch mode based on decision
+                    match decision.action.as_str() {
+                        "approve_auto" | "approve" => {
+                            self.state.mode = OperationMode::Normal;
+                        }
+                        _ => {} // "modify" stays in Plan mode
+                    }
+                    // Forward decision back to the blocking tool
+                    if let Some(tx) = self.plan_approval_response_tx.take() {
+                        let _ = tx.send(decision);
+                    }
+                }
+            }
+            KeyCode::Esc => {
+                self.plan_approval_controller.cancel();
+                // cancel() internally confirms with "modify" via the controller's
+                // oneshot — but we also need to forward through our stored sender.
+                // The controller already sent via its own oneshot in cancel(),
+                // so just clean up our stored tx (it's already consumed by cancel).
+                self.plan_approval_response_tx.take();
+                let _ = self.event_tx.send(AppEvent::Interrupt);
+            }
+            _ => {}
+        }
+        self.state.dirty = true;
+        true
+    }
+
+    /// Handle tool approval dialog keys. Returns true if the key was consumed.
+    fn handle_key_tool_approval(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        if !self.approval_controller.active() {
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Up => self.approval_controller.move_selection(-1),
+            KeyCode::Down => self.approval_controller.move_selection(1),
+            KeyCode::Enter => {
+                // Capture selected option before confirm() clears state
+                let idx = self.approval_controller.selected_index();
+                let option = self.approval_controller.options()[idx].clone();
+                let command = self.approval_controller.command().to_string();
+                self.approval_controller.confirm();
+                // Forward decision back to the react loop
+                if let Some(tx) = self.approval_response_tx.take() {
+                    let choice = if option.choice == "2" {
+                        "yes_remember".to_string()
+                    } else if option.approved {
+                        "yes".to_string()
+                    } else {
+                        "no".to_string()
+                    };
+                    let _ = tx.send(opendev_runtime::ToolApprovalDecision {
+                        approved: option.approved,
+                        choice,
+                        command,
+                    });
+                }
+            }
+            KeyCode::Esc => {
+                let command = self.approval_controller.command().to_string();
+                self.approval_controller.cancel();
+                // Send denial back to the react loop
+                if let Some(tx) = self.approval_response_tx.take() {
+                    let _ = tx.send(opendev_runtime::ToolApprovalDecision {
+                        approved: false,
+                        choice: "no".to_string(),
+                        command,
+                    });
+                }
+                let _ = self.event_tx.send(AppEvent::Interrupt);
+            }
+            _ => {}
+        }
+        self.state.dirty = true;
+        true
+    }
+
+    /// Handle leader key dispatch (Ctrl+X prefix). Returns true if the key was consumed.
+    fn handle_key_leader(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        if !self.state.leader_pending {
+            return false;
+        }
+
+        self.state.leader_pending = false;
+        self.state.leader_timestamp = None;
+        match key.code {
+            KeyCode::Char('u') => {
+                // Undo
+                self.execute_slash_command("/undo");
+            }
+            KeyCode::Char('r') => {
+                // Redo
+                self.execute_slash_command("/redo");
+            }
+            KeyCode::Char('s') => {
+                // Share
+                self.execute_slash_command("/share");
+            }
+            KeyCode::Char('m') => {
+                // Models
+                self.execute_slash_command("/models");
+            }
+            KeyCode::Char('p') => {
+                // Sessions
+                self.execute_slash_command("/sessions");
+            }
+            KeyCode::Char('d') => {
+                // Debug panel
+                self.state.debug_panel_open = !self.state.debug_panel_open;
+            }
+            KeyCode::Esc => {
+                // Cancel leader
+            }
+            _ => {
+                use crate::widgets::toast::{Toast, ToastLevel};
+                self.state.toasts.push(Toast::new(
+                    format!("C-x {:?} — unknown", key.code),
+                    ToastLevel::Warning,
+                ));
+            }
+        }
+        self.state.dirty = true;
+        true
+    }
+
+    /// Handle debug panel keys. Returns true if the key was consumed.
+    fn handle_key_debug_panel(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        if !self.state.debug_panel_open {
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.state.debug_panel_open = false;
+                self.state.dirty = true;
+                return true;
+            }
+            _ => {}
+        }
+        self.state.dirty = true;
+        false
+    }
+
+    /// Handle Ctrl+C: two-stage quit, interrupt agent, or clear input.
+    fn handle_key_ctrl_c(&mut self) {
+        if self.state.input_buffer.is_empty() && !self.state.agent_active {
+            // Two-stage exit: first Ctrl+C shows warning, second exits
+            if self
+                .state
+                .ctrl_c_pending
+                .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2))
+            {
+                self.state.running = false;
+            } else {
+                self.state.ctrl_c_pending = Some(std::time::Instant::now());
+                use crate::widgets::toast::{Toast, ToastLevel};
+                self.state.toasts.push(
+                    Toast::new("Press Ctrl+C again to exit", ToastLevel::Warning)
+                        .with_duration(std::time::Duration::from_secs(2)),
+                );
+                self.state.dirty = true;
+            }
+        } else if self.state.agent_active {
+            // Interrupt agent
+            let _ = self.event_tx.send(AppEvent::Interrupt);
+        } else {
+            self.state.input_buffer.clear();
+            self.state.input_cursor = 0;
+        }
+    }
+
+    /// Handle Enter key: accept autocomplete, submit message, or execute slash command.
+    fn handle_key_enter(&mut self) {
+        if self.state.autocomplete.is_visible() {
+            // If the input is already a known slash command, dismiss autocomplete
+            // and submit it directly — don't let autocomplete replace it.
+            let is_exact_slash = self.state.input_buffer.starts_with('/')
+                && !self.state.input_buffer[1..].contains(' ')
+                && crate::controllers::is_command(&self.state.input_buffer[1..]);
+
+            if is_exact_slash {
+                self.state.autocomplete.dismiss();
+                // Fall through to submit below
+            } else {
+                // Accept autocomplete selection
+                if let Some((insert_text, delete_count)) = self.state.autocomplete.accept() {
+                    let start = self.state.input_cursor.saturating_sub(delete_count);
+                    self.state
+                        .input_buffer
+                        .drain(start..self.state.input_cursor);
+                    self.state.input_cursor = start;
+                    self.state
+                        .input_buffer
+                        .insert_str(self.state.input_cursor, &insert_text);
+                    self.state.input_cursor += insert_text.len();
+                    // Add trailing space
+                    self.state.input_buffer.insert(self.state.input_cursor, ' ');
+                    self.state.input_cursor += 1;
+                }
+            }
+        }
+        if !self.state.autocomplete.is_visible() && !self.state.input_buffer.is_empty() {
+            let msg = self.state.input_buffer.clone();
+            self.state.input_buffer.clear();
+            self.state.input_cursor = 0;
+            self.state.autocomplete.dismiss();
+            self.state.command_history.record(&msg);
+
+            if self.state.agent_active {
+                // Queue silently — message will display when consumed
+                self.state
+                    .pending_queue
+                    .push_back(super::PendingItem::UserMessage(msg));
+                self.state.dirty = true;
+            } else {
+                // Start fading the welcome panel on first user message
+                if !self.state.welcome_panel.fade_complete && !self.state.welcome_panel.is_fading {
+                    self.state.welcome_panel.start_fade();
+                }
+
+                if msg.starts_with('/') {
+                    self.execute_slash_command(&msg);
+                } else {
+                    self.message_controller
+                        .handle_user_submit(&mut self.state, &msg);
+                    self.state.message_generation += 1;
+                    let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
+                }
+            }
+        }
+    }
+
+    /// Handle Up/Down arrow: autocomplete navigation, command history, or scroll.
+    fn handle_key_up_down(&mut self, is_up: bool) {
+        if is_up {
+            if self.state.autocomplete.is_visible() {
+                self.state.autocomplete.select_prev();
+            } else if !self.state.input_buffer.contains('\n') && !self.state.agent_active {
+                // Single-line input: navigate command history
+                if let Some(text) = self
+                    .state
+                    .command_history
+                    .navigate_up(&self.state.input_buffer)
+                {
+                    self.state.input_buffer = text.to_string();
+                    self.state.input_cursor = self.state.input_buffer.len();
+                }
+            } else {
+                let amount = self.accelerated_scroll(true);
+                self.state.scroll_offset = self.state.scroll_offset.saturating_add(amount);
+                self.state.user_scrolled = true;
+            }
+        } else {
+            if self.state.autocomplete.is_visible() {
+                self.state.autocomplete.select_next();
+            } else if self.state.command_history.is_navigating() {
+                // Navigate command history down
+                if let Some(text) = self.state.command_history.navigate_down() {
+                    self.state.input_buffer = text.to_string();
+                    self.state.input_cursor = self.state.input_buffer.len();
+                }
+            } else if self.state.scroll_offset > 0 {
+                let amount = self.accelerated_scroll(false);
+                self.state.scroll_offset = self.state.scroll_offset.saturating_sub(amount);
+            } else {
+                self.state.user_scrolled = false;
+            }
+        }
+    }
+
+    /// Handle main input keys (non-modal, non-leader context).
+    fn handle_key_input(&mut self, key: crossterm::event::KeyEvent) {
+        match (key.modifiers, key.code) {
+            // Ctrl+C — quit or clear input
+            (KeyModifiers::CONTROL, KeyCode::Char('c')) => self.handle_key_ctrl_c(),
             // Escape — dismiss autocomplete or interrupt agent
             (_, KeyCode::Esc) => {
                 if self.state.autocomplete.is_visible() {
@@ -547,68 +711,7 @@ impl App {
                 }
             }
             // Enter — accept autocomplete, submit message, or execute slash command
-            (_, KeyCode::Enter) => {
-                if self.state.autocomplete.is_visible() {
-                    // If the input is already a known slash command, dismiss autocomplete
-                    // and submit it directly — don't let autocomplete replace it.
-                    let is_exact_slash = self.state.input_buffer.starts_with('/')
-                        && !self.state.input_buffer[1..].contains(' ')
-                        && crate::controllers::is_command(&self.state.input_buffer[1..]);
-
-                    if is_exact_slash {
-                        self.state.autocomplete.dismiss();
-                        // Fall through to submit below
-                    } else {
-                        // Accept autocomplete selection
-                        if let Some((insert_text, delete_count)) = self.state.autocomplete.accept()
-                        {
-                            let start = self.state.input_cursor.saturating_sub(delete_count);
-                            self.state
-                                .input_buffer
-                                .drain(start..self.state.input_cursor);
-                            self.state.input_cursor = start;
-                            self.state
-                                .input_buffer
-                                .insert_str(self.state.input_cursor, &insert_text);
-                            self.state.input_cursor += insert_text.len();
-                            // Add trailing space
-                            self.state.input_buffer.insert(self.state.input_cursor, ' ');
-                            self.state.input_cursor += 1;
-                        }
-                    }
-                }
-                if !self.state.autocomplete.is_visible() && !self.state.input_buffer.is_empty() {
-                    let msg = self.state.input_buffer.clone();
-                    self.state.input_buffer.clear();
-                    self.state.input_cursor = 0;
-                    self.state.autocomplete.dismiss();
-                    self.state.command_history.record(&msg);
-
-                    if self.state.agent_active {
-                        // Queue silently — message will display when consumed
-                        self.state
-                            .pending_queue
-                            .push_back(super::PendingItem::UserMessage(msg));
-                        self.state.dirty = true;
-                    } else {
-                        // Start fading the welcome panel on first user message
-                        if !self.state.welcome_panel.fade_complete
-                            && !self.state.welcome_panel.is_fading
-                        {
-                            self.state.welcome_panel.start_fade();
-                        }
-
-                        if msg.starts_with('/') {
-                            self.execute_slash_command(&msg);
-                        } else {
-                            self.message_controller
-                                .handle_user_submit(&mut self.state, &msg);
-                            self.state.message_generation += 1;
-                            let _ = self.event_tx.send(AppEvent::UserSubmit(msg));
-                        }
-                    }
-                }
-            }
+            (_, KeyCode::Enter) => self.handle_key_enter(),
             // Backspace
             (_, KeyCode::Backspace) => {
                 if self.state.input_cursor > 0 {
@@ -735,41 +838,8 @@ impl App {
                 }
             }
             // Up/Down arrow — autocomplete > command history > scroll
-            (_, KeyCode::Up) => {
-                if self.state.autocomplete.is_visible() {
-                    self.state.autocomplete.select_prev();
-                } else if !self.state.input_buffer.contains('\n') && !self.state.agent_active {
-                    // Single-line input: navigate command history
-                    if let Some(text) = self
-                        .state
-                        .command_history
-                        .navigate_up(&self.state.input_buffer)
-                    {
-                        self.state.input_buffer = text.to_string();
-                        self.state.input_cursor = self.state.input_buffer.len();
-                    }
-                } else {
-                    let amount = self.accelerated_scroll(true);
-                    self.state.scroll_offset = self.state.scroll_offset.saturating_add(amount);
-                    self.state.user_scrolled = true;
-                }
-            }
-            (_, KeyCode::Down) => {
-                if self.state.autocomplete.is_visible() {
-                    self.state.autocomplete.select_next();
-                } else if self.state.command_history.is_navigating() {
-                    // Navigate command history down
-                    if let Some(text) = self.state.command_history.navigate_down() {
-                        self.state.input_buffer = text.to_string();
-                        self.state.input_cursor = self.state.input_buffer.len();
-                    }
-                } else if self.state.scroll_offset > 0 {
-                    let amount = self.accelerated_scroll(false);
-                    self.state.scroll_offset = self.state.scroll_offset.saturating_sub(amount);
-                } else {
-                    self.state.user_scrolled = false;
-                }
-            }
+            (_, KeyCode::Up) => self.handle_key_up_down(true),
+            (_, KeyCode::Down) => self.handle_key_up_down(false),
             // Ctrl+O — toggle collapsed state on the most recent collapsible tool result
             (KeyModifiers::CONTROL, KeyCode::Char('o')) => {
                 use crate::widgets::conversation::is_diff_tool;
@@ -863,222 +933,90 @@ impl App {
             _ => {}
         }
     }
+
+    /// Handle a key press event.
+    pub(super) fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
+        // Only process key-press and repeat events (Kitty protocol also sends Release)
+        if !matches!(
+            key.kind,
+            crossterm::event::KeyEventKind::Press | crossterm::event::KeyEventKind::Repeat
+        ) {
+            return;
+        }
+
+        // Ctrl+B — background agent: handle before any modal can swallow it
+        if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('b') {
+            // If task watcher is open, Ctrl+B closes it
+            if self.state.task_watcher_open {
+                self.state.task_watcher_open = false;
+                self.state.force_clear = true;
+                self.state.dirty = true;
+                return;
+            }
+            if self.try_background_agent() {
+                // Dismiss any active modal with a permissive response to unblock the react loop
+                self.dismiss_modals_for_background();
+            }
+            self.state.dirty = true;
+            return;
+        }
+
+        // Ctrl+P — toggle task watcher panel: handle before any modal can swallow it
+        if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('p') {
+            if self.state.task_watcher_open {
+                self.state.task_watcher_open = false;
+                self.state.force_clear = true;
+            } else {
+                let has_bg_subagents = self.state.active_subagents.iter().any(|s| s.backgrounded);
+                let has_bg_agents = !self.state.bg_agent_manager.all_tasks().is_empty();
+                if has_bg_subagents || has_bg_agents {
+                    self.state.task_watcher_open = true;
+                    self.state.task_watcher_focus = 0;
+                    self.state.task_watcher_cell_scrolls.clear();
+                    self.state.task_watcher_page = 0;
+                } else {
+                    use crate::widgets::toast::{Toast, ToastLevel};
+                    self.state
+                        .toasts
+                        .push(Toast::new("No background tasks", ToastLevel::Info));
+                }
+            }
+            self.state.dirty = true;
+            return;
+        }
+
+        // Modal delegates — consume all input when active
+        if self.handle_key_model_picker(key) {
+            return;
+        }
+        if self.handle_key_task_watcher(key) {
+            return;
+        }
+        if self.handle_key_ask_user(key) {
+            return;
+        }
+        if self.handle_key_plan_approval(key) {
+            return;
+        }
+        if self.handle_key_tool_approval(key) {
+            return;
+        }
+
+        // Leader key
+        if self.handle_key_leader(key) {
+            return;
+        }
+
+        // Debug panel
+        if self.handle_key_debug_panel(key) {
+            return;
+        }
+
+        // Main input handling
+        self.handle_key_input(key);
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::*;
-    use crossterm::event::{KeyCode, KeyModifiers};
-
-    #[test]
-    fn test_task_watcher_close_q() {
-        let mut app = App::new();
-        app.state.task_watcher_open = true;
-        let key = crossterm::event::KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
-        app.handle_key(key);
-        assert!(!app.state.task_watcher_open, "q should close task watcher");
-        assert!(app.state.force_clear, "q should set force_clear");
-    }
-
-    #[test]
-    fn test_task_watcher_close_esc() {
-        let mut app = App::new();
-        app.state.task_watcher_open = true;
-        let key = crossterm::event::KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-        app.handle_key(key);
-        assert!(
-            !app.state.task_watcher_open,
-            "Esc should close task watcher"
-        );
-        assert!(app.state.force_clear, "Esc should set force_clear");
-    }
-
-    #[test]
-    fn test_task_watcher_close_ctrl_b() {
-        let mut app = App::new();
-        app.state.task_watcher_open = true;
-        let key = crossterm::event::KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL);
-        app.handle_key(key);
-        assert!(
-            !app.state.task_watcher_open,
-            "Ctrl+B should close task watcher"
-        );
-        assert!(app.state.force_clear, "Ctrl+B should set force_clear");
-    }
-
-    #[test]
-    fn test_task_watcher_close_ctrl_p() {
-        let mut app = App::new();
-        app.state.task_watcher_open = true;
-        let key = crossterm::event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
-        app.handle_key(key);
-        assert!(
-            !app.state.task_watcher_open,
-            "Ctrl+P should close task watcher"
-        );
-        assert!(app.state.force_clear, "Ctrl+P should set force_clear");
-    }
-
-    #[test]
-    fn test_task_watcher_close_alt_b() {
-        let mut app = App::new();
-        app.state.task_watcher_open = true;
-        let key = crossterm::event::KeyEvent::new(KeyCode::Char('b'), KeyModifiers::ALT);
-        app.handle_key(key);
-        assert!(
-            !app.state.task_watcher_open,
-            "Alt+B should close task watcher"
-        );
-        assert!(app.state.force_clear, "Alt+B should set force_clear");
-    }
-
-    #[test]
-    fn test_handle_key_char_input() {
-        let mut app = App::new();
-        let key = crossterm::event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
-        app.handle_key(key);
-        assert_eq!(app.state.input_buffer, "a");
-        assert_eq!(app.state.input_cursor, 1);
-    }
-
-    #[test]
-    fn test_handle_key_backspace() {
-        let mut app = App::new();
-        app.state.input_buffer = "abc".into();
-        app.state.input_cursor = 3;
-        let key = crossterm::event::KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
-        app.handle_key(key);
-        assert_eq!(app.state.input_buffer, "ab");
-        assert_eq!(app.state.input_cursor, 2);
-    }
-
-    #[test]
-    fn test_handle_key_enter_submits() {
-        let mut app = App::new();
-        app.state.input_buffer = "hello".into();
-        app.state.input_cursor = 5;
-        let key = crossterm::event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        app.handle_key(key);
-        assert!(app.state.input_buffer.is_empty());
-        assert_eq!(app.state.input_cursor, 0);
-        // Should have added a user message
-        assert_eq!(app.state.messages.len(), 1);
-        assert_eq!(app.state.messages[0].role, DisplayRole::User);
-    }
-
-    #[test]
-    fn test_mode_toggle() {
-        let mut app = App::new();
-        let key = crossterm::event::KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
-        app.handle_key(key);
-        assert_eq!(app.state.mode, OperationMode::Plan);
-        app.handle_key(key);
-        assert_eq!(app.state.mode, OperationMode::Normal);
-    }
-
-    #[test]
-    fn test_page_scroll() {
-        let mut app = App::new();
-        let pgup = crossterm::event::KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE);
-        app.handle_key(pgup);
-        // First press: base=1 (no accel), page multiplier 3x = 3
-        assert_eq!(app.state.scroll_offset, 3);
-        assert!(app.state.user_scrolled);
-
-        // Page down reduces offset; direction change resets accel, so base=1, 3x=3
-        let pgdn = crossterm::event::KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE);
-        app.handle_key(pgdn);
-        assert_eq!(app.state.scroll_offset, 0);
-        // user_scrolled only clears when already at 0 and page down again
-        assert!(app.state.user_scrolled);
-
-        // One more page down at 0 clears user_scrolled
-        app.handle_key(pgdn);
-        assert!(!app.state.user_scrolled);
-    }
-
-    #[test]
-    fn test_scroll_acceleration() {
-        let mut app = App::new();
-        // Set agent_active so Up/Down arrow scrolls (bypasses command history)
-        app.state.agent_active = true;
-        // First up-arrow: base amount = 1
-        let up = crossterm::event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
-        app.handle_key(up);
-        assert_eq!(app.state.scroll_offset, 1);
-        assert_eq!(app.state.scroll_accel_level, 0);
-
-        // Immediate second press (within 200ms): accelerates to 2
-        app.handle_key(up);
-        assert_eq!(app.state.scroll_offset, 3); // 1 + 2
-        assert_eq!(app.state.scroll_accel_level, 1);
-
-        // Third press: accelerates to 3
-        app.handle_key(up);
-        assert_eq!(app.state.scroll_offset, 6); // 3 + 3
-        assert_eq!(app.state.scroll_accel_level, 2);
-
-        // Fourth press: stays at 3 (capped)
-        app.handle_key(up);
-        assert_eq!(app.state.scroll_offset, 9); // 6 + 3
-        assert_eq!(app.state.scroll_accel_level, 2);
-    }
-
-    #[test]
-    fn test_scroll_acceleration_resets_on_direction_change() {
-        let mut app = App::new();
-        // Set agent_active so Up/Down arrow scrolls (bypasses command history)
-        app.state.agent_active = true;
-        let up = crossterm::event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
-        let down = crossterm::event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
-
-        // Build up acceleration
-        app.handle_key(up);
-        app.handle_key(up);
-        assert_eq!(app.state.scroll_accel_level, 1);
-        assert_eq!(app.state.scroll_offset, 3); // 1 + 2
-
-        // Direction change resets acceleration
-        app.handle_key(down);
-        assert_eq!(app.state.scroll_accel_level, 0);
-        assert_eq!(app.state.scroll_offset, 2); // 3 - 1
-    }
-
-    #[test]
-    fn test_models_command_opens_picker_with_autocomplete() {
-        let mut app = App::new();
-        // Simulate typing "/models" character by character
-        for c in "/models".chars() {
-            let key = crossterm::event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
-            app.handle_key(key);
-        }
-        assert_eq!(app.state.input_buffer, "/models");
-
-        // Autocomplete should be visible (showing /models command)
-        // (It may or may not be visible depending on the completer setup in tests)
-
-        // Press Enter — should execute /models, not accept autocomplete
-        let enter = crossterm::event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        app.handle_key(enter);
-
-        // Input should be cleared (command was submitted)
-        assert!(app.state.input_buffer.is_empty());
-
-        // Should either open picker or show "No models" message
-        let has_picker = app.model_picker_controller.is_some();
-        let has_no_models_msg = app
-            .state
-            .messages
-            .iter()
-            .any(|m| m.content.contains("No models"));
-        assert!(
-            has_picker || has_no_models_msg,
-            "Expected model picker or 'No models' message, got messages: {:?}",
-            app.state
-                .messages
-                .iter()
-                .map(|m| &m.content)
-                .collect::<Vec<_>>()
-        );
-    }
-}
+#[path = "key_handler_tests.rs"]
+mod tests;

@@ -254,13 +254,13 @@ impl Theme {
             phase_critique: Color::Rgb(255, 184, 108), // Orange
             phase_refinement: Color::Rgb(139, 233, 253), // Cyan
 
-            heading_1: Color::Rgb(248, 248, 242), // Foreground (primary)
-            heading_2: Color::Rgb(248, 248, 242), // Foreground (primary)
-            heading_3: Color::Rgb(248, 248, 242), // Foreground (primary)
-            code_fg: Color::Rgb(150, 170, 220),   // Soft steel blue
-            code_bg: Color::Rgb(40, 42, 54),      // Background
-            bullet: Color::Rgb(248, 248, 242),    // Foreground (primary)
-            bold_fg: Color::Rgb(248, 248, 242),   // Foreground (primary)
+            heading_1: Color::Rgb(248, 248, 242),
+            heading_2: Color::Rgb(248, 248, 242),
+            heading_3: Color::Rgb(248, 248, 242),
+            code_fg: Color::Rgb(150, 170, 220),
+            code_bg: Color::Rgb(40, 42, 54),
+            bullet: Color::Rgb(248, 248, 242),
+            bold_fg: Color::Rgb(248, 248, 242),
         }
     }
 }
@@ -315,6 +315,10 @@ pub const HEADING_2: Color = Color::Rgb(208, 212, 220);
 pub const HEADING_3: Color = Color::Rgb(208, 212, 220);
 pub const CODE_FG: Color = Color::Rgb(120, 190, 180);
 pub const CODE_BG: Color = Color::Rgb(30, 30, 30);
+
+/// Zero-width space used as a sentinel to mark code block lines.
+/// The wrap module checks for this to skip word-wrapping code.
+pub const CODE_LINE_SENTINEL: char = '\u{200B}';
 pub const BULLET: Color = Color::Rgb(208, 212, 220);
 pub const BOLD_FG: Color = Color::Rgb(208, 212, 220);
 
@@ -326,7 +330,12 @@ pub const THINKING_ICON: &str = "\u{27e1}"; // ⟡
 /// `tick` drives the wave position. Each character gets an interpolated color
 /// between `base` (dim) and `highlight` (bright) based on distance from the
 /// wave center, using a gaussian falloff with a ~4-char wide window.
-pub fn shimmer_line(text: &str, tick: u64, base: Color, highlight: Color) -> Vec<ratatui::text::Span<'static>> {
+pub fn shimmer_line(
+    text: &str,
+    tick: u64,
+    base: Color,
+    highlight: Color,
+) -> Vec<ratatui::text::Span<'static>> {
     use ratatui::style::Style;
     use ratatui::text::Span;
 
@@ -366,6 +375,9 @@ pub fn shimmer_line(text: &str, tick: u64, base: Color, highlight: Color) -> Vec
 }
 
 // Box-drawing characters (rounded)
+/// Blockquote left bar — thicker than box-drawing │, matching Claude Code's ▎.
+pub const BLOCKQUOTE_BAR: &str = "\u{258e}";
+
 pub const BOX_TL: &str = "\u{256d}";
 pub const BOX_TR: &str = "\u{256e}";
 pub const BOX_BL: &str = "\u{2570}";
@@ -406,104 +418,5 @@ impl Indent {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dark_theme_matches_legacy_constants() {
-        let dark = Theme::dark();
-        assert_eq!(dark.primary, PRIMARY);
-        assert_eq!(dark.accent, ACCENT);
-        assert_eq!(dark.success, SUCCESS);
-        assert_eq!(dark.error, ERROR);
-        assert_eq!(dark.warning, WARNING);
-        assert_eq!(dark.border, BORDER);
-        assert_eq!(dark.code_fg, CODE_FG);
-        assert_eq!(dark.code_bg, CODE_BG);
-        assert_eq!(dark.bold_fg, BOLD_FG);
-    }
-
-    #[test]
-    fn test_light_theme_differs_from_dark() {
-        let dark = Theme::dark();
-        let light = Theme::light();
-        assert_ne!(dark.primary, light.primary);
-        assert_ne!(dark.code_bg, light.code_bg);
-        assert_eq!(light.name, "light");
-    }
-
-    #[test]
-    fn test_dracula_theme() {
-        let dracula = Theme::dracula();
-        assert_eq!(dracula.name, "dracula");
-        assert_eq!(dracula.primary, Color::Rgb(248, 248, 242));
-        assert_eq!(dracula.error, Color::Rgb(255, 85, 85));
-    }
-
-    #[test]
-    fn test_theme_name_from_str() {
-        assert_eq!(ThemeName::from_str_loose("dark"), Some(ThemeName::Dark));
-        assert_eq!(ThemeName::from_str_loose("LIGHT"), Some(ThemeName::Light));
-        assert_eq!(
-            ThemeName::from_str_loose("Dracula"),
-            Some(ThemeName::Dracula)
-        );
-        assert_eq!(ThemeName::from_str_loose("nonexistent"), None);
-    }
-
-    #[test]
-    fn test_theme_name_roundtrip() {
-        for name in ThemeName::all() {
-            let s = name.as_str();
-            let parsed = ThemeName::from_str_loose(s).unwrap();
-            assert_eq!(*name, parsed);
-        }
-    }
-
-    #[test]
-    fn test_theme_name_to_theme() {
-        let dark = ThemeName::Dark.theme();
-        assert_eq!(dark.name, "dark");
-        let light = ThemeName::Light.theme();
-        assert_eq!(light.name, "light");
-    }
-
-    #[test]
-    fn test_default_theme_is_dark() {
-        let default = Theme::default();
-        assert_eq!(default.name, "dark");
-        assert_eq!(default, Theme::dark());
-    }
-
-    #[test]
-    fn test_detect_terminal_background_dark() {
-        // Can't reliably test env var detection in unit tests,
-        // but we can test the Unknown/default path
-        let bg = detect_terminal_background();
-        // In CI/test, COLORFGBG is typically not set
-        assert!(matches!(
-            bg,
-            TerminalBackground::Dark | TerminalBackground::Light | TerminalBackground::Unknown
-        ));
-    }
-
-    #[test]
-    fn test_auto_detect_theme_fallback() {
-        // Without COLORFGBG set, should default to dark
-        let theme = auto_detect_theme();
-        // Could be Dark or Light depending on environment
-        assert!(matches!(theme, ThemeName::Dark | ThemeName::Light));
-    }
-
-    #[test]
-    fn test_all_themes_have_distinct_names() {
-        let themes: Vec<Theme> = ThemeName::all().iter().map(|n| n.theme()).collect();
-        for (i, a) in themes.iter().enumerate() {
-            for (j, b) in themes.iter().enumerate() {
-                if i != j {
-                    assert_ne!(a.name, b.name);
-                }
-            }
-        }
-    }
-}
+#[path = "style_tokens_tests.rs"]
+mod tests;

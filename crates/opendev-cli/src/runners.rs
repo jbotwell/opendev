@@ -5,6 +5,14 @@ use tracing::info;
 use crate::helpers::*;
 use crate::runtime;
 
+/// Create an EventStore wired to an EventBus for audit trail.
+fn create_event_store(session_dir: &std::path::Path) -> opendev_history::event_store::EventStore {
+    let event_bus = opendev_runtime::event_bus::EventBus::new();
+    let bridge = opendev_runtime::event_bus::create_event_bus_bridge(event_bus);
+    opendev_history::event_store::EventStore::new(session_dir.to_path_buf())
+        .with_post_append(bridge)
+}
+
 /// Run non-interactive mode: execute a single prompt and exit.
 pub async fn run_non_interactive(
     working_dir: &std::path::Path,
@@ -36,11 +44,13 @@ pub async fn run_non_interactive(
         config
     };
 
-    // Build system prompt before config is moved
-    let system_prompt = runtime::build_system_prompt(working_dir, &config);
+    // Apply profile overrides (from OPENDEV_PROFILE env var)
+    if let Ok(profile) = std::env::var("OPENDEV_PROFILE") {
+        opendev_config::apply_profile(&mut config, &profile);
+    }
 
     let mut session_manager = match SessionManager::new(session_dir.clone()) {
-        Ok(sm) => sm,
+        Ok(sm) => sm.with_event_store(create_event_store(&session_dir)),
         Err(e) => {
             eprintln!("Failed to initialize session manager: {e}");
             std::process::exit(1);
@@ -91,7 +101,11 @@ pub async fn run_non_interactive(
     };
 
     // Connect MCP servers (best-effort, failures are logged)
-    agent_runtime.connect_mcp_servers().await;
+    agent_runtime.start_mcp_connections();
+
+    // Compose system prompt per-turn (resolves MCP instructions if available)
+    agent_runtime.resolve_mcp_instructions().await;
+    let system_prompt = agent_runtime.compose_system_prompt();
 
     match agent_runtime
         .run_query(prompt, &system_prompt, None, None, false)
@@ -154,7 +168,7 @@ pub async fn run_interactive(
     }
 
     let mut session_manager = match SessionManager::new(session_dir.clone()) {
-        Ok(sm) => sm,
+        Ok(sm) => sm.with_event_store(create_event_store(&session_dir)),
         Err(e) => {
             eprintln!("Failed to initialize session manager: {}", e);
             std::process::exit(1);
@@ -203,7 +217,7 @@ pub async fn run_interactive(
                     for (i, meta) in sessions.iter().enumerate().take(20) {
                         let title = meta.title.as_deref().unwrap_or("(untitled)");
                         let display_title: String = if title.len() > 38 {
-                            format!("{}...", &title[..35])
+                            format!("{}...", &title[..title.floor_char_boundary(35)])
                         } else {
                             title.to_string()
                         };
@@ -262,10 +276,7 @@ pub async fn run_interactive(
 
     let _ = dangerously_skip_permissions; // Will be wired to approval system
 
-    // Build system prompt from embedded templates
-    let system_prompt = runtime::build_system_prompt(working_dir, &config);
-
-    // Create agent runtime
+    // Create agent runtime (prompt composer is initialized inside)
     let mut agent_runtime =
         match runtime::AgentRuntime::new(config.clone(), working_dir, session_manager) {
             Ok(rt) => rt,
@@ -276,13 +287,19 @@ pub async fn run_interactive(
         };
 
     // Connect MCP servers (best-effort, failures are logged)
-    agent_runtime.connect_mcp_servers().await;
+    agent_runtime.start_mcp_connections();
 
     // Resolve theme: CLI flag > auto-detect from terminal background
     let resolved_theme = theme_name
         .as_deref()
         .and_then(opendev_tui::ThemeName::from_str_loose)
         .unwrap_or_else(opendev_tui::auto_detect_theme);
+
+    // Extract session ID for TUI display
+    let session_id = agent_runtime
+        .session_manager
+        .current_session()
+        .map(|s| s.id.clone());
 
     // Populate initial TUI state from config
     let wd_str = working_dir.display().to_string();
@@ -295,6 +312,7 @@ pub async fn run_interactive(
         theme: resolved_theme.theme(),
         theme_name: resolved_theme,
         reasoning_level: opendev_tui::app::ReasoningLevel::from_str_loose(&config.reasoning_effort),
+        session_id,
         ..opendev_tui::AppState::default()
     };
 
@@ -313,9 +331,8 @@ pub async fn run_interactive(
                     if msg.metadata.contains_key("_msg_class") {
                         continue;
                     }
-                    // Also skip messages with [SYSTEM] prefix from older sessions
-                    // that were persisted before _msg_class was preserved
-                    if msg.content.starts_with("[SYSTEM] ") {
+                    // Also skip system-injected messages from older sessions
+                    if opendev_models::message::is_system_injected_content(&msg.content) {
                         continue;
                     }
                     app_state
@@ -342,6 +359,7 @@ pub async fn run_interactive(
                             collapsed: true,
                             thinking_started_at: None,
                             thinking_duration_secs: Some(0),
+                            thinking_finalized_at: None,
                         });
                     }
                     // Add assistant text
@@ -365,6 +383,7 @@ pub async fn run_interactive(
                             collapsed: false,
                             thinking_started_at: None,
                             thinking_duration_secs: None,
+                            thinking_finalized_at: None,
                         });
                     }
                 }
@@ -383,14 +402,85 @@ pub async fn run_interactive(
             ));
     }
 
-    // Create and run the TUI runner
-    let tui_runner = crate::tui_runner::TuiRunner::new(agent_runtime, system_prompt)
-        .with_initial_message(initial_message);
+    // Start Telegram channel in remote-control mode if configured
+    let _telegram_shutdown;
+    let mut tui_runner =
+        crate::tui_runner::TuiRunner::new(agent_runtime).with_initial_message(initial_message);
 
-    if let Err(e) = tui_runner.run(app_state).await {
-        eprintln!("TUI error: {e}");
-        std::process::exit(1);
+    {
+        let tg_config = &config.channels.telegram;
+        if tg_config.as_ref().is_some_and(|tg| tg.enabled) {
+            let tg = tg_config.as_ref().unwrap();
+
+            let telegram_config = opendev_channels::telegram::TelegramConfig {
+                bot_token: tg.bot_token.clone(),
+                enabled: true,
+                group_mention_only: tg.group_mention_only,
+                dm_policy: match tg.dm_policy {
+                    opendev_models::DmPolicy::Open => opendev_channels::telegram::DmPolicy::Open,
+                    opendev_models::DmPolicy::Pairing => {
+                        opendev_channels::telegram::DmPolicy::Pairing
+                    }
+                    opendev_models::DmPolicy::Allowlist => {
+                        opendev_channels::telegram::DmPolicy::Allowlist
+                    }
+                },
+                allowed_users: tg.allowed_users.clone(),
+            };
+
+            match opendev_channels::telegram::start_telegram_remote(Some(&telegram_config)).await {
+                Ok((_adapter, shutdown, bridge, event_tx, command_rx)) => {
+                    info!("Telegram remote-control bot started");
+                    _telegram_shutdown = Some(shutdown);
+                    tui_runner = tui_runner.with_remote_control(event_tx, command_rx, bridge);
+                }
+                Err(e) => {
+                    tracing::warn!("Telegram remote channel not started: {e}");
+                    _telegram_shutdown = None;
+                }
+            }
+        } else {
+            _telegram_shutdown = None;
+        }
     }
+
+    let tui_runner = tui_runner;
+
+    match tui_runner.run(app_state).await {
+        Ok(exit_info) => {
+            print_exit_message(&exit_info);
+        }
+        Err(e) => {
+            eprintln!("TUI error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Print a clean goodbye message after the TUI exits.
+fn print_exit_message(exit_info: &opendev_tui::ExitInfo) {
+    let Some(ref session_id) = exit_info.session_id else {
+        return;
+    };
+
+    // Only show exit message if the session had activity
+    if exit_info.message_count == 0 {
+        return;
+    }
+
+    let cost_str = if exit_info.session_cost > 0.0 {
+        if exit_info.session_cost < 0.01 {
+            format!(" | Cost ${:.4}", exit_info.session_cost)
+        } else {
+            format!(" | Cost ${:.2}", exit_info.session_cost)
+        }
+    } else {
+        String::new()
+    };
+
+    eprintln!();
+    eprintln!("Session {session_id}{cost_str}");
+    eprintln!("Resume this session: opendev -r {session_id}");
 }
 
 /// Replay recorded events from a JSONL file for debugging.

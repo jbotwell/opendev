@@ -17,6 +17,7 @@ pub mod path;
 pub mod policy;
 pub mod registry;
 pub mod sanitizer;
+pub mod tool_names;
 pub mod traits;
 pub mod validation;
 

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Message } from '../../types';
+import { BashPreview } from './BashPreview';
+import { DiffViewer } from './DiffViewer';
 
 interface ToolCallMessageProps {
   message: Message;
@@ -579,6 +581,13 @@ export function ToolCallMessage({ message, hasResult }: ToolCallMessageExtProps)
           </button>
         )}
 
+        {/* Bash preview when collapsed (shell commands with >4 lines) */}
+        {!isExpanded && (toolName === 'run_command' || toolName === 'bash_execute') && fullOutput && fullOutput.split('\n').length > 4 && (
+          <div className="ml-4 pl-3 border-l-2 border-border-300/30 mt-1">
+            <BashPreview output={fullOutput} />
+          </div>
+        )}
+
         {/* Expanded content — always rendered, animated via maxHeight */}
         {hasExpandableContent && (
           <div
@@ -588,11 +597,13 @@ export function ToolCallMessage({ message, hasResult }: ToolCallMessageExtProps)
             }}
           >
             <div ref={expandRef} className="ml-4 mt-3 pl-3 border-t border-border-300/15 pt-3">
-              {fullOutput && (
+              {fullOutput && (toolName === 'edit_file' || toolName === 'apply_patch') && fullOutput.includes('@@') ? (
+                <DiffViewer diff={fullOutput} />
+              ) : fullOutput ? (
                 <pre className="text-sm text-text-300 font-mono bg-bg-000 border border-border-300/15 rounded p-3 overflow-x-auto leading-6">
                   {fullOutput}
                 </pre>
-              )}
+              ) : null}
             </div>
           </div>
         )}

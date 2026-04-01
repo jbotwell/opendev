@@ -19,6 +19,21 @@ use ratatui::{
 /// Spinner frames for the active-todo display (rotating arrow cycle).
 const SPINNER_FRAMES: &[char] = &['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
 
+/// Compute the todo panel height from item count and expanded state.
+///
+/// Shared helper so callers don't duplicate the formula.
+/// Returns 0 when `item_count` is 0 (no panel).
+pub fn todo_panel_height(item_count: usize, expanded: bool) -> u16 {
+    if item_count == 0 {
+        return 0;
+    }
+    if !expanded {
+        return 3;
+    }
+    // 2 borders + items (capped at 12 total rows)
+    (item_count as u16 + 2).min(12)
+}
+
 /// Status of a single todo item for display purposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TodoDisplayStatus {
@@ -255,239 +270,5 @@ impl Widget for TodoPanelWidget<'_> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_items() -> Vec<TodoDisplayItem> {
-        vec![
-            TodoDisplayItem {
-                id: 1,
-                title: "Set up project".into(),
-                status: TodoDisplayStatus::Completed,
-                active_form: None,
-            },
-            TodoDisplayItem {
-                id: 2,
-                title: "Write code".into(),
-                status: TodoDisplayStatus::InProgress,
-                active_form: Some("Writing code".into()),
-            },
-            TodoDisplayItem {
-                id: 3,
-                title: "Write tests".into(),
-                status: TodoDisplayStatus::Pending,
-                active_form: None,
-            },
-        ]
-    }
-
-    #[test]
-    fn test_build_lines_count() {
-        let items = make_items();
-        let widget = TodoPanelWidget::new(&items);
-        let (done, in_progress, total) = widget.counts();
-        let lines = widget.build_lines(done, in_progress, total);
-        // 3 item lines (no progress bar)
-        assert_eq!(lines.len(), 3);
-    }
-
-    #[test]
-    fn test_render_does_not_panic() {
-        let items = make_items();
-        let widget = TodoPanelWidget::new(&items).with_plan_name("bold-blazing-badger");
-        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
-        widget.render(Rect::new(0, 0, 80, 10), &mut buf);
-    }
-
-    #[test]
-    fn test_empty_items() {
-        let items: Vec<TodoDisplayItem> = vec![];
-        let widget = TodoPanelWidget::new(&items);
-        let (done, in_progress, total) = widget.counts();
-        let lines = widget.build_lines(done, in_progress, total);
-        assert!(lines.is_empty());
-    }
-
-    #[test]
-    fn test_all_completed_green_border() {
-        let items = vec![
-            TodoDisplayItem {
-                id: 1,
-                title: "Done".into(),
-                status: TodoDisplayStatus::Completed,
-                active_form: None,
-            },
-            TodoDisplayItem {
-                id: 2,
-                title: "Also done".into(),
-                status: TodoDisplayStatus::Completed,
-                active_form: None,
-            },
-        ];
-        // Just verify no panic with all completed
-        let widget = TodoPanelWidget::new(&items);
-        let mut buf = Buffer::empty(Rect::new(0, 0, 60, 6));
-        widget.render(Rect::new(0, 0, 60, 6), &mut buf);
-    }
-
-    #[test]
-    fn test_long_title_not_truncated() {
-        let items = vec![TodoDisplayItem {
-            id: 1,
-            title: "A".repeat(100),
-            status: TodoDisplayStatus::Pending,
-            active_form: None,
-        }];
-        let widget = TodoPanelWidget::new(&items);
-        let (done, in_progress, total) = widget.counts();
-        let lines = widget.build_lines(done, in_progress, total);
-        assert_eq!(lines.len(), 1);
-        // Full title should be present (no truncation)
-        let text: String = lines[0]
-            .spans
-            .iter()
-            .map(|s| s.content.to_string())
-            .collect();
-        assert!(text.contains(&"A".repeat(100)));
-    }
-
-    #[test]
-    fn test_collapsed_render() {
-        let items = make_items();
-        let widget = TodoPanelWidget::new(&items)
-            .with_expanded(false)
-            .with_spinner_tick(3);
-        let mut buf = Buffer::empty(Rect::new(0, 0, 60, 3));
-        widget.render(Rect::new(0, 0, 60, 3), &mut buf);
-    }
-
-    #[test]
-    fn test_collapsed_uses_active_form() {
-        let items = make_items();
-        let widget = TodoPanelWidget::new(&items).with_expanded(false);
-        let (done, _, total) = widget.counts();
-        let line = widget.build_collapsed_line(done, total);
-        // Should contain the active_form text "Writing code"
-        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
-        assert!(text.contains("Writing code"));
-    }
-
-    #[test]
-    fn test_required_height_expanded() {
-        let items = make_items();
-        let widget = TodoPanelWidget::new(&items);
-        // 3 items + 2 borders = 5
-        assert_eq!(widget.required_height(), 5);
-    }
-
-    #[test]
-    fn test_collapsed_all_done_shows_checkmark() {
-        let items = vec![
-            TodoDisplayItem {
-                id: 1,
-                title: "Task A".into(),
-                status: TodoDisplayStatus::Completed,
-                active_form: None,
-            },
-            TodoDisplayItem {
-                id: 2,
-                title: "Task B".into(),
-                status: TodoDisplayStatus::Completed,
-                active_form: None,
-            },
-        ];
-        let widget = TodoPanelWidget::new(&items).with_expanded(false);
-        let (done, _, total) = widget.counts();
-        let line = widget.build_collapsed_line(done, total);
-        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
-        assert!(
-            text.contains("All tasks complete"),
-            "Expected 'All tasks complete', got: {text}"
-        );
-        assert!(text.contains('\u{2714}'), "Expected checkmark in: {text}");
-        assert!(
-            !text.contains("Working"),
-            "Should not show 'Working' when all done"
-        );
-    }
-
-    #[test]
-    fn test_required_height_zero_when_all_done() {
-        let items = vec![
-            TodoDisplayItem {
-                id: 1,
-                title: "Done".into(),
-                status: TodoDisplayStatus::Completed,
-                active_form: None,
-            },
-            TodoDisplayItem {
-                id: 2,
-                title: "Also done".into(),
-                status: TodoDisplayStatus::Completed,
-                active_form: None,
-            },
-        ];
-        let widget = TodoPanelWidget::new(&items);
-        assert_eq!(
-            widget.required_height(),
-            0,
-            "Panel should hide (height 0) when all items are completed"
-        );
-    }
-
-    #[test]
-    fn test_required_height_collapsed() {
-        let items = make_items();
-        let widget = TodoPanelWidget::new(&items).with_expanded(false);
-        assert_eq!(widget.required_height(), 3);
-    }
-
-    #[test]
-    fn test_expanded_title_no_spinner_in_header() {
-        let items = make_items(); // has 1 in-progress item
-        let widget = TodoPanelWidget::new(&items).with_spinner_tick(2);
-        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 10));
-        widget.render(Rect::new(0, 0, 80, 10), &mut buf);
-        // Extract top row text from buffer
-        let top_row: String = (0..80)
-            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
-            .collect::<String>();
-        // No spinner in the expanded header (spinners are per-item only)
-        for frame in SPINNER_FRAMES {
-            assert!(
-                !top_row.contains(*frame),
-                "Should not have spinner in expanded header, got: {top_row}"
-            );
-        }
-        assert!(
-            top_row.contains("Ctrl+T to toggle"),
-            "Expected hint in title, got: {top_row}"
-        );
-    }
-
-    #[test]
-    fn test_expanded_title_no_spinner_when_all_done() {
-        let items = vec![TodoDisplayItem {
-            id: 1,
-            title: "Done".into(),
-            status: TodoDisplayStatus::Completed,
-            active_form: None,
-        }];
-        let widget = TodoPanelWidget::new(&items).with_spinner_tick(2);
-        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 6));
-        widget.render(Rect::new(0, 0, 80, 6), &mut buf);
-        let top_row: String = (0..80)
-            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
-            .collect::<String>();
-        for frame in SPINNER_FRAMES {
-            assert!(
-                !top_row.contains(*frame),
-                "Should not have spinner when all done, got: {top_row}"
-            );
-        }
-        assert!(
-            top_row.contains("Ctrl+T to toggle"),
-            "Expected hint in title, got: {top_row}"
-        );
-    }
-}
+#[path = "todo_panel_tests.rs"]
+mod tests;

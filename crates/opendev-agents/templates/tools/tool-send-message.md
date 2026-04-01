@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: send_message'
+name: 'Tool Description: SendMessage'
 description: Send messages to configured channels
 version: 1.0.0
 -->

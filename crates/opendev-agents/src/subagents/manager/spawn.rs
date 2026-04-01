@@ -26,8 +26,11 @@ fn select_runner(
 
     match SubagentType::from_name(&spec.name) {
         SubagentType::CodeExplorer => {
-            let max_iterations = spec.max_steps.unwrap_or(200) as usize;
-            Box::new(SimpleReactRunner::new(max_iterations))
+            let max_iterations = spec.max_steps.unwrap_or(100) as usize;
+            Box::new(SimpleReactRunner::new(
+                max_iterations,
+                std::time::Duration::from_secs(600),
+            ))
         }
         _ => {
             // Default to 25 iterations for non-Explorer agents (matches old behavior)
@@ -64,6 +67,8 @@ impl SubagentManager {
         parent_max_tokens: u64,
         parent_reasoning_effort: Option<String>,
         cancel_token: Option<CancellationToken>,
+        debug_logger: Option<&opendev_runtime::SessionDebugLogger>,
+        model_override: Option<&str>,
     ) -> Result<SubagentRunResult, AgentError> {
         let spec = self.get(subagent_name).ok_or_else(|| {
             AgentError::ConfigError(format!("Unknown subagent type: {subagent_name}"))
@@ -81,13 +86,17 @@ impl SubagentManager {
             task_len = task.len(),
             tool_count = spec.tools.len(),
             working_dir = %working_dir,
+            model_override = ?model_override,
             "Spawning subagent"
         );
 
         progress.on_started(&spec.name, task);
 
-        // Determine model (spec override or parent's model)
-        let model = spec.model.as_deref().unwrap_or(parent_model).to_string();
+        // Determine model: model_override > spec.model > parent_model
+        let model = model_override
+            .or(spec.model.as_deref())
+            .unwrap_or(parent_model)
+            .to_string();
 
         // Build restricted tool list (if specified)
         let mut allowed_tools = if spec.has_tool_restriction() {
@@ -185,6 +194,20 @@ impl SubagentManager {
             allowed_tools.as_deref(),
         );
 
+        if tool_schemas.is_empty() {
+            warn!(
+                subagent = %spec.name,
+                allowed_tools = ?allowed_tools,
+                "Tool schemas are EMPTY — subagent has no tools available"
+            );
+        } else {
+            debug!(
+                subagent = %spec.name,
+                schema_count = tool_schemas.len(),
+                "Built tool schemas for subagent"
+            );
+        }
+
         // Build tool context
         let mut tool_context = opendev_tools_core::ToolContext::new(working_dir);
         tool_context.is_subagent = true;
@@ -223,6 +246,8 @@ impl SubagentManager {
             event_callback: Some(bridge.as_ref() as &dyn crate::traits::AgentEventCallback),
             cancel: tool_context.cancel_token.as_ref(),
             tool_approval_tx,
+            debug_logger,
+            mailbox: None,
         };
 
         // Run the isolated ReAct loop via the selected runner
@@ -247,7 +272,8 @@ impl SubagentManager {
                 }
 
                 let summary = if agent_result.content.len() > 200 {
-                    format!("{}...", &agent_result.content[..200])
+                    let end = agent_result.content.floor_char_boundary(200);
+                    format!("{}...", &agent_result.content[..end])
                 } else {
                     agent_result.content.clone()
                 };

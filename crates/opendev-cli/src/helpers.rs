@@ -21,10 +21,20 @@ pub fn init_tracing(verbose: bool, tui_mode: bool) {
         if let Some(home) = dirs_next::home_dir() {
             let log_dir = home.join(".opendev").join("logs");
             let _ = std::fs::create_dir_all(&log_dir);
+            let log_path = log_dir.join("opendev.log");
+
+            // Truncate if over 10 MB to prevent unbounded growth
+            const MAX_LOG_SIZE: u64 = 10 * 1024 * 1024;
+            if let Ok(meta) = std::fs::metadata(&log_path)
+                && meta.len() > MAX_LOG_SIZE
+            {
+                let _ = std::fs::write(&log_path, b"");
+            }
+
             if let Ok(file) = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(log_dir.join("opendev.log"))
+                .open(&log_path)
             {
                 tracing_subscriber::fmt()
                     .with_env_filter(filter)

@@ -12,6 +12,7 @@ class WebSocketClient {
   private intentionalClose = false;
   private pingInterval: number | null = null;
   private visibilityListenerAdded = false;
+  private lastSeq: number = 0;
 
   connect() {
     // Prevent multiple connections
@@ -42,11 +43,29 @@ class WebSocketClient {
         this.reconnectAttempts = 0;
         this.emit({ type: 'connected', data: {} });
         this.startHeartbeat();
+
+        // Request catch-up for messages missed during disconnection
+        if (this.lastSeq > 0) {
+          console.log(`Requesting catch-up from seq ${this.lastSeq}`);
+          this.send({ type: 'sync', data: { last_seq: this.lastSeq } });
+        }
       };
 
       this.ws.onmessage = (event) => {
         try {
           const message: WSMessage = JSON.parse(event.data);
+
+          // Track sequence numbers for ordering and dedup.
+          // Messages arrive with monotonically increasing seq from the server,
+          // so a simple watermark suffices — no need for a Set of seen seqs.
+          const seq = (message as any).seq;
+          if (typeof seq === 'number') {
+            if (seq <= this.lastSeq) {
+              return; // Already processed (duplicate from catch-up replay)
+            }
+            this.lastSeq = seq;
+          }
+
           this.emit(message);
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error);

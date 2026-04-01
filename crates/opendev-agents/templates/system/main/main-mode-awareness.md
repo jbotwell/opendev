@@ -12,7 +12,7 @@ For non-trivial implementation tasks, first understand the codebase before plann
 2. Read relevant files to understand existing patterns and conventions
 3. Spawn a Planner subagent with your findings and a plan file path under ~/.opendev/plans/
 
-After the Planner returns, call present_plan(plan_file_path="...") to show
+After the Planner returns, call EnterPlanMode(plan_file_path="...") to show
 the plan to the user and get approval.
 
 If the user requests modifications, re-spawn the Planner with feedback and

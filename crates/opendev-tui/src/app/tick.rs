@@ -51,9 +51,12 @@ impl App {
             self.state.welcome_panel.tick(w, h);
         }
 
-        // Advance spinner animation
+        // Advance spinner animation (only count unfinished subagents so
+        // the spinner stops promptly instead of persisting through the
+        // finished-subagent grace period)
         if self.state.agent_active
             || !self.state.active_tools.is_empty()
+            || self.state.active_subagents.iter().any(|s| !s.finished)
             || self.state.background_task_count > 0
         {
             self.state.spinner.tick();
@@ -117,7 +120,7 @@ impl App {
                 active_tools.iter().any(|t| t.id == *ptid)
             } else {
                 active_tools.iter().any(|t| {
-                    t.name == "spawn_subagent"
+                    matches!(t.name.as_str(), "Agent" | "spawn_subagent")
                         && t.args.get("task").and_then(|v| v.as_str()) == Some(&s.task)
                 })
             };
@@ -127,6 +130,21 @@ impl App {
             // No matching tool — extended grace period when task watcher is open
             let grace = if task_watcher_open { 60 } else { 1 };
             s.finished_at.is_some_and(|t| t.elapsed().as_secs() < grace)
+        });
+
+        // Orphan cleanup: remove unfinished subagents whose parent tool has been removed.
+        // This handles the race where SubagentStarted's fallback creates a new entry between
+        // ToolResult (which removed the original entry) and ToolFinished (which removes the
+        // parent tool), leaving an orphan that would otherwise persist indefinitely.
+        let active_tools = &self.state.active_tools;
+        self.state.active_subagents.retain(|s| {
+            if s.finished || s.backgrounded {
+                return true; // handled by the block above
+            }
+            match &s.parent_tool_id {
+                Some(ptid) => active_tools.iter().any(|t| t.id == *ptid),
+                None => s.started_at.elapsed().as_secs() < 30, // safety timeout
+            }
         });
 
         // Update task progress elapsed time from wall clock
@@ -234,6 +252,15 @@ impl App {
                 }
             }
             self.state.dirty = true;
+        }
+
+        // Expire Ctrl+C pending after 2 seconds
+        if self
+            .state
+            .ctrl_c_pending
+            .is_some_and(|t| t.elapsed() >= Duration::from_secs(2))
+        {
+            self.state.ctrl_c_pending = None;
         }
 
         // Auto-scroll if user hasn't manually scrolled up

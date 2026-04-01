@@ -10,9 +10,10 @@ import { apiClient } from '../../api/client';
 
 interface Session {
   id: string;
-  working_dir: string;
+  working_dir?: string;
+  working_directory?: string;
   message_count: number;
-  token_usage: {
+  token_usage?: {
     prompt_tokens: number;
     completion_tokens: number;
   };
@@ -61,6 +62,15 @@ export function SessionsSidebar() {
   const currentSessionIsEmpty = currentSessionId !== null && (
     (sessionStates[currentSessionId]?.messages ?? []).length === 0
   );
+
+  // Per-workspace check: only disable "New Session" in the workspace
+  // that contains the current empty session (not globally).
+  const workspaceHasCurrentEmptySession = (workspace: WorkspaceGroup): boolean => {
+    if (currentSessionId === null) return false;
+    const isCurrentInWorkspace = workspace.sessions.some(s => s.id === currentSessionId);
+    if (!isCurrentInWorkspace) return false;
+    return (sessionStates[currentSessionId]?.messages ?? []).length === 0;
+  };
 
   useEffect(() => {
     fetchSessions();
@@ -113,10 +123,11 @@ export function SessionsSidebar() {
 
     // Filter out sessions without a working directory
     sessions.forEach(session => {
-      if (!session.working_dir || session.working_dir.trim() === '') {
-        return; // Skip sessions without working_dir
+      const wd = session.working_dir || session.working_directory;
+      if (!wd || wd.trim() === '') {
+        return; // Skip sessions without working directory
       }
-      const path = session.working_dir;
+      const path = wd;
       if (!groups[path]) {
         groups[path] = [];
       }
@@ -185,8 +196,9 @@ export function SessionsSidebar() {
       await fetchSessions();
 
       // Load the new session
-      if (result.session && result.session.id) {
-        await loadSession(result.session.id);
+      const sessionId = result.id;
+      if (sessionId) {
+        await loadSession(sessionId);
       }
     } catch (error) {
       console.error('[SessionsSidebar] Failed to create session:', error);
@@ -490,11 +502,11 @@ export function SessionsSidebar() {
                         <div className="px-4 pb-3 space-y-1.5 border-t border-gray-100 pt-2">
                           {/* Add New Session Button */}
                           <button
-                            onClick={currentSessionIsEmpty ? undefined : (e) => handleNewSessionInWorkspace(workspace.path, e)}
-                            disabled={currentSessionIsEmpty}
-                            title={currentSessionIsEmpty ? 'Send a message before starting a new session' : undefined}
+                            onClick={workspaceHasCurrentEmptySession(workspace) ? undefined : (e) => handleNewSessionInWorkspace(workspace.path, e)}
+                            disabled={workspaceHasCurrentEmptySession(workspace)}
+                            title={workspaceHasCurrentEmptySession(workspace) ? 'Send a message before starting a new session' : undefined}
                             className={`w-full px-4 py-3 rounded-lg text-left border-2 border-dashed flex items-center gap-2 ${
-                              currentSessionIsEmpty
+                              workspaceHasCurrentEmptySession(workspace)
                                 ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
                                 : 'cursor-pointer bg-amber-50/50 hover:bg-amber-50 border-amber-300 hover:border-amber-400 text-amber-700'
                             }`}

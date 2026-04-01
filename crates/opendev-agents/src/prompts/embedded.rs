@@ -16,26 +16,22 @@ pub const GENERATORS_GENERATOR_AGENT: &str =
 pub const GENERATORS_GENERATOR_SKILL: &str =
     include_str!("../../templates/generators/generator-skill.md");
 
-// memory/
-pub const MEMORY_MEMORY_SENTIMENT_ANALYSIS: &str =
-    include_str!("../../templates/memory/memory-sentiment-analysis.md");
-pub const MEMORY_MEMORY_TOPIC_DETECTION: &str =
-    include_str!("../../templates/memory/memory-topic-detection.md");
-pub const MEMORY_MEMORY_UPDATE_INSTRUCTIONS: &str =
-    include_str!("../../templates/memory/memory-update-instructions.md");
-
 // top-level
 pub const REMINDERS: &str = include_str!("../../templates/reminders.md");
 
 // subagents/
-pub const SUBAGENTS_SUBAGENT_ASK_USER: &str =
-    include_str!("../../templates/subagents/subagent-ask-user.md");
+pub const SUBAGENTS_SUBAGENT_BUILD: &str =
+    include_str!("../../templates/subagents/subagent-build.md");
 pub const SUBAGENTS_SUBAGENT_CODE_EXPLORER: &str =
     include_str!("../../templates/subagents/subagent-code-explorer.md");
+pub const SUBAGENTS_SUBAGENT_GENERAL: &str =
+    include_str!("../../templates/subagents/subagent-general.md");
 pub const SUBAGENTS_SUBAGENT_PLANNER: &str =
     include_str!("../../templates/subagents/subagent-planner.md");
 pub const SUBAGENTS_SUBAGENT_PROJECT_INIT: &str =
     include_str!("../../templates/subagents/subagent-project-init.md");
+pub const SUBAGENTS_SUBAGENT_VERIFICATION: &str =
+    include_str!("../../templates/subagents/subagent-verification.md");
 
 // system/
 pub const SYSTEM_COMPACTION: &str = include_str!("../../templates/system/compaction.md");
@@ -45,8 +41,8 @@ pub const SYSTEM_MAIN: &str = include_str!("../../templates/system/main.md");
 // system/main/
 pub const SYSTEM_MAIN_MAIN_ACTION_SAFETY: &str =
     include_str!("../../templates/system/main/main-action-safety.md");
-pub const SYSTEM_MAIN_MAIN_AVAILABLE_TOOLS: &str =
-    include_str!("../../templates/system/main/main-available-tools.md");
+pub const SYSTEM_MAIN_MAIN_AUTO_MEMORY: &str =
+    include_str!("../../templates/system/main/main-auto-memory.md");
 pub const SYSTEM_MAIN_MAIN_CODE_QUALITY: &str =
     include_str!("../../templates/system/main/main-code-quality.md");
 pub const SYSTEM_MAIN_MAIN_CODE_REFERENCES: &str =
@@ -55,22 +51,20 @@ pub const SYSTEM_MAIN_MAIN_ERROR_RECOVERY: &str =
     include_str!("../../templates/system/main/main-error-recovery.md");
 pub const SYSTEM_MAIN_MAIN_GIT_WORKFLOW: &str =
     include_str!("../../templates/system/main/main-git-workflow.md");
-pub const SYSTEM_MAIN_MAIN_INTERACTION_PATTERN: &str =
-    include_str!("../../templates/system/main/main-interaction-pattern.md");
 pub const SYSTEM_MAIN_MAIN_MODE_AWARENESS: &str =
     include_str!("../../templates/system/main/main-mode-awareness.md");
 pub const SYSTEM_MAIN_MAIN_NO_TIME_ESTIMATES: &str =
     include_str!("../../templates/system/main/main-no-time-estimates.md");
 pub const SYSTEM_MAIN_MAIN_OUTPUT_AWARENESS: &str =
     include_str!("../../templates/system/main/main-output-awareness.md");
+pub const SYSTEM_MAIN_MAIN_OUTPUT_EFFICIENCY: &str =
+    include_str!("../../templates/system/main/main-output-efficiency.md");
 pub const SYSTEM_MAIN_MAIN_PROVIDER_ANTHROPIC: &str =
     include_str!("../../templates/system/main/main-provider-anthropic.md");
 pub const SYSTEM_MAIN_MAIN_PROVIDER_FIREWORKS: &str =
     include_str!("../../templates/system/main/main-provider-fireworks.md");
 pub const SYSTEM_MAIN_MAIN_PROVIDER_OPENAI: &str =
     include_str!("../../templates/system/main/main-provider-openai.md");
-pub const SYSTEM_MAIN_MAIN_READ_BEFORE_EDIT: &str =
-    include_str!("../../templates/system/main/main-read-before-edit.md");
 pub const SYSTEM_MAIN_MAIN_REMINDERS_NOTE: &str =
     include_str!("../../templates/system/main/main-reminders-note.md");
 pub const SYSTEM_MAIN_MAIN_SCRATCHPAD: &str =
@@ -149,6 +143,7 @@ pub const TOOLS_TOOL_GREP: &str = include_str!("../../templates/tools/tool-grep.
 pub const TOOLS_TOOL_AST_GREP: &str = include_str!("../../templates/tools/tool-ast-grep.md");
 pub const TOOLS_TOOL_SEND_MESSAGE: &str =
     include_str!("../../templates/tools/tool-send-message.md");
+pub const TOOLS_TOOL_SPAWN_AGENT: &str = include_str!("../../templates/tools/tool-spawn-agent.md");
 pub const TOOLS_TOOL_TASK_COMPLETE: &str =
     include_str!("../../templates/tools/tool-task-complete.md");
 pub const TOOLS_TOOL_UPDATE_TODO: &str = include_str!("../../templates/tools/tool-update-todo.md");
@@ -161,7 +156,7 @@ pub const TOOLS_TOOL_WRITE_TODOS: &str = include_str!("../../templates/tools/too
 // ---------------------------------------------------------------------------
 
 /// Total number of embedded templates.
-pub const TEMPLATE_COUNT: usize = 79;
+pub const TEMPLATE_COUNT: usize = 78;
 
 /// All embedded templates indexed by their relative path.
 ///
@@ -174,36 +169,24 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
     m.insert("generators/generator-agent.md", GENERATORS_GENERATOR_AGENT);
     m.insert("generators/generator-skill.md", GENERATORS_GENERATOR_SKILL);
 
-    // memory
-    m.insert(
-        "memory/memory-sentiment-analysis.md",
-        MEMORY_MEMORY_SENTIMENT_ANALYSIS,
-    );
-    m.insert(
-        "memory/memory-topic-detection.md",
-        MEMORY_MEMORY_TOPIC_DETECTION,
-    );
-    m.insert(
-        "memory/memory-update-instructions.md",
-        MEMORY_MEMORY_UPDATE_INSTRUCTIONS,
-    );
-
     // top-level
     m.insert("reminders.md", REMINDERS);
 
     // subagents
-    m.insert(
-        "subagents/subagent-ask-user.md",
-        SUBAGENTS_SUBAGENT_ASK_USER,
-    );
+    m.insert("subagents/subagent-build.md", SUBAGENTS_SUBAGENT_BUILD);
     m.insert(
         "subagents/subagent-code-explorer.md",
         SUBAGENTS_SUBAGENT_CODE_EXPLORER,
     );
+    m.insert("subagents/subagent-general.md", SUBAGENTS_SUBAGENT_GENERAL);
     m.insert("subagents/subagent-planner.md", SUBAGENTS_SUBAGENT_PLANNER);
     m.insert(
         "subagents/subagent-project-init.md",
         SUBAGENTS_SUBAGENT_PROJECT_INIT,
+    );
+    m.insert(
+        "subagents/subagent-verification.md",
+        SUBAGENTS_SUBAGENT_VERIFICATION,
     );
 
     // system
@@ -217,8 +200,8 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
         SYSTEM_MAIN_MAIN_ACTION_SAFETY,
     );
     m.insert(
-        "system/main/main-available-tools.md",
-        SYSTEM_MAIN_MAIN_AVAILABLE_TOOLS,
+        "system/main/main-auto-memory.md",
+        SYSTEM_MAIN_MAIN_AUTO_MEMORY,
     );
     m.insert(
         "system/main/main-code-quality.md",
@@ -237,10 +220,6 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
         SYSTEM_MAIN_MAIN_GIT_WORKFLOW,
     );
     m.insert(
-        "system/main/main-interaction-pattern.md",
-        SYSTEM_MAIN_MAIN_INTERACTION_PATTERN,
-    );
-    m.insert(
         "system/main/main-mode-awareness.md",
         SYSTEM_MAIN_MAIN_MODE_AWARENESS,
     );
@@ -253,6 +232,10 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
         SYSTEM_MAIN_MAIN_OUTPUT_AWARENESS,
     );
     m.insert(
+        "system/main/main-output-efficiency.md",
+        SYSTEM_MAIN_MAIN_OUTPUT_EFFICIENCY,
+    );
+    m.insert(
         "system/main/main-provider-anthropic.md",
         SYSTEM_MAIN_MAIN_PROVIDER_ANTHROPIC,
     );
@@ -263,10 +246,6 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
     m.insert(
         "system/main/main-provider-openai.md",
         SYSTEM_MAIN_MAIN_PROVIDER_OPENAI,
-    );
-    m.insert(
-        "system/main/main-read-before-edit.md",
-        SYSTEM_MAIN_MAIN_READ_BEFORE_EDIT,
     );
     m.insert(
         "system/main/main-reminders-note.md",
@@ -365,6 +344,7 @@ pub static TEMPLATES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::
     m.insert("tools/tool-grep.md", TOOLS_TOOL_GREP);
     m.insert("tools/tool-ast-grep.md", TOOLS_TOOL_AST_GREP);
     m.insert("tools/tool-send-message.md", TOOLS_TOOL_SEND_MESSAGE);
+    m.insert("tools/tool-spawn-agent.md", TOOLS_TOOL_SPAWN_AGENT);
     m.insert("tools/tool-task-complete.md", TOOLS_TOOL_TASK_COMPLETE);
     m.insert("tools/tool-update-todo.md", TOOLS_TOOL_UPDATE_TODO);
     m.insert("tools/tool-web-search.md", TOOLS_TOOL_WEB_SEARCH);
@@ -413,15 +393,6 @@ pub fn subagent_templates() -> Vec<(&'static str, &'static str)> {
         .collect()
 }
 
-/// Get all embedded templates in the `memory/` category.
-pub fn memory_templates() -> Vec<(&'static str, &'static str)> {
-    TEMPLATES
-        .iter()
-        .filter(|(k, _)| k.starts_with("memory/"))
-        .map(|(&k, &v)| (k, v))
-        .collect()
-}
-
 /// Get all embedded templates in the `generators/` category.
 pub fn generator_templates() -> Vec<(&'static str, &'static str)> {
     TEMPLATES
@@ -432,65 +403,5 @@ pub fn generator_templates() -> Vec<(&'static str, &'static str)> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_all_templates_embedded() {
-        assert_eq!(TEMPLATES.len(), TEMPLATE_COUNT);
-    }
-
-    #[test]
-    fn test_get_embedded_known() {
-        let content = get_embedded("system/main/main-security-policy.md");
-        assert!(content.is_some());
-        assert!(content.unwrap().contains("Security Policy"));
-    }
-
-    #[test]
-    fn test_get_embedded_unknown() {
-        assert!(get_embedded("nonexistent.md").is_none());
-    }
-
-    #[test]
-    fn test_system_main_templates() {
-        let templates = system_main_templates();
-        assert!(templates.len() >= 20);
-        assert!(templates.iter().all(|(k, _)| k.starts_with("system/main/")));
-    }
-
-    #[test]
-    fn test_tool_templates() {
-        let templates = tool_templates();
-        assert!(templates.len() >= 30);
-        assert!(templates.iter().all(|(k, _)| k.starts_with("tools/")));
-    }
-
-    #[test]
-    fn test_subagent_templates() {
-        let templates = subagent_templates();
-        assert!(templates.len() >= 4);
-    }
-
-    #[test]
-    fn test_build_init_prompt_no_args() {
-        let prompt = build_init_prompt("");
-        assert!(prompt.contains("AGENTS.md"));
-        assert!(prompt.contains("Build/lint/test"));
-        assert!(!prompt.contains("{args}"));
-    }
-
-    #[test]
-    fn test_build_init_prompt_with_args() {
-        let prompt = build_init_prompt("focus on testing");
-        assert!(prompt.contains("focus on testing"));
-        assert!(!prompt.contains("{args}"));
-    }
-
-    #[test]
-    fn test_no_empty_templates() {
-        for (path, content) in TEMPLATES.iter() {
-            assert!(!content.is_empty(), "Template {} is empty", path);
-        }
-    }
-}
+#[path = "embedded_tests.rs"]
+mod tests;

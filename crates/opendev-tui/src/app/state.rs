@@ -45,6 +45,14 @@ pub struct AppState {
     pub mcp_has_errors: bool,
     /// Whether the agent is currently processing.
     pub agent_active: bool,
+    /// Timestamp of the last token/event received from the agent (for stall detection).
+    pub last_token_at: Option<Instant>,
+    /// Context from the last completed tool (e.g. "Read src/main.rs") for thinking spinner.
+    pub last_tool_context: Option<String>,
+    /// Estimated token count for the current turn (for long-turn display).
+    pub turn_token_count: u64,
+    /// When the current turn started (for long-turn token counter threshold).
+    pub turn_started_at: Option<Instant>,
     /// Conversation messages for display.
     pub messages: Vec<DisplayMessage>,
     /// Current task progress (while agent is working).
@@ -148,6 +156,10 @@ pub struct AppState {
     pub task_watcher_cell_scrolls: Vec<usize>,
     /// Page offset when tasks exceed grid capacity.
     pub task_watcher_page: usize,
+    /// Index of expanded detail view cell, or None for grid mode.
+    pub task_watcher_detail: Option<usize>,
+    /// Whether to sort by status (running first) instead of time.
+    pub task_watcher_sort_by_status: bool,
     /// When all tasks finished (for auto-close after 3s grace).
     pub task_watcher_all_done_at: Option<Instant>,
     /// Last task completion flash: (task_id, when).
@@ -166,6 +178,8 @@ pub struct AppState {
     pub debug_panel_open: bool,
     /// Session title (set by the agent).
     pub session_title: Option<String>,
+    /// Session ID for display in status bar and exit message.
+    pub session_id: Option<String>,
     /// Maps background subagent IDs to their parent background task IDs.
     pub bg_subagent_map: HashMap<String, String>,
     /// Per-subagent cancellation tokens for individual kill support.
@@ -177,6 +191,9 @@ pub struct AppState {
     /// Timestamp of last user-interactive event (key, mouse, scroll).
     /// Used to detect tab-switch return via timing gap.
     pub last_event_time: Option<Instant>,
+    /// Timestamp of first Ctrl+C press for two-stage exit confirmation.
+    /// When set, a second Ctrl+C within 2 seconds will exit the app.
+    pub ctrl_c_pending: Option<Instant>,
 }
 
 impl Default for AppState {
@@ -197,6 +214,10 @@ impl Default for AppState {
             mcp_status: None,
             mcp_has_errors: false,
             agent_active: false,
+            last_token_at: None,
+            last_tool_context: None,
+            turn_token_count: 0,
+            turn_started_at: None,
             messages: Vec::new(),
             task_progress: None,
             spinner: crate::widgets::spinner::SpinnerState::new(),
@@ -249,6 +270,8 @@ impl Default for AppState {
             task_watcher_focus: 0,
             task_watcher_cell_scrolls: Vec::new(),
             task_watcher_page: 0,
+            task_watcher_detail: None,
+            task_watcher_sort_by_status: false,
             task_watcher_all_done_at: None,
             last_task_completion: None,
             toasts: Vec::new(),
@@ -258,34 +281,17 @@ impl Default for AppState {
             redo_stack: Vec::new(),
             debug_panel_open: false,
             session_title: None,
+            session_id: None,
             bg_subagent_map: HashMap::new(),
             subagent_cancel_tokens: HashMap::new(),
             selection: SelectionState::default(),
             force_clear: false,
             last_event_time: None,
+            ctrl_c_pending: None,
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_app_state_default() {
-        let state = AppState::default();
-        assert!(state.running);
-        assert_eq!(state.mode, OperationMode::Normal);
-        assert!(state.messages.is_empty());
-        assert!(state.input_buffer.is_empty());
-    }
-
-    #[test]
-    fn test_dirty_flag_default() {
-        let state = AppState::default();
-        assert!(
-            state.dirty,
-            "AppState should start dirty for initial render"
-        );
-    }
-}
+#[path = "state_tests.rs"]
+mod tests;

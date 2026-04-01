@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: ask_user'
+name: 'Tool Description: AskUserQuestion'
 description: Ask the user structured questions with multiple-choice options
 version: 2.0.0
 -->
@@ -12,4 +12,4 @@ Ask the user structured questions with multiple-choice options. Use this when yo
 - Users will always be able to select "Other" to provide custom text input — you do not need to include an "Other" option
 - Use multiSelect=true to allow multiple answers when choices are not mutually exclusive. Phrase the question accordingly (e.g., "Which features do you want to enable?")
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
-- When planning: use ask_user to clarify requirements or choose between approaches BEFORE finalizing a plan. Do NOT use ask_user to ask "Is this plan okay?" — use present_plan for plan approval instead
+- When planning: use AskUserQuestion to clarify requirements or choose between approaches BEFORE finalizing a plan. Do NOT use AskUserQuestion to ask "Is this plan okay?" — use EnterPlanMode for plan approval instead

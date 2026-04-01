@@ -44,6 +44,50 @@ pub enum SubagentEvent {
         input_tokens: u64,
         output_tokens: u64,
     },
+
+    // -- Background agent events (run_in_background) --
+    /// A background agent was spawned (returns task_id immediately).
+    BackgroundSpawned {
+        task_id: String,
+        agent_type: String,
+        query: String,
+        description: String,
+        session_id: String,
+        interrupt_token: opendev_runtime::InterruptToken,
+    },
+    /// A background agent completed (success or failure).
+    BackgroundCompleted {
+        task_id: String,
+        success: bool,
+        result_summary: String,
+        full_result: String,
+        cost_usd: f64,
+        tool_call_count: usize,
+    },
+    /// Progress update from a background agent.
+    BackgroundProgress {
+        task_id: String,
+        tool_name: String,
+        tool_count: usize,
+    },
+    /// Activity line from a background agent.
+    BackgroundActivity { task_id: String, line: String },
+
+    // -- Team events --
+    /// A team was created.
+    TeamCreated {
+        team_id: String,
+        leader: String,
+        members: Vec<String>,
+    },
+    /// An inter-agent message was sent.
+    TeamMessageSent {
+        from: String,
+        to: String,
+        preview: String,
+    },
+    /// A team was deleted.
+    TeamDeleted { team_id: String },
 }
 
 /// Progress callback that sends events through an mpsc channel.
@@ -129,109 +173,81 @@ impl opendev_agents::SubagentProgressCallback for ChannelProgressCallback {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Arc;
+/// Progress callback for background agents spawned with `run_in_background`.
+///
+/// Emits `BackgroundProgress` and `BackgroundActivity` events.
+/// All other methods (chunk, reasoning, context_usage) are no-ops to
+/// prevent background tool events from leaking into the foreground display.
+pub struct BackgroundProgressCallback {
+    tx: mpsc::UnboundedSender<SubagentEvent>,
+    task_id: String,
+    tool_count: std::sync::atomic::AtomicUsize,
+}
 
-    #[test]
-    fn test_subagent_event_variants() {
-        let started = SubagentEvent::Started {
-            subagent_id: "id-1".into(),
-            subagent_name: "Explore".into(),
-            task: "Find all TODO comments".into(),
-            cancel_token: None,
-        };
-        assert!(matches!(started, SubagentEvent::Started { .. }));
-
-        let finished = SubagentEvent::Finished {
-            subagent_id: "id-1".into(),
-            subagent_name: "Explore".into(),
-            success: true,
-            result_summary: "Found 5 TODOs".into(),
-            tool_call_count: 3,
-            shallow_warning: None,
-        };
-        assert!(matches!(finished, SubagentEvent::Finished { .. }));
-    }
-
-    #[tokio::test]
-    async fn test_channel_progress_callback() {
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let cb = ChannelProgressCallback::new(tx, "test-id".into(), None);
-
-        use opendev_agents::SubagentProgressCallback;
-        cb.on_started("test-agent", "do a thing");
-        cb.on_tool_call(
-            "test-agent",
-            "read_file",
-            "tc-1",
-            &std::collections::HashMap::new(),
-        );
-        cb.on_tool_complete("test-agent", "read_file", "tc-1", true);
-        // on_finished is intentionally a no-op (SpawnSubagentTool sends the real Finished event)
-        cb.on_finished("test-agent", true, "Done");
-
-        let evt = rx.recv().await.unwrap();
-        assert!(matches!(evt, SubagentEvent::Started { .. }));
-        let evt = rx.recv().await.unwrap();
-        assert!(matches!(evt, SubagentEvent::ToolCall { .. }));
-        let evt = rx.recv().await.unwrap();
-        assert!(matches!(evt, SubagentEvent::ToolComplete { .. }));
-        // No Finished event expected — on_finished is a no-op
-        assert!(rx.try_recv().is_err());
-    }
-
-    #[tokio::test]
-    async fn test_bridge_to_channel_end_to_end() {
-        // Verify the full chain: SubagentEventBridge → ChannelProgressCallback → channel
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let subagent_id = "test-sa-id".to_string();
-        let cb: Arc<dyn opendev_agents::SubagentProgressCallback> =
-            Arc::new(ChannelProgressCallback::new(tx, subagent_id.clone(), None));
-
-        // Create bridge (as SubagentManager::spawn would)
-        let bridge = opendev_agents::SubagentEventBridge::new("Explorer".to_string(), cb);
-
-        // Simulate react loop calling the bridge
-        use opendev_agents::AgentEventCallback;
-        let args = std::collections::HashMap::new();
-        bridge.on_tool_started("tc-1", "read_file", &args);
-        bridge.on_tool_finished("tc-1", true);
-        bridge.on_token_usage(500, 100);
-
-        // Verify events arrive on the channel
-        let evt = rx.recv().await.unwrap();
-        match evt {
-            SubagentEvent::ToolCall {
-                subagent_id: id,
-                subagent_name,
-                tool_name,
-                tool_id,
-                args: _,
-            } => {
-                assert_eq!(id, "test-sa-id");
-                assert_eq!(subagent_name, "Explorer");
-                assert_eq!(tool_name, "read_file");
-                assert_eq!(tool_id, "tc-1");
-            }
-            other => panic!("Expected ToolCall, got {other:?}"),
-        }
-
-        let evt = rx.recv().await.unwrap();
-        assert!(matches!(evt, SubagentEvent::ToolComplete { .. }));
-
-        let evt = rx.recv().await.unwrap();
-        match evt {
-            SubagentEvent::TokenUpdate {
-                input_tokens,
-                output_tokens,
-                ..
-            } => {
-                assert_eq!(input_tokens, 500);
-                assert_eq!(output_tokens, 100);
-            }
-            other => panic!("Expected TokenUpdate, got {other:?}"),
+impl BackgroundProgressCallback {
+    pub fn new(tx: mpsc::UnboundedSender<SubagentEvent>, task_id: String) -> Self {
+        Self {
+            tx,
+            task_id,
+            tool_count: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 }
+
+impl std::fmt::Debug for BackgroundProgressCallback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BackgroundProgressCallback")
+            .field("task_id", &self.task_id)
+            .finish()
+    }
+}
+
+impl opendev_agents::SubagentProgressCallback for BackgroundProgressCallback {
+    fn on_started(&self, _subagent_name: &str, _task: &str) {}
+
+    fn on_tool_call(
+        &self,
+        _subagent_name: &str,
+        tool_name: &str,
+        _tool_id: &str,
+        _args: &HashMap<String, serde_json::Value>,
+    ) {
+        let count = self
+            .tool_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
+        let _ = self.tx.send(SubagentEvent::BackgroundProgress {
+            task_id: self.task_id.clone(),
+            tool_name: tool_name.to_string(),
+            tool_count: count,
+        });
+        let _ = self.tx.send(SubagentEvent::BackgroundActivity {
+            task_id: self.task_id.clone(),
+            line: format!("\u{25b8} {tool_name}"),
+        });
+    }
+
+    fn on_tool_complete(
+        &self,
+        _subagent_name: &str,
+        tool_name: &str,
+        _tool_id: &str,
+        success: bool,
+    ) {
+        let icon = if success { "\u{2713}" } else { "\u{2717}" };
+        let _ = self.tx.send(SubagentEvent::BackgroundActivity {
+            task_id: self.task_id.clone(),
+            line: format!("  \u{23bf} {icon} {tool_name}"),
+        });
+    }
+
+    fn on_finished(&self, _subagent_name: &str, _success: bool, _result_summary: &str) {
+        // BackgroundCompleted event sent by spawn_background(), not here
+    }
+
+    fn on_token_usage(&self, _subagent_name: &str, _input_tokens: u64, _output_tokens: u64) {}
+}
+
+#[cfg(test)]
+#[path = "events_tests.rs"]
+mod tests;

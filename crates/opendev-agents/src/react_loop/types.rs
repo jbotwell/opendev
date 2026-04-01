@@ -2,6 +2,8 @@
 
 use serde_json::Value;
 
+use crate::traits::{AgentError, AgentResult};
+
 /// Metrics for a single tool call execution.
 #[derive(Debug, Clone)]
 pub struct ToolCallMetric {
@@ -32,14 +34,14 @@ pub struct IterationMetrics {
 
 /// Tools that are safe for parallel execution (read-only, no side effects).
 pub static PARALLELIZABLE_TOOLS: &[&str] = &[
-    "read_file",
-    "list_files",
-    "search",
-    "fetch_url",
-    "web_search",
+    "Read",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch",
     "capture_web_screenshot",
     "analyze_image",
-    "list_todos",
+    "TaskList",
     "search_tools",
     "find_symbol",
     "find_referencing_symbols",
@@ -49,13 +51,13 @@ pub static PARALLELIZABLE_TOOLS: &[&str] = &[
 /// When all tool calls in an iteration are from this set, the consecutive reads
 /// counter increments. After 5 consecutive read-only iterations, a nudge is injected.
 pub(super) static READ_OPS: &[&str] = &[
-    "read_file",
-    "list_files",
-    "search",
-    "fetch_url",
-    "web_search",
+    "Read",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch",
     "find_symbol",
-    "list_todos",
+    "TaskList",
     "read_pdf",
     "analyze_image",
 ];
@@ -81,4 +83,15 @@ pub enum TurnResult {
     MaxIterations,
     /// The run was interrupted by the user.
     Interrupted,
+}
+
+/// Control flow signal returned by extracted phase functions.
+///
+/// Used to propagate `continue` and `return` semantics from extracted
+/// functions back to the orchestrator loop in `run_inner`.
+pub(super) enum LoopAction {
+    /// Continue to the next iteration of the main loop.
+    Continue,
+    /// Return this result from `run_inner`.
+    Return(Result<AgentResult, AgentError>),
 }

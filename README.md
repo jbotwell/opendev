@@ -5,8 +5,12 @@
 <p align="center">Open-source AI coding agent that spawns parallel agents, each bound to the LLM of your choice.</p>
 
 <p align="center">
+  <a href="https://github.com/opendev-to/opendev/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/opendev-to/opendev?style=flat-square&color=blue" /></a>
+  <a href="https://github.com/opendev-to/opendev/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/opendev-to/opendev/total?style=flat-square&color=brightgreen" /></a>
+  <a href="https://crates.io/crates/opendev-cli"><img alt="crates.io" src="https://img.shields.io/crates/d/opendev-cli?style=flat-square&label=crates.io&color=e6522c" /></a>
   <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <a href="https://www.rust-lang.org/"><img alt="Rust" src="https://img.shields.io/badge/rust-%3E%3D1.94-orange.svg?style=flat-square" /></a>
+  <a href="https://github.com/opendev-to/opendev/actions/workflows/release.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/opendev-to/opendev/release.yml?style=flat-square&label=CI" /></a>
   <a href="https://arxiv.org/pdf/2603.05344"><img alt="Technical Report" src="https://img.shields.io/badge/Technical%20Report-arXiv-b31b1b.svg?style=flat-square" /></a>
 </p>
 
@@ -28,7 +32,20 @@ Work is organized into concurrent sessions composed of specialized sub-agents. E
 
 Each workflow is a modular slot you can bind to any LLM of your choice: **Normal** (execution), **Thinking** (reasoning), **Compact** (context summarization), **Self-Critique** (output verification), and **VLM** (vision). For example, use Claude Opus for execution, GPT-o3 for thinking, and a lightweight Qwen model for compaction. Together, these combinations form a compound AI system where multiple models collaborate, each optimized for its role.
 
-OpenDev is written in **Rust** for maximum performance and minimal resource usage. Looking for the original Python version? See [opendev-py](https://github.com/opendev-to/opendev-py) (archived).
+OpenDev is written in **Rust** — it starts in **4.3 ms**, uses just **9.4 MB of memory**, and ships as a single **18 MB binary**. That makes it the **fastest and lightest coding agent** available today — up to **128x faster startup** and **30x less memory** than alternatives.
+
+<div align="center">
+
+| Agent | Startup (mean ± σ) | Peak Memory (median) | Install Size |
+|-------|--------:|------------:|-------------:|
+| **OpenDev** 0.1.4 | **4.3 ms ± 0.4 ms** | **9.4 MB** | **18 MB** |
+| Codex 0.116.0 | 37.8 ms ± 0.8 ms (9x) | 43.7 MB (4.6x) | 116 MB |
+| Claude Code 2.1.87 | 87.3 ms ± 2.0 ms (20x) | 214.6 MB (22.8x) | 188 MB |
+| OpenCode 1.2.27 | 557.4 ms ± 31.8 ms (128x) | 285.9 MB (30.4x) | 90 MB |
+
+<sub>macOS ARM64 (Apple Silicon) · Startup: <a href="https://github.com/sharkdp/hyperfine">hyperfine</a> <code>--shell=none --warmup 10 --runs 100</code> · Memory: <code>/usr/bin/time -l</code> median of 20 runs · Multipliers relative to OpenDev</sub>
+
+</div>
 
 <p align="center">
   <img src="figures/top.png" alt="OpenDev Compound AI Architecture" width="700"/>
@@ -38,10 +55,10 @@ OpenDev is written in **Rust** for maximum performance and minimal resource usag
 
 ### Why OpenDev?
 
+- **Blazing fast, ultra lightweight.** 4.3 ms startup, 9.4 MB RAM, 18 MB on disk. Written in Rust with zero interpreter overhead — it launches before other agents finish loading their runtime.
 - **Proactive, not reactive.** OpenDev can plan, execute, and iterate autonomously. Kick off a refactoring, walk away, and come back to a PR ready for review.
 - **Multi-provider, multi-model.** Assign different models from different providers to every workflow and session, all running in parallel. Your models, your rules.
 - **TUI + Web UI.** A full terminal UI for power users and a Web UI for visual monitoring. The Web UI supports remote sessions, so you can start a task from your phone and let OpenDev work while you sleep.
-- **Fast.** Written in Rust with a ~3.7MB release binary. Instant startup, low memory footprint.
 
 ---
 
@@ -74,6 +91,12 @@ You                          OpenDev Fleet
 ---
 
 ### Installation
+
+#### From crates.io (all platforms)
+
+```bash
+cargo install opendev-cli
+```
 
 #### macOS
 

@@ -45,12 +45,13 @@ export function LandingPage() {
       const recency: Record<string, number> = {};
 
       for (const s of sessions) {
-        if (!s.working_dir || !s.working_dir.trim()) continue;
+        const wd = s.working_dir || s.working_directory;
+        if (!wd || !wd.trim()) continue;
         const t = new Date(s.updated_at).getTime();
-        if (!recency[s.working_dir] || t > recency[s.working_dir]) {
-          recency[s.working_dir] = t;
+        if (!recency[wd] || t > recency[wd]) {
+          recency[wd] = t;
         }
-        grouped[s.working_dir] = s.working_dir;
+        grouped[wd] = wd;
       }
 
       const sorted = Object.keys(grouped)
@@ -107,7 +108,8 @@ export function LandingPage() {
     try {
       const result = await apiClient.createSession(selectedWorkspace);
       bumpSessionList();
-      await loadSession(result.session.id);
+      const sessionId = result.id;
+      await loadSession(sessionId);
       sendMessage(input.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create session');

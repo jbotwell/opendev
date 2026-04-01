@@ -17,7 +17,7 @@ impl ReactLoop {
                 .and_then(|f| f.get("name"))
                 .and_then(|n| n.as_str())
                 .unwrap_or("");
-            self.parallelizable.contains(name) && name != "task_complete"
+            self.parallelizable.contains(name) && !matches!(name, "TaskStop" | "task_complete")
         })
     }
 
@@ -27,7 +27,7 @@ impl ReactLoop {
             .get("function")
             .and_then(|f| f.get("name"))
             .and_then(|n| n.as_str())
-            == Some("task_complete")
+            .is_some_and(|n| matches!(n, "TaskStop" | "task_complete"))
     }
 
     /// Extract the summary and status from a task_complete tool call.
@@ -55,7 +55,7 @@ impl ReactLoop {
     }
 
     /// Format a tool execution result into a string for the message history.
-    pub fn format_tool_result(tool_name: &str, result: &Value) -> String {
+    pub fn format_tool_result(_tool_name: &str, result: &Value) -> String {
         let success = result
             .get("success")
             .and_then(|s| s.as_bool())
@@ -80,7 +80,7 @@ impl ReactLoop {
                 .get("error")
                 .and_then(|e| e.as_str())
                 .unwrap_or("Tool execution failed");
-            format!("Error in {tool_name}: {error}")
+            format!("Error: {error}")
         };
 
         // Append LLM-only suffix if present (hidden from UI, visible to LLM)

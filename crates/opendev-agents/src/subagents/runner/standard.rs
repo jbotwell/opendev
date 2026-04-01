@@ -29,6 +29,13 @@ impl SubagentRunner for StandardReactRunner {
         ctx: &RunnerContext<'_>,
         messages: &mut Vec<Value>,
     ) -> Result<AgentResult, AgentError> {
+        // Drain mailbox messages before starting the react loop (for team members)
+        if let Some(mailbox) = ctx.mailbox
+            && let Ok(msgs) = mailbox.receive()
+        {
+            super::inject_mailbox_messages(msgs, messages);
+        }
+
         let react_loop = ReactLoop::new(self.config.clone());
 
         react_loop
@@ -47,6 +54,7 @@ impl SubagentRunner for StandardReactRunner {
                 None, // no todo_manager
                 ctx.cancel,
                 ctx.tool_approval_tx,
+                ctx.debug_logger,
             )
             .await
     }
@@ -57,12 +65,5 @@ impl SubagentRunner for StandardReactRunner {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_standard_runner_name() {
-        let runner = StandardReactRunner::new(ReactLoopConfig::default());
-        assert_eq!(runner.name(), "StandardReactRunner");
-    }
-}
+#[path = "standard_tests.rs"]
+mod tests;

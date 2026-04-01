@@ -4,18 +4,17 @@
 //! this tool to present the plan and get user sign-off before implementation.
 //!
 //! On approval the tool:
-//! 1. Parses implementation steps from the plan markdown
-//! 2. Creates todo items from those steps (via a shared `TodoManager`)
-//! 3. Registers the plan in the `PlanIndex` for session tracking
-//! 4. Stores the plan file to `~/.opendev/plans/`
+//! 1. Registers the plan in the `PlanIndex` for session tracking
+//! 2. Stores the plan file to `~/.opendev/plans/`
+//!
+//! Todo creation is deferred to the LLM's `write_todos` call after approval,
+//! which produces better hierarchical grouping than automated parsing.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use opendev_runtime::{
-    PlanApprovalRequest, PlanApprovalSender, PlanIndex, TodoManager, parse_plan_steps,
-};
+use opendev_runtime::{PlanApprovalRequest, PlanApprovalSender, PlanIndex, TodoManager};
 use opendev_tools_core::{BaseTool, ToolContext, ToolResult};
 
 /// Minimum plan length in characters to be considered valid.
@@ -76,7 +75,7 @@ impl Default for PresentPlanTool {
 #[async_trait::async_trait]
 impl BaseTool for PresentPlanTool {
     fn name(&self) -> &str {
-        "present_plan"
+        "EnterPlanMode"
     }
 
     fn description(&self) -> &str {
@@ -288,19 +287,12 @@ impl BaseTool for PresentPlanTool {
             auto_approve_mode = true;
         }
 
-        // Parse implementation steps into todos (capped at 10 parents;
-        // the LLM's subsequent write_todos call handles proper grouping with children).
-        let steps = parse_plan_steps(&plan_content);
-        let step_count = steps.len();
-
-        // Create todos from plan steps
+        // Clear any previous plan's todos — the LLM will create new ones
+        // via write_todos after approval, with proper hierarchical grouping.
         if let Some(ref mgr) = self.todo_manager
             && let Ok(mut todo_mgr) = mgr.lock()
         {
-            todo_mgr.clear(); // Clear any previous plan's todos
-            for step in steps.iter().take(10) {
-                todo_mgr.add(step.clone());
-            }
+            todo_mgr.clear();
         }
 
         // Register in PlanIndex and copy plan to ~/.opendev/plans/
@@ -334,27 +326,11 @@ impl BaseTool for PresentPlanTool {
         metadata.insert("auto_approve".into(), serde_json::json!(auto_approve_mode));
         metadata.insert("plan_file_path".into(), serde_json::json!(plan_file_path));
         metadata.insert("plan_length".into(), serde_json::json!(plan_content.len()));
-        metadata.insert("step_count".into(), serde_json::json!(step_count));
         metadata.insert("plan_content".into(), serde_json::json!(plan_content));
 
         if let Some(ref name) = plan_name {
             metadata.insert("plan_name".into(), serde_json::json!(name));
         }
-
-        // Format step list for agent context
-        let step_list = if steps.is_empty() {
-            String::new()
-        } else {
-            let items: Vec<String> = steps
-                .iter()
-                .enumerate()
-                .map(|(i, s)| format!("  {}. {s}", i + 1))
-                .collect();
-            format!(
-                "\n\nTodo items created ({step_count}):\n{}",
-                items.join("\n")
-            )
-        };
 
         let plan_name_display = plan_name
             .as_deref()
@@ -363,9 +339,9 @@ impl BaseTool for PresentPlanTool {
 
         ToolResult::ok_with_metadata(
             format!(
-                "Plan completed{plan_name_display} ({} chars, {step_count} steps). \
+                "Plan approved{plan_name_display} ({} chars). \
                  Proceed with implementation.\n\n\
-                 Plan file: {plan_file_path}{step_list}",
+                 Plan file: {plan_file_path}",
                 plan_content.len()
             ),
             metadata,
@@ -384,159 +360,5 @@ fn expand_tilde(path: &str) -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_args(pairs: &[(&str, serde_json::Value)]) -> HashMap<String, serde_json::Value> {
-        pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.clone()))
-            .collect()
-    }
-
-    #[tokio::test]
-    async fn test_present_plan_missing_path() {
-        let tool = PresentPlanTool::new();
-        let ctx = ToolContext::new("/tmp");
-        let result = tool.execute(HashMap::new(), &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("plan_file_path is required"));
-    }
-
-    #[tokio::test]
-    async fn test_present_plan_file_not_found() {
-        let tool = PresentPlanTool::new();
-        let ctx = ToolContext::new("/tmp");
-        let args = make_args(&[(
-            "plan_file_path",
-            serde_json::json!("/tmp/nonexistent_plan.md"),
-        )]);
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("not found"));
-    }
-
-    #[tokio::test]
-    async fn test_present_plan_empty_file() {
-        let tool = PresentPlanTool::new();
-        let ctx = ToolContext::new("/tmp");
-
-        let path = std::env::temp_dir().join("test_empty_plan_rs.md");
-        std::fs::write(&path, "").unwrap();
-
-        let args = make_args(&[("plan_file_path", serde_json::json!(path.to_string_lossy()))]);
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("empty"));
-
-        std::fs::remove_file(&path).ok();
-    }
-
-    #[tokio::test]
-    async fn test_present_plan_too_short() {
-        let tool = PresentPlanTool::new();
-        let ctx = ToolContext::new("/tmp");
-
-        let path = std::env::temp_dir().join("test_short_plan_rs.md");
-        std::fs::write(&path, "A short plan.").unwrap();
-
-        let args = make_args(&[("plan_file_path", serde_json::json!(path.to_string_lossy()))]);
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("too short"));
-
-        std::fs::remove_file(&path).ok();
-    }
-
-    #[tokio::test]
-    async fn test_present_plan_missing_delimiter() {
-        let tool = PresentPlanTool::new();
-        let ctx = ToolContext::new("/tmp");
-
-        let path = std::env::temp_dir().join("test_no_delimiter_plan_rs.md");
-        let content = "x".repeat(200);
-        std::fs::write(&path, &content).unwrap();
-
-        let args = make_args(&[("plan_file_path", serde_json::json!(path.to_string_lossy()))]);
-        let result = tool.execute(args, &ctx).await;
-        assert!(!result.success);
-        assert!(result.error.unwrap().contains("---BEGIN PLAN---"));
-
-        std::fs::remove_file(&path).ok();
-    }
-
-    #[tokio::test]
-    async fn test_present_plan_valid_creates_todos() {
-        let todo_mgr = Arc::new(Mutex::new(TodoManager::new()));
-        let tool = PresentPlanTool::with_todo_manager(Arc::clone(&todo_mgr));
-        let ctx = ToolContext::new("/tmp");
-
-        let path = std::env::temp_dir().join("test_valid_plan_todos_rs.md");
-        let content = format!(
-            "# Plan\n\n---BEGIN PLAN---\n\n## Implementation Steps\n\n\
-             1. First step\n2. Second step\n3. Third step\n\n\
-             ## Verification\n\n1. Run tests\n2. Check lint\n\n\
-             ---END PLAN---\n\n{}\n",
-            "Additional details. ".repeat(10)
-        );
-        std::fs::write(&path, &content).unwrap();
-
-        let args = make_args(&[("plan_file_path", serde_json::json!(path.to_string_lossy()))]);
-        let result = tool.execute(args, &ctx).await;
-        assert!(result.success, "Error: {:?}", result.error);
-        assert!(
-            result
-                .output
-                .as_ref()
-                .unwrap()
-                .contains("Proceed with implementation")
-        );
-        assert_eq!(
-            result.metadata.get("plan_approved"),
-            Some(&serde_json::json!(true))
-        );
-        assert_eq!(
-            result.metadata.get("step_count"),
-            Some(&serde_json::json!(3))
-        );
-
-        // Verify todos were created
-        let mgr = todo_mgr.lock().unwrap();
-        assert_eq!(mgr.total(), 3);
-        assert_eq!(mgr.all()[0].title, "First step");
-        assert_eq!(mgr.all()[2].title, "Third step");
-
-        std::fs::remove_file(&path).ok();
-    }
-
-    #[tokio::test]
-    async fn test_present_plan_valid_no_todo_manager() {
-        let tool = PresentPlanTool::new();
-        let ctx = ToolContext::new("/tmp");
-
-        let path = std::env::temp_dir().join("test_valid_plan_no_todo_rs.md");
-        let content = format!(
-            "# Plan\n\n---BEGIN PLAN---\n\n## Implementation Steps\n\n\
-             1. First step\n2. Second step\n3. Third step\n\n\
-             ## Verification\n\n1. Run tests\n2. Check lint\n\n\
-             ---END PLAN---\n\n{}\n",
-            "Additional details. ".repeat(10)
-        );
-        std::fs::write(&path, &content).unwrap();
-
-        let args = make_args(&[("plan_file_path", serde_json::json!(path.to_string_lossy()))]);
-        let result = tool.execute(args, &ctx).await;
-        assert!(result.success, "Error: {:?}", result.error);
-
-        std::fs::remove_file(&path).ok();
-    }
-
-    #[test]
-    fn test_expand_tilde() {
-        let expanded = expand_tilde("~/test/plan.md");
-        assert!(!expanded.to_string_lossy().starts_with('~'));
-
-        let no_tilde = expand_tilde("/absolute/path");
-        assert_eq!(no_tilde, PathBuf::from("/absolute/path"));
-    }
-}
+#[path = "present_plan_tests.rs"]
+mod tests;

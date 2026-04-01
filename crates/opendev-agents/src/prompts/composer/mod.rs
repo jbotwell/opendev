@@ -1,14 +1,17 @@
-//! Prompt composition engine with conditional loading.
-//!
-//! Mirrors `opendev/core/agents/prompts/composition.py`.
+//! Prompt composition engine with conditional loading and section caching.
 //!
 //! Composes system prompts from modular sections based on runtime context
 //! and conversation lifecycle. Supports priority ordering, conditional
 //! inclusion, cache-aware two-part splitting, and variable substitution.
 //!
+//! Follows Claude Code's pattern of per-turn composition with a section
+//! cache: `Static` and `Cached` sections are resolved once and reused,
+//! while `Uncached` sections recompute every turn.
+//!
 //! Templates are resolved in order:
-//! 1. Embedded (compile-time `include_str!`) — zero filesystem dependency
-//! 2. Filesystem fallback (`templates_dir`) — for user customisation
+//! 1. Content provider closure (if set) — for dynamic runtime content
+//! 2. Embedded (compile-time `include_str!`) — zero filesystem dependency
+//! 3. Filesystem fallback (`templates_dir`) — for user customisation
 
 mod conditions;
 mod factories;
@@ -40,18 +43,41 @@ pub type PromptContext = HashMap<String, serde_json::Value>;
 /// A condition function that determines if a section should be included.
 pub type ConditionFn = Box<dyn Fn(&PromptContext) -> bool + Send + Sync>;
 
+/// A closure that dynamically generates section content at compose time.
+pub type ContentProviderFn = Box<dyn Fn() -> Option<String> + Send + Sync>;
+
+/// Cache policy for a prompt section, modelled after Claude Code's
+/// `systemPromptSection` vs `DANGEROUS_uncachedSystemPromptSection`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CachePolicy {
+    /// Stable across the entire session. Cached until explicit `clear_all_cache()`.
+    /// Used for: identity, policies, tool guidance, code quality rules.
+    Static,
+    /// Session-specific but stable across turns. Cached until `clear_cache()`
+    /// (triggered by `/compact`, `/clear`).
+    /// Used for: memory, environment context, scratchpad.
+    Cached,
+    /// Recomputed every turn. Never served from cache.
+    /// Used for: MCP instructions (servers connect/disconnect between turns).
+    Uncached,
+}
+
 /// A section to conditionally include in the system prompt.
 pub struct PromptSection {
     /// Section identifier.
     pub name: String,
-    /// Path to template file (relative to templates_dir).
+    /// Path to template file (relative to templates_dir). Ignored when
+    /// `content_provider` is set.
     pub file_path: String,
     /// Optional predicate to determine if section should be included.
     pub condition: Option<ConditionFn>,
     /// Loading priority (lower = earlier in prompt).
     pub priority: i32,
-    /// Whether this section is stable across turns (true = cacheable).
-    pub cacheable: bool,
+    /// Cache policy controlling when this section is recomputed.
+    pub cache_policy: CachePolicy,
+    /// Optional closure that generates content dynamically instead of
+    /// loading from a template file.
+    pub content_provider: Option<ContentProviderFn>,
 }
 
 impl std::fmt::Debug for PromptSection {
@@ -60,23 +86,44 @@ impl std::fmt::Debug for PromptSection {
             .field("name", &self.name)
             .field("file_path", &self.file_path)
             .field("priority", &self.priority)
-            .field("cacheable", &self.cacheable)
+            .field("cache_policy", &self.cache_policy)
             .field("has_condition", &self.condition.is_some())
+            .field("has_content_provider", &self.content_provider.is_some())
             .finish()
     }
 }
 
-/// Composes system prompts from modular sections.
+/// Composes system prompts from modular sections with per-turn caching.
 ///
 /// Follows Claude Code's approach of building prompts from many small
 /// markdown files with conditional loading based on runtime context.
+/// Sections are cached according to their [`CachePolicy`]:
+/// - `Static`: resolved once, cached for the session
+/// - `Cached`: resolved once, cleared on `/compact` or `/clear`
+/// - `Uncached`: resolved fresh every `compose()` call
 ///
-/// Templates are resolved first from the embedded store (compile-time),
-/// falling back to the filesystem `templates_dir` for user overrides.
-#[derive(Debug)]
+/// Templates are resolved first from content providers (dynamic), then
+/// the embedded store (compile-time), then the filesystem `templates_dir`.
 pub struct PromptComposer {
     templates_dir: PathBuf,
     sections: Vec<PromptSection>,
+    /// Per-section content cache. Keyed by section name.
+    section_cache: HashMap<String, Option<String>>,
+    /// Pre-resolved overrides injected by callers before `compose()`.
+    /// Used for async content (e.g. MCP) that must be resolved outside
+    /// the composer's synchronous `compose()` path.
+    section_overrides: HashMap<String, Option<String>>,
+}
+
+impl std::fmt::Debug for PromptComposer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PromptComposer")
+            .field("templates_dir", &self.templates_dir)
+            .field("sections", &self.sections)
+            .field("cache_entries", &self.section_cache.len())
+            .field("override_entries", &self.section_overrides.len())
+            .finish()
+    }
 }
 
 impl PromptComposer {
@@ -85,10 +132,16 @@ impl PromptComposer {
         Self {
             templates_dir: templates_dir.into(),
             sections: Vec::new(),
+            section_cache: HashMap::new(),
+            section_overrides: HashMap::new(),
         }
     }
 
     /// Register a prompt section for conditional inclusion.
+    ///
+    /// The `cacheable` parameter maps to [`CachePolicy`]:
+    /// - `true` → `Static` (cached for the session)
+    /// - `false` → `Uncached` (recomputed every turn)
     pub fn register_section(
         &mut self,
         name: impl Into<String>,
@@ -102,34 +155,88 @@ impl PromptComposer {
             file_path: file_path.into(),
             condition,
             priority,
-            cacheable,
+            cache_policy: if cacheable {
+                CachePolicy::Static
+            } else {
+                CachePolicy::Uncached
+            },
+            content_provider: None,
         });
     }
 
-    /// Register a section with defaults (priority=50, cacheable=true, no condition).
+    /// Register a section with an explicit [`CachePolicy`].
+    pub fn register_section_with_policy(
+        &mut self,
+        name: impl Into<String>,
+        file_path: impl Into<String>,
+        condition: Option<ConditionFn>,
+        priority: i32,
+        cache_policy: CachePolicy,
+    ) {
+        self.sections.push(PromptSection {
+            name: name.into(),
+            file_path: file_path.into(),
+            condition,
+            priority,
+            cache_policy,
+            content_provider: None,
+        });
+    }
+
+    /// Register a dynamic section with a content provider closure.
+    ///
+    /// The content provider replaces template loading — the `file_path` is
+    /// set to an empty string and ignored.
+    pub fn register_dynamic_section(
+        &mut self,
+        name: impl Into<String>,
+        cache_policy: CachePolicy,
+        priority: i32,
+        condition: Option<ConditionFn>,
+        content_provider: ContentProviderFn,
+    ) {
+        self.sections.push(PromptSection {
+            name: name.into(),
+            file_path: String::new(),
+            condition,
+            priority,
+            cache_policy,
+            content_provider: Some(content_provider),
+        });
+    }
+
+    /// Register a section with defaults (priority=50, Static, no condition).
     pub fn register_simple(&mut self, name: impl Into<String>, file_path: impl Into<String>) {
         self.register_section(name, file_path, None, 50, true);
     }
 
+    /// Inject a pre-resolved value for a section, bypassing its normal
+    /// content resolution. Used for async content (e.g. MCP instructions)
+    /// that must be resolved outside the synchronous `compose()` path.
+    ///
+    /// The override is consumed on the next `compose()` call and does NOT
+    /// persist in the section cache (caching follows normal policy after).
+    pub fn set_section_override(&mut self, name: impl Into<String>, value: Option<String>) {
+        self.section_overrides.insert(name.into(), value);
+    }
+
     /// Compose final prompt from registered sections.
     ///
-    /// Sections are filtered by their condition, sorted by priority, loaded
-    /// (embedded first, then filesystem), and joined with double newlines.
-    pub fn compose(&self, context: &PromptContext) -> String {
-        let included = self.filter_and_sort(context);
-        let parts: Vec<String> = included
-            .iter()
-            .filter_map(|s| self.load_section_content(s))
+    /// Sections are filtered by condition, sorted by priority, resolved
+    /// (cache → override → provider → embedded → filesystem), and joined.
+    pub fn compose(&mut self, context: &PromptContext) -> String {
+        let indices = self.filtered_sorted_indices(context);
+        let parts: Vec<String> = indices
+            .into_iter()
+            .filter_map(|i| self.resolve_section_at(i))
             .collect();
+        self.section_overrides.clear();
         parts.join("\n\n")
     }
 
     /// Compose final prompt with variable substitution.
-    ///
-    /// After composing, replaces all `{{variable_name}}` placeholders with
-    /// values from the provided variables map.
     pub fn compose_with_vars(
-        &self,
+        &mut self,
         context: &PromptContext,
         variables: &HashMap<String, String>,
     ) -> String {
@@ -141,27 +248,34 @@ impl PromptComposer {
     ///
     /// For Anthropic prompt caching: the stable part gets cache_control,
     /// the dynamic part changes per session/turn.
-    pub fn compose_two_part(&self, context: &PromptContext) -> (String, String) {
-        let included = self.filter_and_sort(context);
+    /// - Stable = `Static` + `Cached` sections
+    /// - Dynamic = `Uncached` sections
+    pub fn compose_two_part(&mut self, context: &PromptContext) -> (String, String) {
+        let indices = self.filtered_sorted_indices(context);
         let mut stable_parts = Vec::new();
         let mut dynamic_parts = Vec::new();
 
-        for section in &included {
-            if let Some(content) = self.load_section_content(section) {
-                if section.cacheable {
-                    stable_parts.push(content);
-                } else {
-                    dynamic_parts.push(content);
+        for i in indices {
+            let cache_policy = self.sections[i].cache_policy;
+            if let Some(content) = self.resolve_section_at(i) {
+                match cache_policy {
+                    CachePolicy::Static | CachePolicy::Cached => {
+                        stable_parts.push(content);
+                    }
+                    CachePolicy::Uncached => {
+                        dynamic_parts.push(content);
+                    }
                 }
             }
         }
 
+        self.section_overrides.clear();
         (stable_parts.join("\n\n"), dynamic_parts.join("\n\n"))
     }
 
     /// Compose two-part prompt with variable substitution on both halves.
     pub fn compose_two_part_with_vars(
-        &self,
+        &mut self,
         context: &PromptContext,
         variables: &HashMap<String, String>,
     ) -> (String, String) {
@@ -182,19 +296,81 @@ impl PromptComposer {
         self.sections.iter().map(|s| s.name.as_str()).collect()
     }
 
-    fn filter_and_sort(&self, context: &PromptContext) -> Vec<&PromptSection> {
-        let mut included: Vec<&PromptSection> = self
+    /// Clear `Cached` section entries. Called on `/compact` and `/clear`.
+    ///
+    /// `Static` entries survive — they are stable for the entire session.
+    pub fn clear_cache(&mut self) {
+        let cached_names: Vec<String> = self
             .sections
             .iter()
-            .filter(|s| s.condition.as_ref().is_none_or(|f| f(context)))
+            .filter(|s| s.cache_policy == CachePolicy::Cached)
+            .map(|s| s.name.clone())
             .collect();
-        included.sort_by_key(|s| s.priority);
-        included
+        for name in cached_names {
+            self.section_cache.remove(&name);
+        }
     }
 
-    /// Load a section's content: try embedded first, then filesystem.
+    /// Clear all cache entries including `Static`. Called on session switch.
+    pub fn clear_all_cache(&mut self) {
+        self.section_cache.clear();
+    }
+
+    /// Return indices of included sections, sorted by priority.
+    fn filtered_sorted_indices(&self, context: &PromptContext) -> Vec<usize> {
+        let mut indices: Vec<usize> = self
+            .sections
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.condition.as_ref().is_none_or(|f| f(context)))
+            .map(|(i, _)| i)
+            .collect();
+        indices.sort_by_key(|&i| self.sections[i].priority);
+        indices
+    }
+
+    /// Resolve a section's content by index, using the caching pipeline:
+    /// 1. For `Static`/`Cached`: return cached value if present
+    /// 2. Check overrides (pre-resolved async content)
+    /// 3. Call content_provider if set
+    /// 4. Load from embedded templates
+    /// 5. Fallback to filesystem
+    /// 6. Store result in cache (for `Static`/`Cached`)
+    fn resolve_section_at(&mut self, index: usize) -> Option<String> {
+        let section = &self.sections[index];
+        let name = section.name.clone();
+        let cache_policy = section.cache_policy;
+
+        // For Static/Cached, try the cache first
+        if cache_policy != CachePolicy::Uncached
+            && let Some(cached) = self.section_cache.get(&name)
+        {
+            return cached.clone();
+        }
+
+        // Check for pre-resolved override
+        let content = if let Some(override_val) = self.section_overrides.get(&name) {
+            override_val.clone()
+        } else {
+            self.load_section_content(&self.sections[index])
+        };
+
+        // Cache the result for Static and Cached policies
+        if cache_policy != CachePolicy::Uncached {
+            self.section_cache.insert(name, content.clone());
+        }
+
+        content
+    }
+
+    /// Load a section's content: try provider, then embedded, then filesystem.
     fn load_section_content(&self, section: &PromptSection) -> Option<String> {
-        // 1. Try embedded templates
+        // 1. Try content provider
+        if let Some(ref provider) = section.content_provider {
+            return provider();
+        }
+
+        // 2. Try embedded templates
         if let Some(raw) = embedded::get_embedded(&section.file_path) {
             let stripped = strip_frontmatter(raw);
             if !stripped.is_empty() {
@@ -202,7 +378,7 @@ impl PromptComposer {
             }
         }
 
-        // 2. Fallback to filesystem
+        // 3. Fallback to filesystem
         let file_path = self.templates_dir.join(&section.file_path);
         if !file_path.exists() {
             return None;
@@ -252,240 +428,4 @@ pub fn substitute_variables(template: &str, variables: &HashMap<String, String>)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-
-    fn setup_templates(dir: &std::path::Path) {
-        let main_dir = dir.join("system/main");
-        fs::create_dir_all(&main_dir).unwrap();
-
-        fs::write(main_dir.join("section-a.md"), "# Section A\nContent A").unwrap();
-        fs::write(main_dir.join("section-b.md"), "# Section B\nContent B").unwrap();
-        fs::write(
-            main_dir.join("section-c.md"),
-            "<!-- frontmatter: true -->\n# Section C\nContent C",
-        )
-        .unwrap();
-        fs::write(main_dir.join("section-d.md"), "# Dynamic\nDynamic content").unwrap();
-    }
-
-    #[test]
-    fn test_compose_basic() {
-        let dir = tempfile::TempDir::new().unwrap();
-        setup_templates(dir.path());
-
-        let mut composer = PromptComposer::new(dir.path());
-        composer.register_section("a", "system/main/section-a.md", None, 10, true);
-        composer.register_section("b", "system/main/section-b.md", None, 20, true);
-
-        let result = composer.compose(&HashMap::new());
-        assert!(result.contains("Content A"));
-        assert!(result.contains("Content B"));
-        // A should come before B (lower priority)
-        assert!(result.find("Content A") < result.find("Content B"));
-    }
-
-    #[test]
-    fn test_compose_priority_ordering() {
-        let dir = tempfile::TempDir::new().unwrap();
-        setup_templates(dir.path());
-
-        let mut composer = PromptComposer::new(dir.path());
-        // Register in reverse order
-        composer.register_section("b", "system/main/section-b.md", None, 20, true);
-        composer.register_section("a", "system/main/section-a.md", None, 10, true);
-
-        let result = composer.compose(&HashMap::new());
-        assert!(result.find("Content A") < result.find("Content B"));
-    }
-
-    #[test]
-    fn test_compose_with_condition() {
-        let dir = tempfile::TempDir::new().unwrap();
-        setup_templates(dir.path());
-
-        let mut composer = PromptComposer::new(dir.path());
-        composer.register_section("a", "system/main/section-a.md", None, 10, true);
-        composer.register_section(
-            "b",
-            "system/main/section-b.md",
-            Some(ctx_bool("show_b")),
-            20,
-            true,
-        );
-
-        // Without condition met
-        let result = composer.compose(&HashMap::new());
-        assert!(result.contains("Content A"));
-        assert!(!result.contains("Content B"));
-
-        // With condition met
-        let mut ctx = HashMap::new();
-        ctx.insert("show_b".to_string(), serde_json::json!(true));
-        let result = composer.compose(&ctx);
-        assert!(result.contains("Content A"));
-        assert!(result.contains("Content B"));
-    }
-
-    #[test]
-    fn test_compose_strips_frontmatter() {
-        let dir = tempfile::TempDir::new().unwrap();
-        setup_templates(dir.path());
-
-        let mut composer = PromptComposer::new(dir.path());
-        composer.register_section("c", "system/main/section-c.md", None, 10, true);
-
-        let result = composer.compose(&HashMap::new());
-        assert!(!result.contains("frontmatter"));
-        assert!(result.contains("Content C"));
-    }
-
-    #[test]
-    fn test_compose_two_part() {
-        let dir = tempfile::TempDir::new().unwrap();
-        setup_templates(dir.path());
-
-        let mut composer = PromptComposer::new(dir.path());
-        composer.register_section("a", "system/main/section-a.md", None, 10, true);
-        composer.register_section("d", "system/main/section-d.md", None, 20, false);
-
-        let (stable, dynamic) = composer.compose_two_part(&HashMap::new());
-        assert!(stable.contains("Content A"));
-        assert!(!stable.contains("Dynamic content"));
-        assert!(dynamic.contains("Dynamic content"));
-        assert!(!dynamic.contains("Content A"));
-    }
-
-    #[test]
-    fn test_compose_missing_file() {
-        let dir = tempfile::TempDir::new().unwrap();
-
-        let mut composer = PromptComposer::new(dir.path());
-        composer.register_section("missing", "nonexistent.md", None, 10, true);
-
-        let result = composer.compose(&HashMap::new());
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_strip_frontmatter() {
-        assert_eq!(
-            strip_frontmatter("<!-- key: value -->\n# Title\nContent"),
-            "# Title\nContent"
-        );
-        assert_eq!(strip_frontmatter("No frontmatter"), "No frontmatter");
-        assert_eq!(strip_frontmatter(""), "");
-    }
-
-    #[test]
-    fn test_section_count_and_names() {
-        let composer_dir = tempfile::TempDir::new().unwrap();
-        let mut composer = PromptComposer::new(composer_dir.path());
-        composer.register_simple("alpha", "alpha.md");
-        composer.register_simple("beta", "beta.md");
-
-        assert_eq!(composer.section_count(), 2);
-        let names = composer.section_names();
-        assert!(names.contains(&"alpha"));
-        assert!(names.contains(&"beta"));
-    }
-
-    #[test]
-    fn test_substitute_variables_basic() {
-        let mut vars = HashMap::new();
-        vars.insert("name".to_string(), "world".to_string());
-        assert_eq!(
-            substitute_variables("Hello {{name}}!", &vars),
-            "Hello world!"
-        );
-    }
-
-    #[test]
-    fn test_substitute_variables_multiple() {
-        let mut vars = HashMap::new();
-        vars.insert("session_id".to_string(), "abc-123".to_string());
-        vars.insert("path".to_string(), "/home/user".to_string());
-
-        let template = "Session {{session_id}} at {{path}}";
-        assert_eq!(
-            substitute_variables(template, &vars),
-            "Session abc-123 at /home/user"
-        );
-    }
-
-    #[test]
-    fn test_substitute_variables_missing_left_as_is() {
-        let vars = HashMap::new();
-        assert_eq!(
-            substitute_variables("Hello {{unknown}}!", &vars),
-            "Hello {{unknown}}!"
-        );
-    }
-
-    #[test]
-    fn test_substitute_variables_no_placeholders() {
-        let vars = HashMap::new();
-        assert_eq!(substitute_variables("No vars here", &vars), "No vars here");
-    }
-
-    #[test]
-    fn test_compose_with_vars() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let main_dir = dir.path().join("system/main");
-        fs::create_dir_all(&main_dir).unwrap();
-        fs::write(
-            main_dir.join("template.md"),
-            "Session: {{session_id}}\nPath: {{path}}",
-        )
-        .unwrap();
-
-        let mut composer = PromptComposer::new(dir.path());
-        composer.register_section("t", "system/main/template.md", None, 10, true);
-
-        let mut vars = HashMap::new();
-        vars.insert("session_id".to_string(), "xyz-789".to_string());
-        vars.insert("path".to_string(), "/workspace".to_string());
-
-        let result = composer.compose_with_vars(&HashMap::new(), &vars);
-        assert!(result.contains("Session: xyz-789"));
-        assert!(result.contains("Path: /workspace"));
-    }
-
-    #[test]
-    fn test_compose_two_part_with_vars() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let main_dir = dir.path().join("test");
-        fs::create_dir_all(&main_dir).unwrap();
-        fs::write(main_dir.join("stable.md"), "Stable {{key}}").unwrap();
-        fs::write(main_dir.join("dynamic.md"), "Dynamic {{key}}").unwrap();
-
-        let mut composer = PromptComposer::new(dir.path());
-        composer.register_section("s", "test/stable.md", None, 10, true);
-        composer.register_section("d", "test/dynamic.md", None, 20, false);
-
-        let mut vars = HashMap::new();
-        vars.insert("key".to_string(), "value".to_string());
-
-        let (stable, dynamic) = composer.compose_two_part_with_vars(&HashMap::new(), &vars);
-        assert_eq!(stable, "Stable value");
-        assert_eq!(dynamic, "Dynamic value");
-    }
-
-    #[test]
-    fn test_embedded_templates_used_by_default_composer() {
-        // Use a temp dir that has NO files — embedded should still resolve
-        let dir = tempfile::TempDir::new().unwrap();
-        let composer = create_default_composer(dir.path());
-
-        // Compose without any conditions to get the always-included sections
-        let result = composer.compose(&HashMap::new());
-
-        // The security policy section is always included (no condition) and should
-        // come from embedded templates even though the filesystem dir is empty.
-        assert!(
-            result.contains("Security Policy"),
-            "Expected embedded security policy template"
-        );
-    }
-}
+mod tests;

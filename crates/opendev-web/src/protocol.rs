@@ -97,6 +97,9 @@ pub enum WsMessageType {
     /// Pong response to a ping.
     #[serde(rename = "pong")]
     Pong,
+    /// Tells client to perform a full sync (gap too large for catch-up).
+    #[serde(rename = "full_sync")]
+    FullSync,
 
     // ── Client -> Server ────────────────────────────────────────────
     /// Query / user message from the client.
@@ -117,6 +120,9 @@ pub enum WsMessageType {
     /// Interrupt request.
     #[serde(rename = "interrupt")]
     Interrupt,
+    /// Sync request from client after reconnect (sends last_seq).
+    #[serde(rename = "sync")]
+    Sync,
 }
 
 impl WsMessageType {
@@ -152,6 +158,7 @@ impl WsMessageType {
             Self::McpServersUpdated => "mcp:servers_updated",
             Self::Error => "error",
             Self::Pong => "pong",
+            Self::FullSync => "full_sync",
             // Client -> Server
             Self::Query => "query",
             Self::Approve => "approve",
@@ -159,6 +166,7 @@ impl WsMessageType {
             Self::PlanApprovalResponse => "plan_approval_response",
             Self::Ping => "ping",
             Self::Interrupt => "interrupt",
+            Self::Sync => "sync",
         }
     }
 
@@ -193,12 +201,14 @@ impl WsMessageType {
             "mcp:servers_updated" => Some(Self::McpServersUpdated),
             "error" => Some(Self::Error),
             "pong" => Some(Self::Pong),
+            "full_sync" => Some(Self::FullSync),
             "query" => Some(Self::Query),
             "approve" => Some(Self::Approve),
             "ask_user_response" => Some(Self::AskUserResponse),
             "plan_approval_response" => Some(Self::PlanApprovalResponse),
             "ping" => Some(Self::Ping),
             "interrupt" => Some(Self::Interrupt),
+            "sync" => Some(Self::Sync),
             _ => None,
         }
     }
@@ -219,103 +229,5 @@ pub fn ws_message(msg_type: WsMessageType, data: serde_json::Value) -> serde_jso
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_message_type_display() {
-        assert_eq!(WsMessageType::ToolCall.to_string(), "tool_call");
-        assert_eq!(
-            WsMessageType::PlanApprovalResolved.to_string(),
-            "plan_approval_resolved"
-        );
-        assert_eq!(
-            WsMessageType::McpStatusChanged.to_string(),
-            "mcp:status_changed"
-        );
-    }
-
-    #[test]
-    fn test_message_type_roundtrip() {
-        for mt in [
-            WsMessageType::ToolCall,
-            WsMessageType::PlanApprovalResponse,
-            WsMessageType::McpServersUpdated,
-            WsMessageType::Interrupt,
-        ] {
-            let s = mt.as_str();
-            let parsed = WsMessageType::from_str_opt(s).unwrap();
-            assert_eq!(parsed, mt);
-        }
-    }
-
-    #[test]
-    fn test_from_str_opt_unknown() {
-        assert!(WsMessageType::from_str_opt("unknown_type").is_none());
-    }
-
-    #[test]
-    fn test_ws_message_envelope() {
-        let msg = ws_message(WsMessageType::Error, serde_json::json!({"message": "oops"}));
-        assert_eq!(msg["type"], "error");
-        assert_eq!(msg["data"]["message"], "oops");
-    }
-
-    #[test]
-    fn test_serde_roundtrip() {
-        let mt = WsMessageType::PlanApprovalRequired;
-        let json = serde_json::to_string(&mt).unwrap();
-        assert_eq!(json, "\"plan_approval_required\"");
-        let parsed: WsMessageType = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed, mt);
-    }
-
-    #[test]
-    fn test_all_variants_have_as_str() {
-        // Ensure every variant can round-trip through as_str -> from_str_opt.
-        let variants = vec![
-            WsMessageType::ToolCall,
-            WsMessageType::ToolResult,
-            WsMessageType::ApprovalRequired,
-            WsMessageType::ApprovalResolved,
-            WsMessageType::AskUserRequired,
-            WsMessageType::AskUserResolved,
-            WsMessageType::PlanContent,
-            WsMessageType::PlanApprovalRequired,
-            WsMessageType::PlanApprovalResolved,
-            WsMessageType::StatusUpdate,
-            WsMessageType::TaskCompleted,
-            WsMessageType::SubagentStart,
-            WsMessageType::SubagentComplete,
-            WsMessageType::ParallelAgentsStart,
-            WsMessageType::ParallelAgentsDone,
-            WsMessageType::ThinkingBlock,
-            WsMessageType::Progress,
-            WsMessageType::NestedToolCall,
-            WsMessageType::NestedToolResult,
-            WsMessageType::MessageChunk,
-            WsMessageType::MessageStart,
-            WsMessageType::MessageComplete,
-            WsMessageType::SessionActivity,
-            WsMessageType::UserMessage,
-            WsMessageType::McpStatusChanged,
-            WsMessageType::McpServersUpdated,
-            WsMessageType::Error,
-            WsMessageType::Pong,
-            WsMessageType::Query,
-            WsMessageType::Approve,
-            WsMessageType::AskUserResponse,
-            WsMessageType::PlanApprovalResponse,
-            WsMessageType::Ping,
-            WsMessageType::Interrupt,
-        ];
-        for v in variants {
-            assert_eq!(
-                WsMessageType::from_str_opt(v.as_str()),
-                Some(v),
-                "Round-trip failed for {:?}",
-                v
-            );
-        }
-    }
-}
+#[path = "protocol_tests.rs"]
+mod tests;

@@ -102,7 +102,8 @@ impl Widget for NestedToolWidget<'_> {
             let elapsed = subagent.elapsed_secs();
             let task_text = shortener.shorten_text(&subagent.task);
             let task_preview = if task_text.len() > 60 {
-                format!("{}...", &task_text[..60])
+                let end = task_text.floor_char_boundary(60);
+                format!("{}...", &task_text[..end])
             } else {
                 task_text
             };
@@ -110,9 +111,12 @@ impl Widget for NestedToolWidget<'_> {
             let elapsed_str = format_elapsed(elapsed);
 
             // Format token count
-            let token_str = if subagent.token_count > 0 {
-                let k = subagent.token_count as f64 / 1000.0;
-                format!(" \u{00b7} {k:.1}k tokens")
+            let effective_tokens = subagent.effective_token_count();
+            let token_str = if effective_tokens > 0 {
+                format!(
+                    " \u{00b7} {}",
+                    crate::formatters::tool_line::format_token_count(effective_tokens)
+                )
             } else {
                 String::new()
             };
@@ -210,7 +214,7 @@ impl Widget for NestedToolWidget<'_> {
             let hidden_count = total_completed.saturating_sub(visible_count);
             if hidden_count > 0 {
                 lines.push(Line::from(Span::styled(
-                    format!("  {vertical}   +{hidden_count} more tool uses (ctrl+b to run in background)"),
+                    format!("  {vertical}   +{hidden_count} more tool uses (Ctrl+B to run in background)"),
                     Style::default()
                         .fg(style_tokens::SUBTLE)
                         .add_modifier(Modifier::ITALIC),
@@ -233,35 +237,4 @@ impl Widget for NestedToolWidget<'_> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-
-    #[test]
-    fn test_empty_widget() {
-        let subagents: Vec<SubagentDisplayState> = vec![];
-        let _widget = NestedToolWidget::new(&subagents);
-    }
-
-    #[test]
-    fn test_widget_with_active_subagent() {
-        let mut state =
-            SubagentDisplayState::new("id-1".into(), "Explore".into(), "Find TODOs".into());
-        state.add_tool_call("read_file".into(), "tc-1".into(), HashMap::new());
-        let subagents = vec![state];
-        let _widget = NestedToolWidget::new(&subagents);
-    }
-
-    #[test]
-    fn test_widget_with_finished_subagent() {
-        let mut state =
-            SubagentDisplayState::new("id-2".into(), "Planner".into(), "Create plan".into());
-        state.add_tool_call("read_file".into(), "tc-1".into(), HashMap::new());
-        state.complete_tool_call("tc-1", true);
-        state.add_tool_call("write_file".into(), "tc-2".into(), HashMap::new());
-        state.complete_tool_call("tc-2", true);
-        state.finish(true, "Plan created".into(), 2, None);
-        let subagents = vec![state];
-        let _widget = NestedToolWidget::new(&subagents);
-    }
-}
+mod tests;

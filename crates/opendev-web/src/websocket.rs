@@ -22,9 +22,26 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // Subscribe to broadcast channel.
     let mut broadcast_rx = state.ws_subscribe();
 
-    // Spawn task to forward broadcasts to this client.
+    // Channel for sending messages directly to this client (e.g. sync catch-up).
+    let (direct_tx, mut direct_rx) = tokio::sync::mpsc::channel::<WsBroadcast>(256);
+
+    // Spawn task to forward both broadcasts and direct messages to this client.
     let send_task = tokio::spawn(async move {
-        while let Ok(msg) = broadcast_rx.recv().await {
+        loop {
+            let msg = tokio::select! {
+                result = broadcast_rx.recv() => {
+                    match result {
+                        Ok(msg) => msg,
+                        Err(_) => break,
+                    }
+                }
+                result = direct_rx.recv() => {
+                    match result {
+                        Some(msg) => msg,
+                        None => break,
+                    }
+                }
+            };
             match serde_json::to_string(&msg) {
                 Ok(text) => {
                     if sender.send(Message::Text(text.into())).await.is_err() {
@@ -42,7 +59,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     while let Some(Ok(msg)) = receiver.next().await {
         match msg {
             Message::Text(text) => {
-                handle_client_message(&state, &text).await;
+                handle_client_message(&state, &text, &direct_tx).await;
             }
             Message::Close(_) => {
                 info!("WebSocket client disconnected");
@@ -58,7 +75,11 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 }
 
 /// Handle a text message from a WebSocket client.
-async fn handle_client_message(state: &AppState, text: &str) {
+async fn handle_client_message(
+    state: &AppState,
+    text: &str,
+    direct_tx: &tokio::sync::mpsc::Sender<WsBroadcast>,
+) {
     let parsed: serde_json::Value = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
@@ -73,10 +94,10 @@ async fn handle_client_message(state: &AppState, text: &str) {
 
     match msg_type {
         Some(WsMessageType::Ping) => {
-            state.broadcast(WsBroadcast {
-                msg_type: WsMessageType::Pong.as_str().to_string(),
-                data: serde_json::Value::Null,
-            });
+            state.broadcast(WsBroadcast::new(
+                WsMessageType::Pong.as_str().to_string(),
+                serde_json::Value::Null,
+            ));
         }
         Some(WsMessageType::Query) => {
             handle_query(state, &parsed).await;
@@ -93,16 +114,19 @@ async fn handle_client_message(state: &AppState, text: &str) {
         Some(WsMessageType::Interrupt) => {
             handle_interrupt(state).await;
         }
+        Some(WsMessageType::Sync) => {
+            handle_sync(state, &parsed, direct_tx).await;
+        }
         _ => {
             if !msg_type_str.is_empty() {
                 warn!("Unknown WebSocket message type: {}", msg_type_str);
             }
-            state.broadcast(WsBroadcast {
-                msg_type: WsMessageType::Error.as_str().to_string(),
-                data: serde_json::json!({
-                    "message": format!("Unknown message type: {}", msg_type_str),
+            state.broadcast(WsBroadcast::new(
+                WsMessageType::Error.as_str().to_string(),
+                serde_json::json!({
+                "message": format!("Unknown message type: {}", msg_type_str),
                 }),
-            });
+            ));
         }
     }
 }
@@ -121,10 +145,10 @@ async fn handle_query(state: &AppState, data: &serde_json::Value) {
     let message = match message {
         Some(m) if !m.trim().is_empty() => m.trim(),
         _ => {
-            state.broadcast(WsBroadcast {
-                msg_type: WsMessageType::Error.as_str().to_string(),
-                data: serde_json::json!({"message": "Missing or empty message field"}),
-            });
+            state.broadcast(WsBroadcast::new(
+                WsMessageType::Error.as_str().to_string(),
+                serde_json::json!({"message": "Missing or empty message field"}),
+            ));
             return;
         }
     };
@@ -135,10 +159,10 @@ async fn handle_query(state: &AppState, data: &serde_json::Value) {
         None => match state.current_session_id().await {
             Some(id) => id,
             None => {
-                state.broadcast(WsBroadcast {
-                    msg_type: WsMessageType::Error.as_str().to_string(),
-                    data: serde_json::json!({"message": "No active session"}),
-                });
+                state.broadcast(WsBroadcast::new(
+                    WsMessageType::Error.as_str().to_string(),
+                    serde_json::json!({"message": "No active session"}),
+                ));
                 return;
             }
         },
@@ -148,14 +172,14 @@ async fn handle_query(state: &AppState, data: &serde_json::Value) {
     if state.is_bridge_guarded(&session_id).await {
         // In bridge mode, broadcast the user message then inject into the
         // TUI's queue (same injection mechanism used for live messages).
-        state.broadcast(WsBroadcast {
-            msg_type: WsMessageType::UserMessage.as_str().to_string(),
-            data: serde_json::json!({
-                "role": "user",
-                "content": message,
-                "session_id": session_id,
+        state.broadcast(WsBroadcast::new(
+            WsMessageType::UserMessage.as_str().to_string(),
+            serde_json::json!({
+            "role": "user",
+            "content": message,
+            "session_id": session_id,
             }),
-        });
+        ));
 
         match state
             .try_inject_message(&session_id, message.to_string())
@@ -163,12 +187,12 @@ async fn handle_query(state: &AppState, data: &serde_json::Value) {
         {
             Ok(()) => {}
             Err(e) => {
-                state.broadcast(WsBroadcast {
-                    msg_type: WsMessageType::Error.as_str().to_string(),
-                    data: serde_json::json!({
-                        "message": format!("Bridge mode injection failed: {}", e),
+                state.broadcast(WsBroadcast::new(
+                    WsMessageType::Error.as_str().to_string(),
+                    serde_json::json!({
+                    "message": format!("Bridge mode injection failed: {}", e),
                     }),
-                });
+                ));
             }
         }
         return;
@@ -181,38 +205,38 @@ async fn handle_query(state: &AppState, data: &serde_json::Value) {
             .await
         {
             Ok(()) => {
-                state.broadcast(WsBroadcast {
-                    msg_type: WsMessageType::UserMessage.as_str().to_string(),
-                    data: serde_json::json!({
-                        "role": "user",
-                        "content": message,
-                        "session_id": session_id,
-                        "injected": true,
+                state.broadcast(WsBroadcast::new(
+                    WsMessageType::UserMessage.as_str().to_string(),
+                    serde_json::json!({
+                    "role": "user",
+                    "content": message,
+                    "session_id": session_id,
+                    "injected": true,
                     }),
-                });
+                ));
             }
             Err(e) => {
-                state.broadcast(WsBroadcast {
-                    msg_type: WsMessageType::Error.as_str().to_string(),
-                    data: serde_json::json!({
-                        "message": e,
-                        "session_id": session_id,
+                state.broadcast(WsBroadcast::new(
+                    WsMessageType::Error.as_str().to_string(),
+                    serde_json::json!({
+                    "message": e,
+                    "session_id": session_id,
                     }),
-                });
+                ));
             }
         }
         return;
     }
 
     // Broadcast user message.
-    state.broadcast(WsBroadcast {
-        msg_type: WsMessageType::UserMessage.as_str().to_string(),
-        data: serde_json::json!({
-            "role": "user",
-            "content": message,
-            "session_id": session_id,
+    state.broadcast(WsBroadcast::new(
+        WsMessageType::UserMessage.as_str().to_string(),
+        serde_json::json!({
+        "role": "user",
+        "content": message,
+        "session_id": session_id,
         }),
-    });
+    ));
 
     // Fire the agent executor in the background (if set).
     if let Some(executor) = state.agent_executor().await {
@@ -252,10 +276,10 @@ async fn handle_approval(state: &AppState, data: &serde_json::Value) {
         .unwrap_or(false);
 
     if approval_id.is_empty() {
-        state.broadcast(WsBroadcast {
-            msg_type: WsMessageType::Error.as_str().to_string(),
-            data: serde_json::json!({"message": "Invalid approval data"}),
-        });
+        state.broadcast(WsBroadcast::new(
+            WsMessageType::Error.as_str().to_string(),
+            serde_json::json!({"message": "Invalid approval data"}),
+        ));
         return;
     }
 
@@ -265,14 +289,14 @@ async fn handle_approval(state: &AppState, data: &serde_json::Value) {
 
     if let Some(approval) = resolved {
         info!("Approval {} resolved: approved={}", approval_id, approved);
-        state.broadcast(WsBroadcast {
-            msg_type: WsMessageType::ApprovalResolved.as_str().to_string(),
-            data: serde_json::json!({
-                "approvalId": approval_id,
-                "approved": approved,
-                "session_id": approval.session_id,
+        state.broadcast(WsBroadcast::new(
+            WsMessageType::ApprovalResolved.as_str().to_string(),
+            serde_json::json!({
+            "approvalId": approval_id,
+            "approved": approved,
+            "session_id": approval.session_id,
             }),
-        });
+        ));
     } else {
         warn!("Approval {} not found", approval_id);
     }
@@ -292,10 +316,10 @@ async fn handle_ask_user_response(state: &AppState, data: &serde_json::Value) {
         .unwrap_or(false);
 
     if request_id.is_empty() {
-        state.broadcast(WsBroadcast {
-            msg_type: WsMessageType::Error.as_str().to_string(),
-            data: serde_json::json!({"message": "Invalid ask-user response data"}),
-        });
+        state.broadcast(WsBroadcast::new(
+            WsMessageType::Error.as_str().to_string(),
+            serde_json::json!({"message": "Invalid ask-user response data"}),
+        ));
         return;
     }
 
@@ -303,13 +327,13 @@ async fn handle_ask_user_response(state: &AppState, data: &serde_json::Value) {
 
     if let Some(ask_user) = resolved {
         info!("Ask-user {} resolved", request_id);
-        state.broadcast(WsBroadcast {
-            msg_type: WsMessageType::AskUserResolved.as_str().to_string(),
-            data: serde_json::json!({
-                "requestId": request_id,
-                "session_id": ask_user.session_id,
+        state.broadcast(WsBroadcast::new(
+            WsMessageType::AskUserResolved.as_str().to_string(),
+            serde_json::json!({
+            "requestId": request_id,
+            "session_id": ask_user.session_id,
             }),
-        });
+        ));
     } else {
         warn!("Ask-user request {} not found", request_id);
     }
@@ -334,10 +358,10 @@ async fn handle_plan_approval_response(state: &AppState, data: &serde_json::Valu
         .to_string();
 
     if request_id.is_empty() {
-        state.broadcast(WsBroadcast {
-            msg_type: WsMessageType::Error.as_str().to_string(),
-            data: serde_json::json!({"message": "Invalid plan approval response data"}),
-        });
+        state.broadcast(WsBroadcast::new(
+            WsMessageType::Error.as_str().to_string(),
+            serde_json::json!({"message": "Invalid plan approval response data"}),
+        ));
         return;
     }
 
@@ -347,14 +371,14 @@ async fn handle_plan_approval_response(state: &AppState, data: &serde_json::Valu
 
     if let Some(plan_approval) = resolved {
         info!("Plan approval {} resolved: action={}", request_id, action);
-        state.broadcast(WsBroadcast {
-            msg_type: WsMessageType::PlanApprovalResolved.as_str().to_string(),
-            data: serde_json::json!({
-                "requestId": request_id,
-                "action": action,
-                "session_id": plan_approval.session_id,
+        state.broadcast(WsBroadcast::new(
+            WsMessageType::PlanApprovalResolved.as_str().to_string(),
+            serde_json::json!({
+            "requestId": request_id,
+            "action": action,
+            "session_id": plan_approval.session_id,
             }),
-        });
+        ));
     } else {
         warn!("Plan approval request {} not found", request_id);
     }
@@ -365,10 +389,45 @@ async fn handle_interrupt(state: &AppState) {
     info!("Interrupt requested via WebSocket");
     state.request_interrupt().await;
 
-    state.broadcast(WsBroadcast {
-        msg_type: WsMessageType::StatusUpdate.as_str().to_string(),
-        data: serde_json::json!({
-            "interrupted": true,
+    state.broadcast(WsBroadcast::new(
+        WsMessageType::StatusUpdate.as_str().to_string(),
+        serde_json::json!({
+        "interrupted": true,
         }),
-    });
+    ));
+}
+
+/// Handle a sync (catch-up) request from a reconnecting WebSocket client.
+async fn handle_sync(
+    state: &AppState,
+    data: &serde_json::Value,
+    direct_tx: &tokio::sync::mpsc::Sender<WsBroadcast>,
+) {
+    let last_seq = data
+        .get("data")
+        .and_then(|d| d.get("last_seq"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    debug!("Sync requested with last_seq={}", last_seq);
+
+    match state.catch_up_since(last_seq).await {
+        Some(messages) => {
+            for msg in messages {
+                if direct_tx.send(msg).await.is_err() {
+                    warn!("Failed to send catch-up message to client");
+                    return;
+                }
+            }
+        }
+        None => {
+            // Gap too large -- tell client to reload via REST.
+            let _ = direct_tx
+                .send(WsBroadcast::new(
+                    WsMessageType::FullSync.as_str().to_string(),
+                    serde_json::Value::Null,
+                ))
+                .await;
+        }
+    }
 }

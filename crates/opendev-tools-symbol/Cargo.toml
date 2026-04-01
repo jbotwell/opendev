@@ -9,7 +9,7 @@ description = "Symbol operations for OpenDev: find, references, rename, and repl
 opendev-models = { workspace = true }
 opendev-config = { workspace = true }
 opendev-tools-core = { workspace = true }
-opendev-tools-lsp = { path = "../opendev-tools-lsp" }
+opendev-tools-lsp = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

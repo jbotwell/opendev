@@ -1,8 +1,10 @@
 [package]
 name = "opendev-web"
+description = "Web backend (axum + WebSocket) for OpenDev AI coding agent"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 # Web framework

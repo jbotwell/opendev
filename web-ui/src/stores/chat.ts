@@ -15,6 +15,7 @@ const DEFAULT_SESSION: PerSessionState = {
   pendingPlanApproval: null,
   progressMessage: null,
   queuedMessages: [],
+  optimisticMessages: new Map(),
 };
 
 function getSessionState(states: Record<string, PerSessionState>, id: string): PerSessionState {
@@ -232,21 +233,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const sessionState = getSessionState(get().sessionStates, sessionId);
     const isQueuing = sessionState.isLoading;
 
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const userMessage: Message = {
       role: 'user',
       content,
       timestamp: new Date().toISOString(),
+      isOptimistic: true,
+      optimisticId: tempId,
     };
 
     set(state => ({
-      ...patchSession(state, sessionId, prev => ({
-        messages: [...prev.messages, userMessage],
-        isLoading: true,
-        error: null,
-        queuedMessages: isQueuing
-          ? [...prev.queuedMessages, content]
-          : prev.queuedMessages,
-      })),
+      ...patchSession(state, sessionId, prev => {
+        const newOptimistic = new Map(prev.optimisticMessages);
+        newOptimistic.set(tempId, userMessage);
+        return {
+          messages: [...prev.messages, userMessage],
+          isLoading: true,
+          error: null,
+          queuedMessages: isQueuing
+            ? [...prev.queuedMessages, content]
+            : prev.queuedMessages,
+          optimisticMessages: newOptimistic,
+        };
+      }),
     }));
 
     try {
@@ -413,6 +422,33 @@ wsClient.on('connected', () => {
   useChatStore.getState().setConnected(true);
   if (wasEverStable) {
     useToastStore.getState().addToast('Reconnected to server', 'success');
+
+    // On reconnect, expire optimistic messages older than 30 seconds.
+    // The catch-up mechanism will have confirmed any that succeeded.
+    const OPTIMISTIC_EXPIRY_MS = 30_000;
+    const now = Date.now();
+    useChatStore.setState(state => {
+      const newSessionStates = { ...state.sessionStates };
+      let changed = false;
+      for (const [sid, session] of Object.entries(newSessionStates)) {
+        if (session.optimisticMessages.size === 0) continue;
+        const expiredIds = new Set<string>();
+        for (const [tempId, optMsg] of session.optimisticMessages) {
+          const msgTime = optMsg.timestamp ? new Date(optMsg.timestamp).getTime() : 0;
+          if (now - msgTime > OPTIMISTIC_EXPIRY_MS) {
+            expiredIds.add(tempId);
+          }
+        }
+        if (expiredIds.size > 0) {
+          changed = true;
+          const newOptimistic = new Map(session.optimisticMessages);
+          const newMessages = session.messages.filter(m => !m.optimisticId || !expiredIds.has(m.optimisticId));
+          for (const id of expiredIds) newOptimistic.delete(id);
+          newSessionStates[sid] = { ...session, messages: newMessages, optimisticMessages: newOptimistic };
+        }
+      }
+      return changed ? { sessionStates: newSessionStates } : {};
+    });
   }
   connectionStableTimer = window.setTimeout(() => {
     wasEverStable = true;
@@ -434,20 +470,53 @@ wsClient.on('user_message', (message) => {
   const sid = resolveSessionId(message.data);
   if (!sid) return;
   const content = message.data.content;
-  const sessionState = getSessionState(useChatStore.getState().sessionStates, sid);
-  const msgs = sessionState.messages;
-  // Dedup: skip if last user message already has this content (optimistic add from sendMessage)
-  const lastUserMsg = [...msgs].reverse().find(m => m.role === 'user');
-  if (lastUserMsg && lastUserMsg.content === content) return;
-  useChatStore.setState(state => ({
-    ...patchSession(state, sid, prev => ({
+
+  useChatStore.setState(state => {
+    const session = getSessionState(state.sessionStates, sid);
+
+    // Try to find a matching optimistic message by content
+    let matchedTempId: string | null = null;
+    for (const [tempId, optMsg] of session.optimisticMessages) {
+      if (optMsg.content === content) {
+        matchedTempId = tempId;
+        break;
+      }
+    }
+
+    if (matchedTempId) {
+      // Replace optimistic message with confirmed server version
+      const confirmedMsg: Message = {
+        role: 'user' as const,
+        content,
+        timestamp: message.data.timestamp || new Date().toISOString(),
+      };
+      const idx = session.messages.findIndex(m => m.optimisticId === matchedTempId);
+      const newMessages = [...session.messages];
+      if (idx >= 0) {
+        newMessages[idx] = confirmedMsg;
+      }
+      const newOptimistic = new Map(session.optimisticMessages);
+      newOptimistic.delete(matchedTempId);
+      return patchSession(state, sid, { messages: newMessages, optimisticMessages: newOptimistic });
+    }
+
+    // No matching optimistic message -- check simple dedup (fallback for non-optimistic sends)
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      if (session.messages[i].role === 'user') {
+        if (session.messages[i].content === content) return {};
+        break;
+      }
+    }
+
+    // New message from server (e.g., another client)
+    return patchSession(state, sid, prev => ({
       messages: [...prev.messages, {
         role: 'user' as const,
         content,
-        timestamp: new Date().toISOString(),
+        timestamp: message.data.timestamp || new Date().toISOString(),
       }],
-    })),
-  }));
+    }));
+  });
 });
 
 wsClient.on('message_start', (message) => {
@@ -458,6 +527,17 @@ wsClient.on('message_start', (message) => {
   }));
 });
 
+/** Finalize any active thinking block in the session (mark isActive: false). */
+function finalizeThinking(msgs: Message[]): Message[] {
+  const lastIdx = msgs.length - 1;
+  if (lastIdx >= 0 && msgs[lastIdx].role === 'thinking' && msgs[lastIdx].metadata?.isActive) {
+    const updated = [...msgs];
+    updated[lastIdx] = { ...msgs[lastIdx], metadata: { ...msgs[lastIdx].metadata, isActive: false } };
+    return updated;
+  }
+  return msgs;
+}
+
 wsClient.on('message_chunk', (message) => {
   const sid = resolveSessionId(message.data);
   if (!sid) return;
@@ -465,7 +545,7 @@ wsClient.on('message_chunk', (message) => {
 
   useChatStore.setState(state => {
     const sessionState = getSessionState(state.sessionStates, sid);
-    const msgs = sessionState.messages;
+    const msgs = finalizeThinking(sessionState.messages);
     const lastMessage = msgs[msgs.length - 1];
 
     let newMessages: Message[];
@@ -577,16 +657,46 @@ wsClient.on('tool_result', (message) => {
 wsClient.on('thinking_block', (message) => {
   const sid = resolveSessionId(message.data);
   if (!sid) return;
+  const content = message.data.content || '';
+  const isBlockStart = message.data.block_start === true;
 
   useChatStore.setState(state => {
     const sessionState = getSessionState(state.sessionStates, sid);
+    const msgs = sessionState.messages;
+
+    // If block_start, always create a new thinking message
+    if (isBlockStart) {
+      return patchSession(state, sid, {
+        messages: [
+          ...msgs,
+          {
+            role: 'thinking' as const,
+            content: '',
+            metadata: { level: message.data.level || 'Medium', isActive: true },
+          },
+        ],
+      });
+    }
+
+    // Otherwise, append to the last thinking message if it exists and is active
+    const lastIdx = msgs.length - 1;
+    if (lastIdx >= 0 && msgs[lastIdx].role === 'thinking' && msgs[lastIdx].metadata?.isActive) {
+      const updated = [...msgs];
+      updated[lastIdx] = {
+        ...msgs[lastIdx],
+        content: msgs[lastIdx].content + content,
+      };
+      return patchSession(state, sid, { messages: updated });
+    }
+
+    // No active thinking block — create one
     return patchSession(state, sid, {
       messages: [
-        ...sessionState.messages,
+        ...msgs,
         {
           role: 'thinking' as const,
-          content: message.data.content,
-          metadata: { level: message.data.level },
+          content,
+          metadata: { level: message.data.level || 'Medium', isActive: true },
         },
       ],
     });
@@ -623,14 +733,24 @@ wsClient.on('ask_user_resolved', (message) => {
 });
 
 wsClient.on('session_activity', (message) => {
-  const { session_id, status } = message.data;
+  const { session_id, status, running } = message.data;
+  // Support both formats: {status: "running"} and {running: true}
+  const isRunning = running === true || status === 'running';
   useChatStore.setState((state) => {
     const next = new Set(state.runningSessions);
-    if (status === 'running') next.add(session_id);
+    if (isRunning) next.add(session_id);
     else next.delete(session_id);
     return { runningSessions: next };
   });
   useChatStore.getState().bumpSessionList();
+
+  // Toast notification when a non-current session completes
+  if (!isRunning && session_id !== useChatStore.getState().currentSessionId) {
+    useToastStore.getState().addToast(
+      `Session ${session_id.slice(0, 8)} completed`,
+      'success',
+    );
+  }
 });
 
 // ─── Plan Approval Events ────────────────────────────────────────────────────
@@ -708,6 +828,19 @@ wsClient.on('task_completed', (message) => {
   const sid = resolveSessionId(message.data);
   if (!sid) return;
   console.log('[Frontend] Task completed:', message.data.summary);
+});
+
+// ─── Full Sync (gap too large, reload from REST) ────────────────────────────
+
+wsClient.on('full_sync', () => {
+  const sessionId = useChatStore.getState().currentSessionId;
+  if (!sessionId) return;
+  console.log('[Frontend] Received full_sync, reloading session from REST');
+  // Clear cached messages so loadSession fetches fresh data from the server
+  useChatStore.setState(state => ({
+    ...patchSession(state, sessionId, { messages: [] }),
+  }));
+  useChatStore.getState().loadSession(sessionId);
 });
 
 // ─── Progress Events ─────────────────────────────────────────────────────────

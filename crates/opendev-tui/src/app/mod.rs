@@ -5,7 +5,8 @@
 //! - [`types`] — DisplayMessage, DisplayRole, RoleStyle, DisplayToolCall, ToolState, ToolExecution
 //! - [`state`] — AppState struct and Default impl
 //! - [`cache`] — Conversation message caching and incremental rebuild
-//! - [`render`] — UI layout composition, popup panels, and modal dialogs
+//! - [`render`] — UI layout composition and main rendering orchestration
+//! - [`render_popups`] — Popup panels and modal dialog rendering
 //! - [`event_dispatch`] — Event routing and state mutations
 //! - [`key_handler`] — Keyboard input handling
 //! - [`slash_commands`] — Slash command execution
@@ -14,8 +15,15 @@
 mod cache;
 mod enums;
 mod event_dispatch;
+mod handle_agent;
+mod handle_background;
+mod handle_subagent;
+mod handle_team;
+mod handle_tools;
+mod handle_ui;
 mod key_handler;
 mod render;
+mod render_popups;
 mod slash_commands;
 mod state;
 mod tick;
@@ -23,6 +31,14 @@ mod types;
 
 pub use enums::{AutonomyLevel, OperationMode, ReasoningLevel};
 pub use state::AppState;
+
+/// Information collected for the exit message after TUI shutdown.
+#[derive(Debug, Clone, Default)]
+pub struct ExitInfo {
+    pub session_id: Option<String>,
+    pub session_cost: f64,
+    pub message_count: usize,
+}
 pub use types::{
     DisplayMessage, DisplayRole, DisplayToolCall, PendingItem, RoleStyle, ToolExecution, ToolState,
 };
@@ -90,7 +106,10 @@ impl App {
     fn should_render_before_draining(event: &AppEvent) -> bool {
         matches!(
             event,
-            AppEvent::ReasoningContent(_)
+            AppEvent::AgentStarted
+                | AppEvent::AgentFinished
+                | AppEvent::AgentInterrupted
+                | AppEvent::ReasoningContent(_)
                 | AppEvent::AgentChunk(_)
                 | AppEvent::AgentMessage(_)
                 | AppEvent::ToolStarted { .. }
@@ -146,7 +165,7 @@ impl App {
     ///
     /// Sets up the terminal, enters the event loop, and restores the
     /// terminal on exit or panic.
-    pub async fn run(&mut self) -> io::Result<()> {
+    pub async fn run(&mut self) -> io::Result<ExitInfo> {
         // Terminal setup
         enable_raw_mode()?;
         let mut stdout = io::stdout();
@@ -197,7 +216,12 @@ impl App {
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
         terminal.show_cursor()?;
 
-        result
+        result?;
+        Ok(ExitInfo {
+            session_id: self.state.session_id.clone(),
+            session_cost: self.state.session_cost,
+            message_count: self.state.messages.len(),
+        })
     }
 
     /// The core event loop: render -> wait for event -> drain queued events -> repeat.
@@ -239,10 +263,13 @@ impl App {
 
             // Only render when state has changed
             if self.state.dirty {
-                // Rebuild cached conversation lines if messages changed or scroll
-                // moved (scroll affects viewport culling boundaries).
+                // Rebuild cached conversation lines if messages changed, scroll
+                // moved (scroll affects viewport culling boundaries), or terminal
+                // width changed (cached lines are pre-wrapped to a specific width).
+                let content_width = self.state.terminal_width.saturating_sub(1);
                 if self.state.lines_generation != self.state.message_generation
                     || self.state.cached_scroll_offset != self.state.scroll_offset
+                    || self.state.cached_width != content_width
                 {
                     self.rebuild_cached_lines();
                     self.state.lines_generation = self.state.message_generation;
@@ -279,45 +306,4 @@ impl App {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::event::AppEvent;
-
-    #[test]
-    fn test_app_creation() {
-        let app = App::new();
-        assert!(app.state.running);
-        assert_eq!(app.state.mode, OperationMode::Normal);
-    }
-
-    #[test]
-    fn test_should_render_before_draining_on_live_subagent_events() {
-        assert!(App::should_render_before_draining(
-            &AppEvent::ReasoningContent("thinking".into(),)
-        ));
-        assert!(App::should_render_before_draining(&AppEvent::ToolStarted {
-            tool_id: "t1".into(),
-            tool_name: "spawn_subagent".into(),
-            args: std::collections::HashMap::new(),
-        }));
-        assert!(App::should_render_before_draining(
-            &AppEvent::SubagentStarted {
-                subagent_id: "sa1".into(),
-                subagent_name: "Explore".into(),
-                task: "Inspect auth".into(),
-                cancel_token: None,
-            }
-        ));
-        assert!(App::should_render_before_draining(
-            &AppEvent::ToolFinished {
-                tool_id: "t1".into(),
-                success: true,
-            }
-        ));
-    }
-
-    #[test]
-    fn test_should_not_force_render_before_draining_on_tick() {
-        assert!(!App::should_render_before_draining(&AppEvent::Tick));
-    }
-}
+mod tests;

@@ -62,6 +62,11 @@ pub(super) fn apply_staged_compaction(
                     api_idx += 1;
                 }
             }
+            // Invalidate stale calibration after content modification so the next
+            // update_token_count recalculates from the actual reduced messages.
+            if let Ok(mut comp) = compactor.lock() {
+                comp.invalidate_calibration();
+            }
             false
         }
         OptimizationLevel::Prune => {
@@ -77,6 +82,10 @@ pub(super) fn apply_staged_compaction(
                     *msg = Value::Object(api_msgs[api_idx].clone());
                     api_idx += 1;
                 }
+            }
+            // Invalidate stale calibration after content modification.
+            if let Ok(mut comp) = compactor.lock() {
+                comp.invalidate_calibration();
             }
             false
         }
@@ -172,7 +181,7 @@ pub(super) fn record_artifact(
     };
 
     let (operation, details) = match tool_name {
-        "read_file" => {
+        "Read" | "read_file" => {
             let line_count = result
                 .output
                 .as_deref()
@@ -180,7 +189,7 @@ pub(super) fn record_artifact(
                 .unwrap_or(0);
             ("read", format!("{line_count} lines"))
         }
-        "write_file" => {
+        "Write" | "write_file" => {
             let line_count = args
                 .get("content")
                 .and_then(|v| v.as_str())
@@ -188,7 +197,7 @@ pub(super) fn record_artifact(
                 .unwrap_or(0);
             ("created", format!("{line_count} lines"))
         }
-        "edit_file" => ("modified", "edit".to_string()),
+        "Edit" | "edit_file" => ("modified", "edit".to_string()),
         _ => return,
     };
 

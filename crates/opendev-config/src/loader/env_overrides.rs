@@ -25,6 +25,9 @@ impl ConfigLoader {
         if let Some(model) = get("OPENDEV_MODEL") {
             config.model = model;
         }
+        if let Some(base_url) = get("OPENDEV_API_BASE_URL") {
+            config.api_base_url = Some(base_url);
+        }
         if let Some(val) = get("OPENDEV_MAX_TOKENS")
             && let Ok(max_tokens) = val.parse()
         {

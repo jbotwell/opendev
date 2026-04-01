@@ -1,5 +1,5 @@
 <!--
-name: 'Tool Description: web_search'
+name: 'Tool Description: WebSearch'
 description: Search the web for current information
 version: 2.0.0
 -->
@@ -16,4 +16,4 @@ Search the web for current information using DuckDuckGo. Returns results with ti
   - [Source Title 2](https://example.com/2)
 - Use the current year in search queries when looking for recent information or documentation. Do not search with outdated years
 - Domain filtering is supported — use include_domains or exclude_domains to narrow results
-- For fetching and analyzing the full content of a specific page, use fetch_url after finding the URL with web_search
+- For fetching and analyzing the full content of a specific page, use WebFetch after finding the URL with WebSearch

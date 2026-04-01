@@ -5,6 +5,9 @@ import { MessageList } from './MessageList';
 import { QueueBar } from './QueueBar';
 import { InputBox } from './InputBox';
 import { LandingPage } from './LandingPage';
+import { TodoPanel } from './TodoPanel';
+import { StatusBar } from './StatusBar';
+import { SubagentTree } from './SubagentTree';
 
 export function ChatInterface() {
   const error = useChatStore(state => {
@@ -47,9 +50,12 @@ export function ChatInterface() {
         </div>
       )}
 
+      <TodoPanel />
       <MessageList />
+      <SubagentTree />
       <QueueBar />
       <InputBox />
+      <StatusBar />
     </div>
   );
 }

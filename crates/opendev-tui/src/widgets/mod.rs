@@ -21,5 +21,5 @@ pub use progress::TaskProgress;
 pub use spinner::SpinnerState;
 pub use status_bar::StatusBarWidget;
 pub use toast::{Toast, ToastLevel, ToastWidget};
-pub use todo_panel::{TodoDisplayItem, TodoDisplayStatus, TodoPanelWidget};
+pub use todo_panel::{TodoDisplayItem, TodoDisplayStatus, TodoPanelWidget, todo_panel_height};
 pub use welcome_panel::{WelcomePanelState, WelcomePanelWidget};
